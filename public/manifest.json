@@ -1,0 +1,16 @@
+{
+  "name": "Vivacom Pulse",
+  "short_name": "Pulse",
+  "description": "Vivacom Internal Workforce Operations, Attendance, Kanban & Payroll Suite",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='40' fill='%234f46e5'/><path d='M48 96h24l16-44 28 88 20-52 12 16h28' stroke='white' stroke-width='16' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}
