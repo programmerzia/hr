@@ -137,25 +137,27 @@ export const EmployeeAttendanceWidget: React.FC = () => {
             {/* Current State Pill */}
             <div className="mt-4">
               {myAttendance.status === 'active' && (
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-300 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-300 font-bold text-xs shadow-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
-                  🟢 Shift Active & Counting Production
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-semibold text-xs shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Shift Active • Production Logging</span>
                 </div>
               )}
               {myAttendance.status === 'on_break' && (
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-50 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-500/30 text-amber-800 dark:text-amber-300 font-bold text-xs shadow-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping"></span>
-                  🟡 On Break (Lapse Interval Ticking)
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-300 font-semibold text-xs shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                  <span>On Break • Off-Time Accruing</span>
                 </div>
               )}
               {myAttendance.status === 'shift_not_started' && (
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs">
-                  ⚪ Shift Not Started (Will Mark Absent if &gt; 11:00 AM)
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium text-xs">
+                  <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                  <span>Shift Not Started • Awaiting Login</span>
                 </div>
               )}
               {myAttendance.status === 'shift_ended' && (
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-500/15 border border-indigo-200 dark:border-indigo-500/30 text-indigo-800 dark:text-indigo-300 font-bold text-xs">
-                  🏁 Shift Concluded for Today
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-500/15 border border-indigo-200 dark:border-indigo-500/30 text-indigo-700 dark:text-indigo-300 font-semibold text-xs">
+                  <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                  <span>Shift Concluded for Today</span>
                 </div>
               )}
             </div>

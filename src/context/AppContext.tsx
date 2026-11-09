@@ -80,11 +80,17 @@ interface AppContextType {
   approvePayroll: (id: string) => void;
   disburseAllPayroll: () => void;
 
-  // Invoicing & Internal Vouchers
+  // Invoicing (Employee Monthly Salary Claims & Client Retainers)
   invoices: Invoice[];
   activeInvoiceModal: Invoice | null;
   setActiveInvoiceModal: (invoice: Invoice | null) => void;
   updateInvoiceStatus: (id: string, status: InvoiceStatus) => void;
+  submitSalaryInvoice: (billingMonth?: string, notes?: string) => void;
+  createClientProjectInvoice: (clientName: string, clientEmail: string, projectName: string, billingPeriod: string, total: number, currency: 'USD' | 'EUR' | 'BDT', notes?: string) => void;
+  verifySalaryInvoiceTL: (id: string) => void;
+  approveSalaryInvoiceManagement: (id: string) => void;
+  disburseInvoice: (id: string) => void;
+  // Legacy aliases
   createInvoiceFromProject: (projectName: string, clientName: string, hours: number, rate: number) => void;
   createInternalVoucher: (data: Partial<Invoice>) => void;
   verifyVoucherTL: (id: string) => void;
@@ -698,92 +704,131 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addToast('Batch Disbursal Successful', 'Direct bank wire instructions transmitted via Bangladesh Electronic Funds Transfer Network (BEFTN).', 'success');
   };
 
-  // Invoicing & Internal Vouchers
+  // Invoicing: Employee Monthly Salary Invoices & Client Project Retainers
   const updateInvoiceStatus = (id: string, status: InvoiceStatus) => {
     setInvoices(prev => prev.map(item => item.id === id ? { ...item, status } : item));
-    addToast('Status Updated', `Item status changed to ${status.toUpperCase()}`, 'info');
+    addToast('Status Updated', `Invoice status changed to ${status.toUpperCase()}`, 'info');
   };
 
-  const createInvoiceFromProject = (projectName: string, clientName: string, hours: number, rate: number) => {
-    const amount = hours * rate;
-    const tax = amount * 0.05;
-    const newInv: Invoice = {
-      id: 'inv-' + (invoices.length + 103),
-      invoiceNumber: `INV-2026-0${invoices.length + 90}`,
-      type: 'client_invoice',
-      clientName,
-      clientEmail: `finance@${clientName.toLowerCase().replace(/\s+/g, '')}.com`,
-      clientAddress: 'Corporate Suites, Innovation Park, Dhaka',
-      projectName,
-      issueDate: new Date().toISOString().split('T')[0],
-      dueDate: '2026-11-30',
-      status: 'draft',
-      currency: 'USD',
-      taxRatePercent: 5,
-      discountAmount: 0,
-      subtotal: amount,
-      taxAmount: tax,
-      total: amount + tax,
-      notes: 'Generated automatically from verified employee production hours.',
-      items: [
-        {
-          id: 'it-gen-1',
-          description: `Engineering & Development Hours on ${projectName}`,
-          quantityHours: hours,
-          unitRate: rate,
-          amount
-        }
-      ]
-    };
+  const submitSalaryInvoice = (billingMonth: string = 'November 2026', notes?: string) => {
+    const existing = invoices.find(i => i.type === 'employee_salary' && i.employeeId === currentUser.id && i.billingMonth === billingMonth);
+    if (existing) {
+      addToast('Invoice Already Exists', `You have already generated a salary invoice (${existing.invoiceNumber}) for ${billingMonth}.`, 'warning');
+      return;
+    }
 
-    setInvoices(prev => [newInv, ...prev]);
-    addToast('Invoice Created', `Drafted ${newInv.invoiceNumber} for ${clientName}`, 'success');
-  };
+    const prodHours = Math.floor(myAttendance.productionSeconds / 3600) + 176;
+    const base = currentUser.salary?.grossMonthly || 120000;
+    const hourlyRate = currentUser.salary?.hourlyRate || Math.round(base / 176);
+    const otHours = 8;
+    const otPay = Math.round(hourlyRate * 1.5 * otHours);
+    const net = base + otPay;
 
-  const createInternalVoucher = (data: Partial<Invoice>) => {
-    const newVoucher: Invoice = {
-      id: 'vch-' + (invoices.length + 200),
-      invoiceNumber: `VCH-2026-0${invoices.length + 45}`,
-      type: 'internal_voucher',
-      projectName: data.projectName || 'Internal Operations & Cloud Infrastructure',
-      claimantEmployeeId: currentUser.id,
-      claimantEmployeeName: currentUser.name,
-      claimantAvatar: currentUser.avatar,
-      voucherCategory: data.voucherCategory || 'Reimbursement',
+    const newSalaryInv: Invoice = {
+      id: 'sal-' + (invoices.length + 105),
+      invoiceNumber: `SAL-2026-11-0${invoices.filter(i => i.type === 'employee_salary').length + 5}`,
+      type: 'employee_salary',
+      employeeId: currentUser.id,
+      employeeName: currentUser.name,
+      employeeAvatar: currentUser.avatar,
+      designation: currentUser.designation,
+      department: currentUser.department,
+      billingMonth,
+      productionHours: prodHours,
+      standardHours: 176,
+      baseSalary: base,
+      overtimeHours: otHours,
+      overtimePay: otPay,
+      deductions: 0,
+      netPayable: net,
+      total: net,
+      currency: 'BDT',
       issueDate: new Date().toISOString().split('T')[0],
       dueDate: '2026-11-20',
       status: 'submitted',
-      currency: 'BDT',
-      taxRatePercent: 0,
-      discountAmount: 0,
-      subtotal: data.subtotal || 5000,
-      taxAmount: 0,
-      total: data.subtotal || 5000,
-      notes: data.notes || 'Internal expense claim with receipts attached.',
-      items: data.items || [
-        {
-          id: 'vit-new-1',
-          description: data.notes || 'Expense item',
-          quantityHours: 1,
-          unitRate: data.subtotal || 5000,
-          amount: data.subtotal || 5000
-        }
-      ]
+      bankName: currentUser.bankDetails?.bankName || 'BRAC Bank Ltd',
+      accountNumber: currentUser.bankDetails?.accountNumber || '1501-2049-8120',
+      routingNumber: currentUser.bankDetails?.routingNumber || '060261724',
+      scopeDescription: `${currentUser.designation} production hours & deliverables on Vivacom client & internal project commitments.`,
+      notes: notes || 'Submitted for monthly compensation review against biometric attendance clock.'
     };
 
-    setInvoices(prev => [newVoucher, ...prev]);
-    addToast('Voucher Submitted', `Expense claim ${newVoucher.invoiceNumber} submitted for Team Lead & Finance verification.`, 'success');
+    setInvoices(prev => [newSalaryInv, ...prev]);
+    addToast('Salary Invoice Submitted', `Generated ${newSalaryInv.invoiceNumber} for ${billingMonth} (৳ ${net.toLocaleString()}). Notified Team Lead & HR.`, 'success');
   };
 
-  const verifyVoucherTL = (id: string) => {
-    setInvoices(prev => prev.map(item => item.id === id ? { ...item, status: 'verified_tl', verifiedBy: currentUser.name } : item));
-    addToast('Voucher Verified', 'Team Lead verified expense; routed to HR/Finance for payout approval.', 'success');
+  const createClientProjectInvoice = (
+    clientName: string,
+    clientEmail: string,
+    projectName: string,
+    billingPeriod: string,
+    total: number,
+    currency: 'USD' | 'EUR' | 'BDT' = 'USD',
+    notes?: string
+  ) => {
+    const newInv: Invoice = {
+      id: 'inv-' + (invoices.length + 105),
+      invoiceNumber: `INV-2026-0${invoices.filter(i => i.type === 'client_project').length + 90}`,
+      type: 'client_project',
+      clientName,
+      clientEmail,
+      clientAddress: 'International Corporate Client, Innovation District',
+      projectName,
+      billingPeriod: billingPeriod || 'Current Sprint Retainer',
+      issueDate: new Date().toISOString().split('T')[0],
+      dueDate: '2026-11-30',
+      status: 'submitted',
+      currency,
+      total,
+      netPayable: total,
+      scopeDescription: `Dedicated software engineering retainer and milestone deliverable for ${projectName}.`,
+      notes: notes || 'Payment via wire transfer within specified payment window.'
+    };
+
+    setInvoices(prev => [newInv, ...prev]);
+    addToast('Client Invoice Generated', `Created ${newInv.invoiceNumber} for ${clientName}`, 'success');
   };
 
-  const approveVoucherFinance = (id: string) => {
-    setInvoices(prev => prev.map(item => item.id === id ? { ...item, status: 'approved', approvedBy: currentUser.name } : item));
-    addToast('Voucher Approved for Payout', 'Disbursal scheduled with next salary payroll cycle.', 'success');
+  const verifySalaryInvoiceTL = (id: string) => {
+    setInvoices(prev => prev.map(item => item.id === id ? { 
+      ...item, 
+      status: 'verified_tl', 
+      tlVerifiedBy: currentUser.name,
+      tlVerifiedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    } : item));
+    addToast('Salary Invoice Verified', 'Team Lead certified verified production hours. Routed to Management for final approval.', 'success');
   };
+
+  const approveSalaryInvoiceManagement = (id: string) => {
+    setInvoices(prev => prev.map(item => item.id === id ? { 
+      ...item, 
+      status: 'approved', 
+      managementApprovedBy: currentUser.name,
+      managementApprovedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    } : item));
+    addToast('Salary Invoice Approved', 'Authorized by Management for bank disbursal batch.', 'success');
+  };
+
+  const disburseInvoice = (id: string) => {
+    setInvoices(prev => prev.map(item => item.id === id ? { 
+      ...item, 
+      status: 'paid', 
+      paidAt: new Date().toISOString().split('T')[0]
+    } : item));
+    addToast('Payment Disbursed', 'Settlement completed via BEFTN direct bank wire transfer.', 'success');
+  };
+
+  // Legacy backwards-compatible aliases
+  const createInvoiceFromProject = (projectName: string, clientName: string, hours: number, rate: number) => {
+    createClientProjectInvoice(clientName, `accounts@${clientName.toLowerCase().replace(/\s+/g, '')}.com`, projectName, 'November 2026 Retainer', hours * rate, 'USD');
+  };
+
+  const createInternalVoucher = (_data: Partial<Invoice>) => {
+    submitSalaryInvoice('November 2026', 'Staff monthly salary claim');
+  };
+
+  const verifyVoucherTL = verifySalaryInvoiceTL;
+  const approveVoucherFinance = approveSalaryInvoiceManagement;
 
   return (
     <AppContext.Provider value={{
@@ -835,6 +880,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activeInvoiceModal,
       setActiveInvoiceModal,
       updateInvoiceStatus,
+      submitSalaryInvoice,
+      createClientProjectInvoice,
+      verifySalaryInvoiceTL,
+      approveSalaryInvoiceManagement,
+      disburseInvoice,
       createInvoiceFromProject,
       createInternalVoucher,
       verifyVoucherTL,

@@ -78,11 +78,11 @@ export const Sidebar: React.FC = () => {
     },
     {
       id: 'invoicing',
-      label: 'Billing & Vouchers',
+      label: 'Invoicing & Claims',
       badge: `${invoices.length}`,
       badgeColor: 'bg-teal-500/10 dark:bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/30',
       icon: Receipt,
-      desc: 'Client Invoicing & Internal Claims'
+      desc: 'Staff Salary Claims & Client Retainers'
     }
   ];
 
@@ -105,7 +105,7 @@ export const Sidebar: React.FC = () => {
               onClick={() => setActiveTab(item.id)}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left transition-all group ${
                 isActive
-                  ? 'bg-gradient-to-r from-brand-600 to-indigo-600 text-white shadow-lg shadow-brand-500/20 font-semibold'
+                  ? 'bg-brand-600 text-white shadow-sm font-semibold'
                   : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
               }`}
             >

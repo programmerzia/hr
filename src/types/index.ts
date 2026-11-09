@@ -185,44 +185,48 @@ export interface PayrollRecord {
   bankAccountRef: string;
 }
 
-export interface InvoiceItem {
-  id: string;
-  description: string;
-  quantityHours: number;
-  unitRate: number;
-  amount: number;
-}
-
-export type InvoiceType = 'client_invoice' | 'internal_voucher';
-export type InvoiceStatus = 'draft' | 'submitted' | 'sent' | 'verified_tl' | 'approved' | 'paid' | 'overdue';
+export type InvoiceType = 'employee_salary' | 'client_project';
+export type InvoiceStatus = 'draft' | 'submitted' | 'verified_tl' | 'approved' | 'paid' | 'overdue';
 
 export interface Invoice {
   id: string;
   invoiceNumber: string;
   type: InvoiceType;
-  // Client Invoicing fields
-  clientName?: string;
-  clientEmail?: string;
-  clientAddress?: string;
-  projectName: string;
-  // Internal Employee Voucher fields
-  claimantEmployeeId?: string;
-  claimantEmployeeName?: string;
-  claimantAvatar?: string;
-  voucherCategory?: 'Reimbursement' | 'Contractor Payout' | 'Hardware/Software' | 'Office Supply' | 'Client Entertainment';
-  receiptAttachmentUrl?: string;
-  verifiedBy?: string;
-  approvedBy?: string;
-
   issueDate: string;
   dueDate: string;
   status: InvoiceStatus;
-  items: InvoiceItem[];
-  subtotal: number;
-  taxRatePercent: number;
-  taxAmount: number;
-  discountAmount: number;
+  currency: 'BDT' | 'USD' | 'EUR';
+  notes?: string;
+
+  // Employee Monthly Salary Invoice fields (Direct production hours & salary claim, no item clutter)
+  employeeId?: string;
+  employeeName?: string;
+  employeeAvatar?: string;
+  designation?: string;
+  department?: string;
+  billingMonth?: string;
+  productionHours?: number;
+  standardHours?: number;
+  baseSalary?: number;
+  overtimeHours?: number;
+  overtimePay?: number;
+  deductions?: number;
+  netPayable: number;
+  bankName?: string;
+  accountNumber?: string;
+  routingNumber?: string;
+  tlVerifiedBy?: string;
+  tlVerifiedAt?: string;
+  managementApprovedBy?: string;
+  managementApprovedAt?: string;
+  paidAt?: string;
+
+  // Commercial Client Project Invoice fields
+  clientName?: string;
+  clientEmail?: string;
+  clientAddress?: string;
+  projectName?: string;
+  billingPeriod?: string;
+  scopeDescription?: string;
   total: number;
-  currency: 'USD' | 'EUR' | 'BDT';
-  notes: string;
 }

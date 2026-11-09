@@ -102,7 +102,7 @@ const MainContent: React.FC = () => {
           }`}
         >
           <Receipt className="w-5 h-5 mb-0.5" />
-          <span>Billing</span>
+          <span>Claims</span>
         </button>
       </nav>
 
