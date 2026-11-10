@@ -1,7 +1,7 @@
 {
-  "name": "Vivacom Pulse",
-  "short_name": "Pulse",
-  "description": "Vivacom Internal Workforce Operations, Attendance, Kanban & Payroll Suite",
+  "name": "Vivacom",
+  "short_name": "Vivacom",
+  "description": "Vivacom internal workspace",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#090d16",

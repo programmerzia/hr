@@ -1,232 +1,529 @@
-export type PersonaRole = 'employee' | 'team_lead' | 'hr' | 'management';
-export type ThemeMode = 'dark' | 'light';
+// Domain types mirroring docs/02-architecture.md "Data model".
+// snake_case fields match Laravel JSON. Dates are ISO strings, ids are strings.
 
-export interface SalaryStructure {
-  basic: number;
-  houseRent: number;
-  medical: number;
-  conveyance: number;
-  providentFund: number;
-  taxDeduction: number;
-  grossMonthly: number;
-  hourlyRate: number;
-}
+export type Id = string
+export type ISODate = string // 2026-11-12
+export type ISODateTime = string // 2026-11-12T09:12:00+06:00
 
-export interface BankDetails {
-  bankName: string;
-  accountName: string;
-  accountNumber: string;
-  routingNumber: string;
-  branch: string;
+// ---------- Identity / org ----------
+export type Role = 'employee' | 'team_lead' | 'hr' | 'management'
+export type EmploymentType = 'full_time' | 'contractor' | 'intern'
+export type EmployeeStatus = 'active' | 'probation' | 'on_leave' | 'resigned' | 'terminated'
+
+export interface User {
+  id: Id
+  name: string
+  email: string
+  password?: string
+  role: Role
+  employee_id: Id
+  last_seen_at: ISODateTime | null
 }
 
 export interface Employee {
-  id: string;
-  employeeId: string; // e.g. VIVA-EMP-101
-  name: string;
-  email: string;
-  phone: string;
-  nid: string;
-  avatar: string;
-  role: PersonaRole;
-  designation: string;
-  department: string;
-  joiningDate: string;
-  employmentType: 'Full-Time' | 'Contractor' | 'Intern';
-  status: 'Active' | 'On Leave' | 'Probation' | 'Terminated';
-  supervisorName: string;
-  salary: SalaryStructure;
-  bankDetails: BankDetails;
-  assets: string[];
-  assignedProjects: string[];
-  onboardingProgress: number; // 0 - 100
+  id: Id
+  code: string // VIV-101
+  user_id: Id
+  name: string
+  email: string
+  department_id: Id
+  team_id: Id | null
+  designation: string
+  employment_type: EmploymentType
+  status: EmployeeStatus
+  joined_on: ISODate
+  probation_until: ISODate | null
+  exited_on: ISODate | null
+  phone: string
+  nid: string
+  avatar_path: string | null
 }
 
-// User compatibility alias
-export type User = Employee;
-
-export type AttendanceStatus = 
-  | 'shift_not_started' 
-  | 'active' 
-  | 'on_break' 
-  | 'shift_ended' 
-  | 'absent';
-
-export type BreakCategory = 'Short Break' | 'Tea Break' | 'Lunch Break' | 'System Inactive' | 'Official Step Out';
-
-export interface BreakRecord {
-  id: string;
-  category: BreakCategory;
-  startTime: string; // HH:mm:ss
-  endTime?: string;  // HH:mm:ss
-  durationSeconds: number;
-  reason?: string;
+export interface Department {
+  id: Id
+  name: string
 }
+
+export interface Team {
+  id: Id
+  name: string
+  department_id: Id
+  lead_employee_id: Id
+}
+
+export interface TeamMember {
+  team_id: Id
+  employee_id: Id
+}
+
+export interface SalaryStructure {
+  id: Id
+  employee_id: Id
+  effective_from: ISODate
+  basic: number
+  house_rent: number
+  medical: number
+  conveyance: number
+  pf_percent: number
+  tax_monthly: number
+  gross: number
+  hourly_rate: number
+}
+
+export interface BankAccount {
+  id: Id
+  employee_id: Id
+  bank: string
+  account_name: string
+  account_no: string
+  routing_no: string
+  branch: string
+  is_primary: boolean
+}
+
+export type EmployeeDocumentKind = 'nid' | 'contract' | 'cv' | 'certificate' | 'other'
+export interface EmployeeDocument {
+  id: Id
+  employee_id: Id
+  kind: EmployeeDocumentKind
+  name: string
+  path: string
+  uploaded_at: ISODateTime
+}
+
+export type EmployeeAssetStatus = 'assigned' | 'returned' | 'lost'
+export interface EmployeeAsset {
+  id: Id
+  employee_id: Id
+  name: string
+  tag: string
+  assigned_on: ISODate
+  returned_on: ISODate | null
+  status: EmployeeAssetStatus
+}
+
+export interface OnboardingChecklistItem {
+  id: Id
+  employee_id: Id
+  label: string
+  done: boolean
+  done_at: ISODateTime | null
+}
+export type OnboardingChecklist = OnboardingChecklistItem
+
+// ---------- Attendance ----------
+export interface AttendancePolicy {
+  shift_start: string // '09:00'
+  shift_end: string // '18:00'
+  grace_minutes: number
+  standard_minutes: number
+  idle_timeout_minutes: number
+  lunch_cap_minutes: number
+  late_penalty_rule: { lates_per_penalty: number; penalty_days: number }
+  weekend_days: number[] // 0 = Sunday
+}
+
+export interface Holiday {
+  id: Id
+  date: ISODate
+  name: string
+}
+
+export type AttendanceDayStatus =
+  | 'not_started'
+  | 'working'
+  | 'on_break'
+  | 'ended'
+  | 'on_leave'
+  | 'holiday'
+  | 'absent'
 
 export interface AttendanceDay {
-  id: string;
-  userId: string;
-  userName: string;
-  userAvatar: string;
-  department: string;
-  date: string;
-  status: AttendanceStatus;
-  firstLoginTime?: string;
-  lastLogoutTime?: string;
-  productionSeconds: number;
-  breakSeconds: number;
-  grossSeconds: number;
-  breaks: BreakRecord[];
-  currentTaskTitle?: string;
-  currentTaskId?: string;
-  currentBreakDurationSeconds?: number;
-  isLateArrival?: boolean;
-  isRegularized?: boolean;
+  id: Id
+  employee_id: Id
+  date: ISODate
+  status: AttendanceDayStatus
+  first_in_at: ISODateTime | null
+  last_out_at: ISODateTime | null
+  work_seconds: number
+  break_seconds: number
+  late_minutes: number
+  is_regularized: boolean
 }
 
-export type KanbanColumnId = 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
+export type SegmentType = 'work' | 'break'
+export type BreakCategory = 'short' | 'tea' | 'lunch' | 'official' | 'idle' | 'signed_out'
+export type SegmentSource = 'login' | 'logout' | 'idle_sweep' | 'manual'
 
-export interface TaskAttachment {
-  id: string;
-  name: string;
-  url: string;
-  fileType: string;
-  sizeBytes: number;
-  uploadedAt: string;
-  uploadedBy: string;
-  isClipboardPaste?: boolean;
+export interface TimeSegment {
+  id: Id
+  attendance_day_id: Id
+  type: SegmentType
+  break_category: BreakCategory | null
+  started_at: ISODateTime
+  ended_at: ISODateTime | null
+  note: string | null
+  source: SegmentSource
+}
+
+export interface TaskTimeEntry {
+  id: Id
+  time_segment_id: Id
+  task_id: Id
+  employee_id: Id
+  started_at: ISODateTime
+  ended_at: ISODateTime | null
+  seconds: number
+}
+
+export type RegularizationStatus = 'pending' | 'approved' | 'rejected'
+export interface RegularizationRequest {
+  id: Id
+  attendance_day_id: Id
+  employee_id: Id
+  reason: string
+  status: RegularizationStatus
+  decided_by: Id | null
+  decided_at: ISODateTime | null
+  note: string | null
+  created_at: ISODateTime
+}
+
+// ---------- Leave ----------
+export interface LeaveType {
+  id: Id
+  name: string
+  annual_quota: number
+  is_paid: boolean
+  carry_forward: boolean
+  allows_half_day: boolean
+}
+
+export interface LeaveBalance {
+  id: Id
+  employee_id: Id
+  leave_type_id: Id
+  year: number
+  entitled: number
+  used: number
+  pending: number
+}
+
+export type LeaveStatus = 'pending_lead' | 'pending_hr' | 'approved' | 'rejected' | 'cancelled'
+export type HalfDay = 'none' | 'first_half' | 'second_half'
+
+export interface LeaveRequest {
+  id: Id
+  employee_id: Id
+  leave_type_id: Id
+  starts_on: ISODate
+  ends_on: ISODate
+  half_day: HalfDay
+  days: number
+  reason: string
+  attachment_path: string | null
+  status: LeaveStatus
+  created_at: ISODateTime
+}
+
+export type ApprovalDecision = 'approved' | 'rejected'
+export interface LeaveApproval {
+  id: Id
+  leave_request_id: Id
+  stage: 'lead' | 'hr'
+  decided_by: Id
+  decision: ApprovalDecision
+  note: string | null
+  decided_at: ISODateTime
+}
+
+// ---------- Payroll ----------
+export type PayrollRunStatus = 'draft' | 'review' | 'approved' | 'paid'
+export interface PayrollRun {
+  id: Id
+  year: number
+  month: number // 1-12
+  status: PayrollRunStatus
+  approved_by: Id | null
+  approved_at: ISODateTime | null
+  paid_at: ISODateTime | null
+  payment_reference: string | null
+  locked_at: ISODateTime | null
+}
+
+export interface PayrollItem {
+  id: Id
+  run_id: Id
+  employee_id: Id
+  salary_structure_id: Id
+  standard_minutes: number
+  worked_minutes: number
+  overtime_minutes: number
+  unpaid_leave_days: number
+  late_count: number
+  gross: number
+  overtime_pay: number
+  unpaid_deduction: number
+  late_deduction: number
+  tax: number
+  pf: number
+  net: number
+  bank_account_id: Id | null
+  payslip_path: string | null
+}
+
+export type PayrollAdjustmentKind = 'bonus' | 'deduction'
+export interface PayrollAdjustment {
+  id: Id
+  item_id: Id
+  kind: PayrollAdjustmentKind
+  label: string
+  amount: number
+  note: string | null
+  created_by: Id
+}
+
+// ---------- Billing ----------
+export type Currency = 'BDT' | 'USD' | 'EUR'
+
+export interface Client {
+  id: Id
+  name: string
+  email: string
+  address: string
+  currency: Currency
+  default_rate: number
+}
+
+export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'void'
+export interface Invoice {
+  id: Id
+  number: string // VIV-2026-0042
+  client_id: Id
+  project_id: Id | null
+  issued_on: ISODate
+  due_on: ISODate
+  currency: Currency
+  subtotal: number
+  tax_percent: number
+  discount: number
+  total: number
+  paid_total: number
+  status: InvoiceStatus
+  notes: string | null
+  pdf_path: string | null
+}
+
+export interface InvoiceLine {
+  id: Id
+  invoice_id: Id
+  description: string
+  qty: number
+  unit_price: number
+  amount: number
+}
+
+export interface InvoicePayment {
+  id: Id
+  invoice_id: Id
+  paid_on: ISODate
+  amount: number
+  method: string
+  reference: string | null
+}
+
+export type ClaimStatus = 'draft' | 'submitted' | 'verified' | 'approved' | 'paid'
+export interface ContractorClaim {
+  id: Id
+  employee_id: Id
+  year: number
+  month: number
+  tracked_minutes: number
+  claimed_minutes: number
+  rate: number
+  fixed_amount: number | null
+  total: number
+  status: ClaimStatus
+  verified_by: Id | null
+  approved_by: Id | null
+  paid_at: ISODateTime | null
+  bank_account_id: Id | null
+  pdf_path: string | null
+}
+
+// ---------- Work ----------
+export type ProjectStatus = 'active' | 'paused' | 'done'
+export type BillingType = 'retainer' | 'hourly' | 'fixed' | 'internal'
+
+export interface Project {
+  id: Id
+  key: string // PULSE
+  name: string
+  client_id: Id | null
+  lead_employee_id: Id
+  status: ProjectStatus
+  billing_type: BillingType
+  rate: number | null
+}
+
+export interface ProjectMember {
+  project_id: Id
+  employee_id: Id
+}
+
+export interface BoardColumn {
+  id: Id
+  project_id: Id
+  name: string
+  position: number
+  is_done: boolean
+}
+
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
+export interface Task {
+  id: Id
+  project_id: Id
+  number: number
+  key: string // PULSE-142 (derived: project.key + number)
+  title: string
+  body_md: string
+  column_id: Id
+  priority: TaskPriority
+  assignee_id: Id | null
+  reporter_id: Id
+  estimate_minutes: number | null
+  due_on: ISODate | null
+  position: number
+  created_at: ISODateTime
+}
+
+export interface Label {
+  id: Id
+  project_id: Id | null
+  name: string
+  color: 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'accent'
+}
+
+export interface TaskLabel {
+  task_id: Id
+  label_id: Id
+}
+
+export interface Subtask {
+  id: Id
+  task_id: Id
+  title: string
+  done: boolean
+  position: number
 }
 
 export interface TaskComment {
-  id: string;
-  authorId: string;
-  authorName: string;
-  authorAvatar: string;
-  createdAt: string;
-  text: string;
-  attachedImages?: string[];
+  id: Id
+  task_id: Id
+  author_id: Id
+  body: string
+  created_at: ISODateTime
 }
 
-export interface ChecklistItem {
-  id: string;
-  text: string;
-  completed: boolean;
+export type AttachableType = 'task' | 'task_comment' | 'message' | 'leave_request'
+export interface Attachment {
+  id: Id
+  attachable_type: AttachableType
+  attachable_id: Id
+  name: string
+  mime: string
+  size: number
+  path: string // object/data URL in the mock
+  created_at: ISODateTime
 }
 
-export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
-
-export interface KanbanTask {
-  id: string;
-  projectKey: string;
-  projectName: string;
-  title: string;
-  description: string;
-  columnId: KanbanColumnId;
-  priority: TaskPriority;
-  assignee: Employee;
-  reporter: Employee;
-  estimatedHours: number;
-  spentProductionSeconds: number;
-  dueDate: string;
-  attachments: TaskAttachment[];
-  comments: TaskComment[];
-  labels: string[];
-  subtasks: ChecklistItem[];
-  isTracking?: boolean;
+export interface TaskActivity {
+  id: Id
+  task_id: Id
+  actor_id: Id
+  text: string
+  at: ISODateTime
 }
 
-export type LeaveType = 'Casual Leave' | 'Sick Leave' | 'Annual Leave' | 'Unpaid Leave';
-
-export type LeaveStatus = 'pending_tl' | 'pending_hr' | 'approved' | 'rejected';
-
-export interface LeaveRequest {
-  id: string;
-  userId: string;
-  userName: string;
-  userAvatar: string;
-  department: string;
-  type: LeaveType;
-  startDate: string;
-  endDate: string;
-  daysCount: number;
-  reason: string;
-  status: LeaveStatus;
-  appliedAt: string;
-  tlApprovedBy?: string;
-  hrApprovedBy?: string;
-  rejectionReason?: string;
+// ---------- Chat ----------
+export type ConversationType = 'dm' | 'team' | 'project' | 'group'
+export interface Conversation {
+  id: Id
+  type: ConversationType
+  name: string | null
+  team_id: Id | null
+  project_id: Id | null
 }
 
-export interface PayrollRecord {
-  id: string;
-  userId: string;
-  userName: string;
-  userAvatar: string;
-  designation: string;
-  department: string;
-  month: string; // "November 2026"
-  baseSalary: number;
-  salaryBreakdown: SalaryStructure;
-  standardHours: number; // 176h
-  actualProductionHours: number;
-  totalBreakHours: number;
-  overtimeHours: number;
-  overtimePay: number;
-  unpaidLeaveDays: number;
-  unpaidLeaveDeduction: number;
-  latePenaltyDeduction: number;
-  taxDeduction: number;
-  performanceBonus: number;
-  grossEarnings: number;
-  totalDeductions: number;
-  netPayable: number;
-  paymentStatus: 'draft' | 'approved' | 'paid';
-  disbursementDate?: string;
-  bankAccountRef: string;
+export interface ConversationMember {
+  conversation_id: Id
+  employee_id: Id
+  last_read_message_id: Id | null
 }
 
-export type InvoiceType = 'employee_salary' | 'client_project';
-export type InvoiceStatus = 'draft' | 'submitted' | 'verified_tl' | 'approved' | 'paid' | 'overdue';
-
-export interface Invoice {
-  id: string;
-  invoiceNumber: string;
-  type: InvoiceType;
-  issueDate: string;
-  dueDate: string;
-  status: InvoiceStatus;
-  currency: 'BDT' | 'USD' | 'EUR';
-  notes?: string;
-
-  // Employee Monthly Salary Invoice fields (Direct production hours & salary claim, no item clutter)
-  employeeId?: string;
-  employeeName?: string;
-  employeeAvatar?: string;
-  designation?: string;
-  department?: string;
-  billingMonth?: string;
-  productionHours?: number;
-  standardHours?: number;
-  baseSalary?: number;
-  overtimeHours?: number;
-  overtimePay?: number;
-  deductions?: number;
-  netPayable: number;
-  bankName?: string;
-  accountNumber?: string;
-  routingNumber?: string;
-  tlVerifiedBy?: string;
-  tlVerifiedAt?: string;
-  managementApprovedBy?: string;
-  managementApprovedAt?: string;
-  paidAt?: string;
-
-  // Commercial Client Project Invoice fields
-  clientName?: string;
-  clientEmail?: string;
-  clientAddress?: string;
-  projectName?: string;
-  billingPeriod?: string;
-  scopeDescription?: string;
-  total: number;
+export interface MessageAttachment {
+  name: string
+  mime: string
+  size: number
+  path: string
 }
+
+export interface Message {
+  id: Id
+  conversation_id: Id
+  author_id: Id
+  body: string
+  attachments: MessageAttachment[]
+  created_at: ISODateTime
+}
+
+// ---------- Platform ----------
+export type NotificationKind =
+  | 'leave'
+  | 'regularization'
+  | 'claim'
+  | 'payroll'
+  | 'invoice'
+  | 'mention'
+
+export interface Notification {
+  id: Id
+  employee_id: Id
+  kind: NotificationKind
+  title: string
+  body: string | null
+  link: string
+  read_at: ISODateTime | null
+  created_at: ISODateTime
+}
+
+export interface ActivityLogEntry {
+  id: Id
+  subject_type: string
+  subject_id: Id
+  actor_id: Id
+  description: string
+  properties: Record<string, unknown> | null
+  created_at: ISODateTime
+}
+
+export interface Setting {
+  key: string
+  value: string | number | boolean | null
+}
+
+// ---------- Cross-cutting ----------
+export type Ability =
+  | 'view_team'
+  | 'approve_leave_lead'
+  | 'approve_leave_hr'
+  | 'manage_people'
+  | 'manage_payroll'
+  | 'approve_payroll'
+  | 'manage_billing'
+  | 'verify_claims'
+  | 'approve_claims'
+  | 'manage_projects'
+  | 'manage_settings'
+
+export type BadgeVariant = 'neutral' | 'success' | 'warning' | 'danger' | 'info'
