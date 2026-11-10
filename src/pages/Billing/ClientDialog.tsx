@@ -39,7 +39,7 @@ export function ClientDialog({ client, open, onOpenChange }: { client: Client | 
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={save}>
+          <Button variant="primary" onClick={save} disabled={!form.name.trim()}>
             {client ? 'Save changes' : 'Create client'}
           </Button>
         </>

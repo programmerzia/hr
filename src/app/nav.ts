@@ -79,6 +79,7 @@ export const navGroups: NavGroup[] = [
       { id: 'regularizations', label: 'Regularizations', to: '/team/regularizations', icon: ClipboardCheck },
       { id: 'leave-approvals', label: 'Leave approvals', to: '/leave/approvals', icon: CalendarCheck },
       { id: 'leave-calendar', label: 'Calendar', to: '/leave/calendar', icon: Calendar },
+      { id: 'claims', label: 'Claims', to: '/claims', icon: Receipt, roles: ['team_lead'] },
     ],
   },
   {

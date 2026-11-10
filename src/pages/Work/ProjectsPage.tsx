@@ -193,7 +193,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit}>
+          <Button variant="primary" onClick={submit} disabled={!name.trim() || !key.trim()}>
             Create project
           </Button>
         </>

@@ -70,7 +70,7 @@ export function ConversationList({ rows, query, onQuery, onNew, className }: Pro
           if (list.length === 0) return null
           return (
             <section key={s.id} className="mb-2">
-              <h2 className="px-3 py-1 text-xs font-medium uppercase tracking-wide text-fg-subtle">{s.label}</h2>
+              <h2 className="px-3 py-1 text-xs font-medium text-fg-subtle">{s.label}</h2>
               <ul>
                 {list.map((r) => (
                   <li key={r.conversation.id}>

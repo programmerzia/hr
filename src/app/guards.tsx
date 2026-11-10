@@ -7,15 +7,12 @@ import type { Employee, Role } from '../types'
 export interface RouteHandle {
   roles?: Role[]
   allow?: (who: { role: Role; employee: Employee }) => boolean
+  /** Render the page without the sidebar or tab bar (print views). */
+  bare?: boolean
 }
 
 export const fullTimeOnly: RouteHandle = {
   allow: ({ employee }) => employee.employment_type === 'full_time',
-}
-
-export const managementOrContractor: RouteHandle = {
-  roles: ['management'],
-  allow: ({ employee }) => employee.employment_type === 'contractor',
 }
 
 /** Sends signed-out visitors to /login. */

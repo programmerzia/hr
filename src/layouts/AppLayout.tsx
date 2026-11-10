@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Outlet, useNavigate } from 'react-router'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Outlet, useMatches, useNavigate } from 'react-router'
+import type { RouteHandle } from '../app/guards'
 import { navFor } from '../app/nav'
+import { PageSkeleton } from '../components/shared/PageSkeleton'
 import { CommandPalette, type CommandItem } from '../components/ui'
 import { useAuthed } from '../mock/session'
 import { LogoutDialog } from '../pages/Auth/LogoutDialog'
@@ -22,6 +24,7 @@ export function AppLayout() {
   const { employee, role } = useAuthed()
   const navigate = useNavigate()
   useHeartbeat()
+  const bare = useMatches().some((m) => (m.handle as RouteHandle | undefined)?.bare)
 
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -65,6 +68,16 @@ export function AppLayout() {
     [groups, navigate],
   )
 
+  if (bare) {
+    return (
+      <main className="min-h-screen bg-bg px-4 py-6 print:p-0">
+        <Suspense fallback={<PageSkeleton />}>
+          <Outlet />
+        </Suspense>
+      </main>
+    )
+  }
+
   return (
     <div className="flex min-h-screen bg-bg">
       <Sidebar
@@ -75,7 +88,9 @@ export function AppLayout() {
         onSignOut={() => setLogoutOpen(true)}
       />
       <main className="min-w-0 flex-1 px-4 pb-24 pt-4 md:px-6 md:pb-6 md:pt-6">
-        <Outlet />
+        <Suspense fallback={<PageSkeleton />}>
+          <Outlet />
+        </Suspense>
       </main>
       <MobileTabBar groups={groups} onSignOut={() => setLogoutOpen(true)} />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} items={commands} />

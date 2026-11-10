@@ -14,11 +14,8 @@ import { useWork } from '../../mock/stores/work'
 import type { Invoice } from '../../types'
 import { balanceOf, COMPANY, isoToday, paymentMethods } from './helpers'
 
-const printCss = `@media print {
-  body * { visibility: hidden; }
-  .invoice-print, .invoice-print * { visibility: visible; }
-  .invoice-print { position: absolute; left: 0; top: 0; width: 100%; border: 0; box-shadow: none; }
-}`
+const printCss = `@page { size: A4; margin: 12mm; }
+@media print { .invoice-print { border: 0; box-shadow: none; } }`
 
 function PaymentDialog({ invoice, onClose }: { invoice: Invoice; onClose: () => void }) {
   const recordPayment = useBilling((s) => s.recordPayment)
@@ -45,7 +42,7 @@ function PaymentDialog({ invoice, onClose }: { invoice: Invoice; onClose: () => 
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={save}>
+          <Button variant="primary" onClick={save} disabled={!(Number(amount) > 0) || !paidOn}>
             Record payment
           </Button>
         </>
@@ -73,7 +70,8 @@ function PaymentDialog({ invoice, onClose }: { invoice: Invoice; onClose: () => 
   )
 }
 
-export function InvoiceDetailPage() {
+/** `printView` is the bare route (/invoices/:id/print): just the sheet and a print button. */
+export function InvoiceDetailPage({ printView = false }: { printView?: boolean }) {
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const b = useBilling()
@@ -109,14 +107,25 @@ export function InvoiceDetailPage() {
   return (
     <div className="mx-auto max-w-content">
       <style>{printCss}</style>
-      <PageHeader
-        title={invoice.number}
-        breadcrumb={[{ label: 'Invoices', to: '/invoices' }, { label: invoice.number }]}
-        actions={<StatusBadge status={invoice.status} />}
-        className="print:hidden"
-      />
+      {printView ? (
+        <div className="mb-4 flex items-center justify-between print:hidden">
+          <Link to={`/invoices/${invoice.id}`} className="text-sm text-accent hover:underline">
+            Back to invoice
+          </Link>
+          <Button variant="primary" icon={<Printer size={14} />} onClick={() => window.print()}>
+            Print or save as PDF
+          </Button>
+        </div>
+      ) : (
+        <PageHeader
+          title={invoice.number}
+          breadcrumb={[{ label: 'Invoices', to: '/invoices' }, { label: invoice.number }]}
+          actions={<StatusBadge status={invoice.status} />}
+          className="print:hidden"
+        />
+      )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_16rem]">
+      <div className={printView ? 'grid grid-cols-1' : 'grid grid-cols-1 gap-4 lg:grid-cols-[1fr_16rem]'}>
         <Card className="invoice-print p-6 sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -125,7 +134,7 @@ export function InvoiceDetailPage() {
               <p className="text-sm text-fg-muted">{COMPANY.email}</p>
             </div>
             <div className="text-right">
-              <p className="text-xl font-semibold">Invoice</p>
+              {printView ? <h1 className="text-xl font-semibold">Invoice</h1> : <p className="text-xl font-semibold">Invoice</p>}
               <p className="font-mono text-sm">{invoice.number}</p>
               <div className="mt-1">
                 <StatusBadge status={invoice.status} />
@@ -260,7 +269,7 @@ export function InvoiceDetailPage() {
           )}
         </Card>
 
-        <div className="flex flex-col gap-4 print:hidden">
+        {!printView && <div className="flex flex-col gap-4 print:hidden">
           <Card>
             <CardHeader title="Actions" />
             <CardBody className="flex flex-col gap-2">
@@ -282,7 +291,7 @@ export function InvoiceDetailPage() {
                   Record payment
                 </Button>
               )}
-              <Button icon={<Printer size={14} />} onClick={() => window.print()}>
+              <Button icon={<Printer size={14} />} onClick={() => navigate(`/invoices/${invoice.id}/print`)}>
                 Print
               </Button>
               {canVoid && (
@@ -298,7 +307,7 @@ export function InvoiceDetailPage() {
             </CardBody>
           </Card>
           <HistoryPanel entries={history} />
-        </div>
+        </div>}
       </div>
 
       {paying && <PaymentDialog invoice={invoice} onClose={() => setPaying(false)} />}

@@ -57,7 +57,7 @@ export function RequestLeaveDialog({ open, onOpenChange, employeeId }: Props) {
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit}>
+          <Button variant="primary" onClick={submit} disabled={!reason.trim() || !from || !to}>
             Submit request
           </Button>
         </>

@@ -1,12 +1,15 @@
+import { Suspense } from 'react'
 import { Outlet, type RouteObject } from 'react-router'
+import { page } from '../../app/lazy'
 import { TaskDrawer } from '../Work/routes'
-import { ChatPage } from './ChatPage'
 
 function ChatLayout() {
   return (
     <>
       <Outlet />
-      <TaskDrawer />
+      <Suspense fallback={null}>
+        <TaskDrawer />
+      </Suspense>
     </>
   )
 }
@@ -15,8 +18,8 @@ export const chatRoutes: RouteObject[] = [
   {
     element: <ChatLayout />,
     children: [
-      { path: 'chat', element: <ChatPage /> },
-      { path: 'chat/:conversationId', element: <ChatPage /> },
+      { path: 'chat', element: page(() => import('./ChatPage'), 'ChatPage') },
+      { path: 'chat/:conversationId', element: page(() => import('./ChatPage'), 'ChatPage') },
     ],
   },
 ]

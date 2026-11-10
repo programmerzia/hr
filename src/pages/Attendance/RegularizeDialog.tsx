@@ -46,6 +46,7 @@ export function ReasonDialog({
           </Button>
           <Button
             variant={destructive ? 'danger' : 'primary'}
+            disabled={invalid}
             onClick={() => {
               setTouched(true)
               if (invalid) return

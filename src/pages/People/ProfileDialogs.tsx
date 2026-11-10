@@ -17,11 +17,11 @@ interface DialogProps {
   employee: Employee
 }
 
-function Footer({ onCancel, onSubmit, label }: { onCancel: () => void; onSubmit: () => void; label: string }) {
+function Footer({ onCancel, onSubmit, label, disabled }: { onCancel: () => void; onSubmit: () => void; label: string; disabled?: boolean }) {
   return (
     <>
       <Button variant="ghost" onClick={onCancel}>Cancel</Button>
-      <Button variant="primary" onClick={onSubmit}>{label}</Button>
+      <Button variant="primary" onClick={onSubmit} disabled={disabled}>{label}</Button>
     </>
   )
 }
@@ -161,7 +161,7 @@ export function EditBankDialog({ open, onOpenChange, employee }: DialogProps) {
       onOpenChange={onOpenChange}
       title="Edit bank account"
       description="Salary and claims are paid to this account."
-      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Save account" />}
+      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Save account" disabled={Object.values(f).some((v) => !v.trim())} />}
     >
       <div className="flex flex-col gap-4 pb-2">
         <Field label="Bank" error={missing(f.bank)} required><Input value={f.bank} onChange={set('bank')} /></Field>
@@ -202,7 +202,7 @@ export function AddDocumentDialog({ open, onOpenChange, employee }: DialogProps)
       onOpenChange={onOpenChange}
       title="Add document"
       description={employee.name}
-      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Add document" />}
+      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Add document" disabled={!name.trim()} />}
     >
       <div className="flex flex-col gap-4 pb-2">
         <Field label="Kind">
@@ -239,7 +239,7 @@ export function AddAssetDialog({ open, onOpenChange, employee }: DialogProps) {
       onOpenChange={onOpenChange}
       title="Assign asset"
       description={employee.name}
-      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Assign asset" />}
+      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Assign asset" disabled={!name.trim() || !tag.trim()} />}
     >
       <div className="flex flex-col gap-4 pb-2">
         <Field label="Asset" error={touched && !name.trim() ? 'Required' : undefined} required><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Dell monitor 24 inch" /></Field>

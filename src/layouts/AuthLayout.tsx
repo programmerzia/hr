@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { Outlet } from 'react-router'
 
 export function AuthLayout() {
@@ -6,7 +7,9 @@ export function AuthLayout() {
       <main className="w-full max-w-sm">
         <p className="mb-4 text-center text-lg font-semibold">Vivacom</p>
         <div className="rounded-lg border border-border bg-surface p-6">
-          <Outlet />
+          <Suspense fallback={null}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
     </div>

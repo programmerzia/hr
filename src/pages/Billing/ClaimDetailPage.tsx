@@ -47,6 +47,7 @@ function EditDialog({ claim, onClose }: { claim: ContractorClaim; onClose: () =>
           </Button>
           <Button
             variant="primary"
+            disabled={hours.trim() === '' && fixed.trim() === ''}
             onClick={() => {
               const res = updateClaim(claim.id, {
                 claimed_minutes: Math.round((Number(hours) || 0) * 60),

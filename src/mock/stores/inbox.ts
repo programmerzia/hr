@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { navBadges } from '../../app/nav'
 import { toast } from '../../components/ui'
-import { listOf, useOptionalState } from '../optional'
+import { useBilling } from './billing'
+import { usePayroll } from './payroll'
 import { employeeById } from '../db/people'
 import { useSession } from '../session'
-import type { ContractorClaim, PayrollRun } from '../../types'
+import type { ContractorClaim } from '../../types'
 import { scopeEmployees, useAttendance } from './attendance'
 import { conversationTitle, useChat } from './chat'
 import { useLeaveStore } from './leave'
@@ -52,8 +53,8 @@ export function useInboxItems(): InboxItem[] {
   const conversations = useChat((s) => s.conversations)
   const members = useChat((s) => s.members)
   const [openedAt] = useState(() => Date.now())
-  const payroll = useOptionalState('payroll')
-  const billing = useOptionalState('billing')
+  const allClaims = useBilling((s) => s.claims)
+  const runs = usePayroll((s) => s.runs)
 
   // requests feeds pendingFor(), which reads the store directly
   /* eslint-disable react-hooks/exhaustive-deps */
@@ -122,8 +123,8 @@ export function useInboxItems(): InboxItem[] {
     }
 
     // Contractor claims (optional Billing module). Leads verify, management approves.
-    const claims = listOf<ContractorClaim>(billing, 'claims')
-    if (claims && (role === 'team_lead' || role === 'management')) {
+    const claims: ContractorClaim[] = allClaims
+    if ((role === 'team_lead' || role === 'management')) {
       const mates = new Set(people.filter((e) => role === 'management' || scopeEmployees(me, role).some((s) => s.id === e.id)).map((e) => e.id))
       for (const c of claims) {
         const waiting = role === 'management' ? c.status === 'submitted' || c.status === 'verified' : c.status === 'submitted'
@@ -141,8 +142,7 @@ export function useInboxItems(): InboxItem[] {
     }
 
     // Payroll runs awaiting approval (optional Payroll module)
-    const runs = listOf<PayrollRun>(payroll, 'runs')
-    if (runs && role === 'management') {
+    if (role === 'management') {
       for (const run of runs) {
         if (run.status !== 'review') continue
         items.push({
@@ -180,7 +180,7 @@ export function useInboxItems(): InboxItem[] {
     }
 
     return items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-  }, [employee, role, requests, leaveTypes, regs, days, people, messages, conversations, members, payroll, billing, openedAt])
+  }, [employee, role, requests, leaveTypes, regs, days, people, messages, conversations, members, allClaims, runs, openedAt])
   /* eslint-enable react-hooks/exhaustive-deps */
 }
 

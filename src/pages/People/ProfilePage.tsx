@@ -155,7 +155,7 @@ function OverviewTab({ employee: e }: { employee: Employee }) {
   const checklist = people.onboardingChecklists.filter((c) => c.employee_id === e.id)
   const done = checklist.filter((c) => c.done).length
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader title="Details" />
         <CardBody>
@@ -222,7 +222,7 @@ function CompensationTab({ employee: e, onNew }: { employee: Employee; onNew: ()
   return (
     <div className="flex flex-col gap-4">
       {current && (
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {hourly ? (
             <Stat label="Hourly rate" value={<MoneyCell amount={current.hourly_rate} className="text-left" />} />
           ) : (

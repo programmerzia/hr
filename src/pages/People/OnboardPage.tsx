@@ -137,7 +137,7 @@ export function OnboardPage() {
             <>
               <Field label="Full name" error={errors.name} required><Input {...text('name')} /></Field>
               <Field label="Work email" error={errors.email} hint="The invite is sent here." required><Input type="email" {...text('email')} /></Field>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Phone" error={errors.phone} required><Input {...text('phone')} placeholder="+8801712345678" /></Field>
                 <Field label="National ID" error={errors.nid} required><Input {...text('nid')} className="font-mono" /></Field>
               </div>
@@ -146,7 +146,7 @@ export function OnboardPage() {
 
           {step === 1 && (
             <>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Department" required>
                   <NativeSelect value={form.department_id} onChange={(e) => { set('department_id', e.target.value); set('team_id', 'none') }}>
                     {people.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -160,7 +160,7 @@ export function OnboardPage() {
                 </Field>
               </div>
               <Field label="Designation" error={errors.designation} required><Input {...text('designation')} /></Field>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Employment type" required>
                   <NativeSelect value={form.employment_type} onChange={(e) => set('employment_type', e.target.value as EmploymentType)}>
                     {typeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -176,7 +176,7 @@ export function OnboardPage() {
             <>
               <SalaryFields value={salary} onChange={(f) => { setSalary(f); setErrors((e) => ({ ...e, ...Object.fromEntries(Object.keys(f).map((k) => [k, undefined])) })) }} errors={errors} hourly={hourly} />
               <h3 className="mt-2 text-base font-semibold">Bank account</h3>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Bank" error={errors.bank} required><Input {...text('bank')} /></Field>
                 <Field label="Branch" error={errors.branch} required><Input {...text('branch')} /></Field>
                 <Field label="Account name" error={errors.account_name} required><Input {...text('account_name')} /></Field>

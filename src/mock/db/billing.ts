@@ -189,6 +189,8 @@ export const auditSeed: AuditSeed[] = [
     if (c.verified_by) out.push({ id: `aud-${c.id}-v`, entity: 'claim', entity_id: c.id, at: `${next}-02T10:00:00+06:00`, actor_id: c.verified_by, text: 'verified the hours' })
     if (c.approved_by) out.push({ id: `aud-${c.id}-a`, entity: 'claim', entity_id: c.id, at: `${next}-03T10:00:00+06:00`, actor_id: c.approved_by, text: 'approved the claim' })
     if (c.paid_at) out.push({ id: `aud-${c.id}-p`, entity: 'claim', entity_id: c.id, at: c.paid_at, actor_id: MGMT, text: 'marked the claim as paid' })
-    return out
+    // Seeded history never lies in the future (the current month's claim is still in progress).
+    const now = Date.now()
+    return out.map((e, i) => (new Date(e.at).getTime() > now ? { ...e, at: new Date(now - (out.length - i) * 3_600_000).toISOString() } : e))
   }),
 ]

@@ -1,29 +1,28 @@
+import { lazy, Suspense } from 'react'
 import { Outlet, type RouteObject } from 'react-router'
-import { BoardPage } from './BoardPage'
-import { ListPage } from './ListPage'
-import { MyTasksPage } from './MyTasksPage'
-import { ProjectsPage } from './ProjectsPage'
-import { TaskDrawer } from './TaskDrawer'
+import { page } from '../../app/lazy'
+export const TaskDrawer = lazy(async () => ({ default: (await import('./TaskDrawer')).TaskDrawer }))
 
 function WorkLayout() {
   return (
     <>
       <Outlet />
-      <TaskDrawer />
+      <Suspense fallback={null}>
+        <TaskDrawer />
+      </Suspense>
     </>
   )
 }
 
-export { TaskDrawer }
 
 export const workRoutes: RouteObject[] = [
   {
     element: <WorkLayout />,
     children: [
-      { path: 'projects', element: <ProjectsPage /> },
-      { path: 'projects/:key', element: <BoardPage /> },
-      { path: 'projects/:key/list', element: <ListPage /> },
-      { path: 'tasks', element: <MyTasksPage /> },
+      { path: 'projects', element: page(() => import('./ProjectsPage'), 'ProjectsPage') },
+      { path: 'projects/:key', element: page(() => import('./BoardPage'), 'BoardPage') },
+      { path: 'projects/:key/list', element: page(() => import('./ListPage'), 'ListPage') },
+      { path: 'tasks', element: page(() => import('./MyTasksPage'), 'MyTasksPage') },
     ],
   },
 ]

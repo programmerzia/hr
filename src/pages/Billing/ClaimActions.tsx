@@ -31,6 +31,7 @@ function PayDialog({ claim, onClose }: { claim: ContractorClaim; onClose: () => 
           </Button>
           <Button
             variant="primary"
+            disabled={!paidOn}
             onClick={() => {
               const res = payClaim(claim.id, paidOn, reference)
               if (!res.ok) return setError(res.error)

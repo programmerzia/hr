@@ -59,7 +59,7 @@ function MarkPaidDialog({ open, onOpenChange, runId, label }: { open: boolean; o
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit}>
+          <Button variant="primary" onClick={submit} disabled={!paidOn}>
             Mark as paid
           </Button>
         </>
@@ -213,7 +213,7 @@ function ItemSheet({ itemId, onClose }: { itemId: string | null; onClose: () => 
                   <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
                 </Field>
                 <div className="flex justify-end">
-                  <Button variant="primary" onClick={add}>
+                  <Button variant="primary" onClick={add} disabled={!label.trim() || !(Number(amount) > 0)}>
                     Add adjustment
                   </Button>
                 </div>
@@ -344,7 +344,7 @@ export function RunDetailPage() {
         <Stat label="Net payable" value={formatMoney(totals.net)} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
+      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[1fr_18rem]">
         <div className="min-w-0">
           {items.length === 0 ? (
             <EmptyTable icon={Users} title="No employees in this run" description="Full-time employees with a salary structure appear after you recompute." />

@@ -1,4 +1,4 @@
+import { page } from '../../app/lazy'
 import type { RouteObject } from 'react-router'
-import { InboxPage } from './InboxPage'
 
-export const inboxRoutes: RouteObject[] = [{ path: 'inbox', element: <InboxPage /> }]
+export const inboxRoutes: RouteObject[] = [{ path: 'inbox', element: page(() => import('./InboxPage'), 'InboxPage') }]

@@ -1,4 +1,5 @@
 import { Printer, ShieldOff } from 'lucide-react'
+import { useMemo } from 'react'
 import { Link, useParams } from 'react-router'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { Button, buttonVariants, EmptyState } from '../../components/ui'
@@ -9,17 +10,10 @@ import { usePayroll } from '../../mock/stores/payroll'
 import { usePeopleStore } from '../../mock/stores/people'
 import { cn } from '../../lib/cn'
 
-/**
- * AppLayout has no "bare" mode, so printing hides everything except `.payslip-sheet`
- * with visibility rules (works whatever the shell contains) and sets an A4 page.
- */
+/** The route is bare (no app shell), so printing only needs an A4 page. */
 const printCss = `
 @page { size: A4; margin: 12mm; }
-@media print {
-  body * { visibility: hidden !important; }
-  .payslip-sheet, .payslip-sheet * { visibility: visible !important; }
-  .payslip-sheet { position: absolute; left: 0; top: 0; width: 100%; border: 0 !important; box-shadow: none !important; }
-}
+@media print { .payslip-sheet { border: 0 !important; box-shadow: none !important; } }
 `
 
 function Row({ label, value, strong, muted }: { label: string; value: string; strong?: boolean; muted?: boolean }) {
@@ -36,7 +30,8 @@ export function PayslipPage() {
   const { employee: viewer, role } = useAuthed()
   const run = usePayroll((s) => s.runs.find((r) => r.id === runId))
   const item = usePayroll((s) => s.items.find((i) => i.id === itemId && i.run_id === runId))
-  const adjustments = usePayroll((s) => s.adjustments.filter((a) => a.item_id === itemId))
+  const allAdjustments = usePayroll((s) => s.adjustments)
+  const adjustments = useMemo(() => allAdjustments.filter((a) => a.item_id === itemId), [allAdjustments, itemId])
   const people = usePeopleStore()
 
   const staff = role === 'hr' || role === 'management'
@@ -113,7 +108,7 @@ export function PayslipPage() {
           <p><span className="text-fg-muted">Late arrivals </span>{item.late_count}</p>
         </section>
 
-        <section className="grid gap-6 py-4 sm:grid-cols-2">
+        <section className="grid grid-cols-1 gap-6 py-4 sm:grid-cols-2">
           <div>
             <h2 className="mb-1 text-sm font-semibold">Earnings</h2>
             <table className="w-full text-sm">

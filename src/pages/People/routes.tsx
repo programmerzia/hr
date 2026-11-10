@@ -1,22 +1,20 @@
+import { page } from '../../app/lazy'
 import type { RouteObject } from 'react-router'
-import { DirectoryPage } from './DirectoryPage'
-import { OnboardPage } from './OnboardPage'
-import { ProfilePage } from './ProfilePage'
 
 export const peopleRoutes: RouteObject[] = [
   {
     path: 'people',
     handle: { roles: ['hr', 'management'] },
-    element: <DirectoryPage />,
+    element: page(() => import('./DirectoryPage'), 'DirectoryPage'),
   },
   {
     path: 'people/new',
     handle: { roles: ['hr', 'management'] },
-    element: <OnboardPage />,
+    element: page(() => import('./OnboardPage'), 'OnboardPage'),
   },
   {
     path: 'people/:id',
     handle: { roles: ['hr', 'management'] },
-    element: <ProfilePage />,
+    element: page(() => import('./ProfilePage'), 'ProfilePage'),
   },
 ]

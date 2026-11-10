@@ -48,7 +48,7 @@ export function NewTaskDialog({ project, columnId, onClose }: { project: Project
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit}>
+          <Button variant="primary" onClick={submit} disabled={!title.trim()}>
             Create task
           </Button>
         </>

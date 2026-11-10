@@ -457,6 +457,12 @@ export const useBilling = create<BillingState>((set, get) => {
   }
 })
 
+/** Contractors see how many of their own claims are still drafts. */
+navBadges.set('my-claims', () => {
+  const employee = useSession((s) => s.employee)
+  return useBilling((s) => (employee ? s.claims.filter((c) => c.employee_id === employee.id && c.status === 'draft').length : 0))
+})
+
 /** Nav badge: management sees submitted + verified claims, a lead sees submitted claims to verify. */
 navBadges.set('claims', () => {
   const employee = useSession((s) => s.employee)

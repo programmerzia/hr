@@ -5,10 +5,11 @@ import { StatusBadge } from '../../components/shared/StatusBadge'
 import { Card, CardBody, CardHeader, EmptyState, Stat, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { formatDuration, formatMoney, formatTime } from '../../lib/format'
 import { useInboxItems } from '../../mock/stores/inbox'
-import { listOf, useOptionalState } from '../../mock/optional'
+import { useBilling } from '../../mock/stores/billing'
+import { usePayroll } from '../../mock/stores/payroll'
 import { computeTotals, scopeEmployees, todayKey, useAttendance } from '../../mock/stores/attendance'
 import { usePeopleStore } from '../../mock/stores/people'
-import type { ContractorClaim, Currency, Invoice, PayrollRun, Role } from '../../types'
+import type { Currency, Role } from '../../types'
 
 export function TeamNowCard({ employeeId, role }: { employeeId: string; role: Role }) {
   const now = useAttendance((s) => s.now)
@@ -132,9 +133,7 @@ export function PeopleStats() {
 }
 
 export function PayrollCard() {
-  const payroll = useOptionalState('payroll')
-  const runs = listOf<PayrollRun>(payroll, 'runs')
-  if (!runs) return null
+  const runs = usePayroll((s) => s.runs)
   const latest = [...runs].sort((a, b) => b.year * 12 + b.month - (a.year * 12 + a.month))[0]
   const label = latest
     ? new Date(latest.year, latest.month - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
@@ -182,10 +181,8 @@ export function CompanyStats() {
 }
 
 export function FinanceStats() {
-  const billing = useOptionalState('billing')
-  const invoices = listOf<Invoice>(billing, 'invoices')
-  const claims = listOf<ContractorClaim>(billing, 'claims')
-  if (!invoices && !claims) return null
+  const invoices = useBilling((s) => s.invoices)
+  const claims = useBilling((s) => s.claims)
 
   const open = (invoices ?? []).filter((i) => i.status === 'sent' || i.status === 'overdue')
   const overdue = (invoices ?? []).filter((i) => i.status === 'overdue')

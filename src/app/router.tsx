@@ -13,11 +13,13 @@ import { peopleRoutes } from '../pages/People/routes'
 import { settingsRoutes } from '../pages/Settings/routes'
 import { workRoutes } from '../pages/Work/routes'
 import { RequireAuth, RoleGuard } from './guards'
+import { RouteError } from './RouteError'
 
 export const router = createBrowserRouter([
-  { element: <AuthLayout />, children: authRoutes },
+  { element: <AuthLayout />, errorElement: <RouteError />, children: authRoutes },
   {
     element: <RequireAuth />,
+    errorElement: <RouteError />,
     children: [
       {
         element: <AppLayout />,

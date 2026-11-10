@@ -54,7 +54,7 @@ export function MyTasksPage() {
                     <tr>
                       <Th>Key</Th>
                       <Th>Title</Th>
-                      <Th>Priority</Th>
+                      <Th className="hidden sm:table-cell">Priority</Th>
                       <Th>Due</Th>
                       <Th>Status</Th>
                     </tr>
@@ -69,7 +69,7 @@ export function MyTasksPage() {
                             <TaskKey taskKey={t.key} />
                           </Td>
                           <Td className="font-medium">{t.title}</Td>
-                          <Td>
+                          <Td className="hidden sm:table-cell">
                             <PriorityIcon priority={t.priority} withLabel />
                           </Td>
                           <Td className="whitespace-nowrap">
