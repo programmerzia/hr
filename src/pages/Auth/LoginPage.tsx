@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router'
+import { ConfirmDialog } from '../../components/shared/ConfirmDialog'
 import { Button, Field, Input } from '../../components/ui'
 import { employees, users } from '../../mock/db/people'
 import { useSession } from '../../mock/session'
+import { todayKey, useAttendance } from '../../mock/stores/attendance'
 import type { Role } from '../../types'
 
 const roleLabel: Record<Role, string> = {
@@ -27,12 +29,20 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | undefined>()
+  const [overtimeFor, setOvertimeFor] = useState<string | null>(null)
 
   if (signedIn) return <Navigate to="/" replace />
 
-  const enter = (employeeId: string) => {
-    if (login(employeeId)) navigate('/', { replace: true })
-    else setError('This account cannot sign in.')
+  const enter = (employeeId: string, confirmedOvertime = false) => {
+    const day = useAttendance.getState().dayFor(employeeId, todayKey())
+    if (day?.status === 'ended' && !confirmedOvertime) {
+      setOvertimeFor(employeeId)
+      return
+    }
+    if (login(employeeId)) {
+      if (confirmedOvertime) useAttendance.getState().startWork(employeeId, true)
+      navigate('/', { replace: true })
+    } else setError('This account cannot sign in.')
   }
 
   const submit = (e: FormEvent) => {
@@ -89,6 +99,18 @@ export function LoginPage() {
           ))}
         </ul>
       </section>
+      <ConfirmDialog
+        open={overtimeFor !== null}
+        onOpenChange={(o) => !o && setOvertimeFor(null)}
+        title="Start an overtime session?"
+        description="You already ended your day. Signing in again records an overtime session."
+        confirmLabel="Start overtime"
+        onConfirm={() => {
+          const id = overtimeFor
+          setOvertimeFor(null)
+          if (id) enter(id, true)
+        }}
+      />
     </div>
   )
 }

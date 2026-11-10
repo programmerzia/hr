@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { employeeById, userByEmployeeId } from './db/people'
+import { useAttendance } from './stores/attendance'
 import type { BreakCategory, Employee, Role, User } from '../types'
 
 const STORAGE_KEY = 'vivacom.employee_id'
@@ -48,8 +49,8 @@ export const useSession = create<SessionState>((set, get) => ({
   login: (employeeId) => {
     const next = resolve(employeeId)
     if (!next.employee || !['active', 'probation', 'on_leave'].includes(next.employee.status)) return false
-    // ATTENDANCE HOOK (Wave 1A): call attendance.startWork(employeeId) here.
-    // not_started -> working, on_break -> resume work, ended -> ask about overtime first.
+    // Returns 'needs_overtime_confirm' for an ended day; the login page asks first and calls startWork(id, true).
+    useAttendance.getState().startWork(employeeId)
     writeStored(employeeId)
     set({ ...next, lastHeartbeatAt: new Date().toISOString() })
     return true
@@ -59,10 +60,9 @@ export const useSession = create<SessionState>((set, get) => ({
     const { employee } = get()
     if (employee) {
       if (mode === 'break') {
-        // ATTENDANCE HOOK (Wave 1A): call attendance.startBreak(employee.id, breakCategory ?? 'signed_out') here.
-        void breakCategory
+        useAttendance.getState().startBreak(employee.id, breakCategory ?? 'signed_out')
       } else {
-        // ATTENDANCE HOOK (Wave 1A): call attendance.endDay(employee.id) here.
+        useAttendance.getState().endDay(employee.id)
       }
     }
     writeStored(null)
@@ -70,8 +70,9 @@ export const useSession = create<SessionState>((set, get) => ({
   },
 
   heartbeat: () => {
-    if (!get().employee) return
-    // ATTENDANCE HOOK (Wave 1A): record last activity so the idle sweep can open an idle break.
+    const { employee } = get()
+    if (!employee) return
+    useAttendance.getState().heartbeat(employee.id)
     set({ lastHeartbeatAt: new Date().toISOString() })
   },
 }))
