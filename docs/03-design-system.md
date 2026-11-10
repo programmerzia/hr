@@ -102,3 +102,58 @@ Still forbidden: gradients, glass, glow, rainbow accents, rounded-2xl, uppercase
 
 ## Offline tracking (added 2026-11-10)
 A new break category `offline` is distinct from `idle`: idle = tab open, no activity; offline = app closed, device asleep, or network down while the day was `working`/`on_break`. Detect: (1) persisted last-heartbeat time; on app load or `visibilitychange`→visible, if the gap exceeds the policy idle timeout and the day was working, close the work segment at the last heartbeat and record an `offline` segment up to now, then resume working; (2) `navigator.onLine` false→true transitions record the same way. Timeline bar draws offline as a hatched gray band (idle is hatched warning). My day shows "Offline today" next to break time. Team views show "Offline" (gray dot) for a working member whose last heartbeat is older than 2 minutes, with "since HH:MM". History tables include an Offline column. Payroll and claims treat offline time like break time (not worked).
+
+## Revision 3 — from clean to stunning (added 2026-11-10)
+
+Problem: screens are correct but flat; Home is a grid of identical stat boxes, several at zero. Goal: the feel of Linear / Vercel / Raycast — layered surfaces, confident typography, live data drawn as small honest visuals, and motion that confirms actions. Still no gradients, glass, glow, or marketing copy.
+
+### Surfaces and color
+- Three planes: sidebar `--sidebar` (light #f3f4f6 / dark #12151b), page `--bg` (light #f8f9fb / dark #0f1115), card `--surface` (#fff / #181c25). Card = hairline `--border` + `shadow-xs`. Hover-able cards lift 1px with `shadow-sm` (120ms).
+- Accent stays blue (#2f5fe3 / #6b8cff). Add `--accent-strong` (#1f46c9) for pressed, and `--accent-soft` for selected/active fills.
+- Categorical palette for charts and labels, muted and theme-safe (8 hues; define `--chart-1..8`): blue, teal, violet, amber, rose, green, slate, orange. Status colors stay semantic.
+- Text hierarchy: `--fg` for primary, `--fg-muted` for secondary, `--fg-subtle` for tertiary. Every card must show all three levels (title, value, context).
+
+### Typography
+- Page title 24px/600/-0.02em. Section title 15px/600. Card title 14px/600. Eyebrow 12px/500 `--fg-muted` (sentence case, never uppercase).
+- Big figures (clock, primary stat): JetBrains Mono 32–40px/500 tabular, `--fg`. Secondary figures 20px.
+- Line-height: 1.25 for titles, 1.5 for body.
+
+### Charts (`src/components/charts/`, pure SVG, no library)
+- `Bars` (vertical, ≤ 14 bars, value labels on hover tooltip, baseline line, optional target line), `StackedBar` (horizontal composition with legend), `Sparkline` (single series, area at 8% opacity), `Ring` (progress 0–100, 48px, 4px stroke), `HeatStrip` (N cells × intensity, for 30-day attendance).
+- Rules: one color per series from `--chart-n`; axis text 12px `--fg-subtle`; no gridlines except baseline; animate bar height/width on mount 240ms ease-out; tooltips via Tooltip component; `aria-label` with the summary sentence; every chart needs real seed data.
+
+### Home (all roles)
+- Row 1: greeting (24px) + date; right: today's status chip duplicated? No — the top bar has it. Instead right side shows a `Ring` of work vs target with "5h 12m of 8h".
+- Row 2 "Overview": ONE wide card with a `StackedBar` of team/company presence (working / break / offline / leave / not started / absent) + legend with counts. Never a row of single-number cards for presence.
+- Row 3: role content in a 2:1 grid. Left: Team now table (lead+), My tasks (all), Payroll/claims/invoices cards (hr/mgmt) with inline `Bars` where series exist: payroll gross last 6 months (runs), invoices by status `StackedBar`, hires per month `Bars`. Right: Needs your attention (counts become links with chevrons, zero rows hidden), Leave balance as 3 thin progress lines, Chat unread.
+- Hide any stat that is zero unless it is a warning.
+
+### My day
+- Status card: left column = status badge, clock 40px, caption; middle = `Ring` 64px (work vs target) with percent; right = actions. Below: TimelineBar v2 — 16px tall, rounded ends, hour ticks + labels every 2h, a 2px `--fg` "now" marker, target marker at shift end, segment tooltips (type, category, from–to, duration), hatched idle/offline, smooth width transition each tick.
+- Add "This week" `Bars` (work hours per day, target line at 8h) beside the week table.
+
+### Team
+- Stats row replaced by `StackedBar` presence strip + counts. Table rows get presence ring on avatar (green working, amber break, gray offline/ended). Group rows by team for hr/management with team header rows.
+- History: add a 30-day `HeatStrip` per member column (hover = day summary).
+
+### Board
+- Column header: name, count chip, tinted strip 2px using `--chart-n` per column position. Cards: hover lift, priority icon colored (urgent danger, high warning, medium `--fg-muted`, low `--fg-subtle`), label chips with colored dot from a label color map, due badge soft-danger if overdue. Drag ghost at 80% opacity, drop target column outline accent.
+
+### Payroll, Invoices, Claims
+- Runs page: `Bars` gross per month over the runs. Run detail: totals row with `StackedBar` of deductions composition (tax, PF, unpaid, late, adjustments). Invoices: aging `StackedBar` (current / 1–30 / 31–60 / 60+) by amount in the stats row. Claim detail: weekly `Bars` claimed vs tracked (two series).
+
+### People
+- Profile header: 48px avatar with presence ring, name 22px, designation, team chip, status badge; meta row (code, joined, lead) as label/value pairs; tab bar underline. Attendance tab: 30-day `HeatStrip` + month `Bars`.
+
+### Chat
+- Day dividers with centered date pill; hover actions (copy link, open task); task reference cards with status dot and assignee; composer with border-strong focus ring accent; unread divider line "New".
+
+### Login
+- Split layout ≥ 1024px: left panel `--accent-soft` with logomark 40px, "Vivacom", one line "Internal workspace", and a quiet decorative 8×8 dot grid in accent at 12% (CSS radial-gradient dots are allowed here only). Right: form card. Demo accounts as a compact list with role badges.
+
+### Motion
+- Buttons: active scale 0.98. Cards: hover translateY(-1px). Page: content fade+rise 4px on route change (120ms). Charts animate on mount. Status dot pulse while working. All under `prefers-reduced-motion: reduce` → none.
+
+### Sidebar and top bar
+- Active nav: `--accent-soft` fill + 2px accent bar at left edge + icon in accent. Icons strokeWidth 1.75. Group labels 12px `--fg-subtle`. Collapsed rail shows tooltips.
+- Top bar status chip: tinted background by state (success-soft working, warning-soft break, surface-2 otherwise).
