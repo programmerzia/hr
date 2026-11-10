@@ -1,4 +1,4 @@
-import { FileText, Plus, Search } from 'lucide-react'
+import { AlertCircle, CircleCheck, FileText, Hourglass, Plus, Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { EmptyTable } from '../../components/shared/EmptyTable'
@@ -63,14 +63,16 @@ export function InvoicesPage() {
       />
 
       <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Stat label="Outstanding" value={sumByCurrency(open.map((i) => ({ currency: i.currency, amount: balanceOf(i) })))} />
+        <Stat icon={Hourglass} label="Outstanding" value={sumByCurrency(open.map((i) => ({ currency: i.currency, amount: balanceOf(i) })))} />
         <Stat
+          icon={AlertCircle}
           label="Overdue"
           value={sumByCurrency(
             invoices.filter((i) => i.status === 'overdue').map((i) => ({ currency: i.currency, amount: balanceOf(i) })),
           )}
         />
         <Stat
+          icon={CircleCheck}
           label="Paid this month"
           value={sumByCurrency(
             payments

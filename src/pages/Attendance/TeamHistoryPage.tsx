@@ -65,7 +65,7 @@ export function TeamHistoryPage() {
   }
 
   const exportCsv = () => {
-    const header = ['Date', 'Employee', 'Code', 'Team', 'In', 'Out', 'Work (min)', 'Break (min)', 'Late (min)', 'Status', 'Regularized']
+    const header = ['Date', 'Employee', 'Code', 'Team', 'In', 'Out', 'Work (min)', 'Break (min)', 'Offline (min)', 'Late (min)', 'Status', 'Regularized']
     const body = rows.map(({ d, e }) => {
       const t = totalsOf(segsByDay.get(d.id), now)
       return [
@@ -77,6 +77,7 @@ export function TeamHistoryPage() {
         d.last_out_at ? formatTime(d.last_out_at) : '',
         Math.round(t.workSeconds / 60),
         Math.round(t.breakSeconds / 60),
+        Math.round(t.offlineSeconds / 60),
         d.late_minutes,
         d.status,
         regState(d.id, d.is_regularized),
@@ -128,6 +129,7 @@ export function TeamHistoryPage() {
               <Th numeric>Out</Th>
               <Th numeric>Work</Th>
               <Th numeric>Break</Th>
+              <Th numeric>Offline</Th>
               <Th numeric>Late (min)</Th>
               <Th>Status</Th>
               <Th>Regularized</Th>
@@ -147,6 +149,7 @@ export function TeamHistoryPage() {
                   <Td numeric>{d.last_out_at ? formatTime(d.last_out_at) : '-'}</Td>
                   <Td numeric>{d.first_in_at ? <DurationText seconds={t.workSeconds} /> : '-'}</Td>
                   <Td numeric>{d.first_in_at ? formatDuration(t.breakSeconds) : '-'}</Td>
+                  <Td numeric>{d.first_in_at && t.offlineSeconds >= 60 ? formatDuration(t.offlineSeconds) : '-'}</Td>
                   <Td numeric>{d.late_minutes > 0 ? d.late_minutes : '-'}</Td>
                   <Td>
                     <StatusBadge status={d.status} />

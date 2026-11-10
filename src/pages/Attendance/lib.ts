@@ -4,7 +4,13 @@ import { dateKey } from '../../mock/db/attendance'
 import { computeTotals, useAttendance, type DayTotals } from '../../mock/stores/attendance'
 import type { AttendanceDay, AttendanceDayStatus, TimeSegment } from '../../types'
 
-export const EMPTY_TOTALS: DayTotals = { workSeconds: 0, breakSeconds: 0, lunchOverCapMinutes: 0 }
+export const EMPTY_TOTALS: DayTotals = {
+  workSeconds: 0,
+  breakSeconds: 0,
+  idleSeconds: 0,
+  offlineSeconds: 0,
+  lunchOverCapMinutes: 0,
+}
 
 /** Segments grouped by attendance day id; recomputed only when segments change. */
 export function useSegmentsByDay(): Map<string, TimeSegment[]> {

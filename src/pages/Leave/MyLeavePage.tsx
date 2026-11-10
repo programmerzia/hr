@@ -1,4 +1,4 @@
-import { CalendarDays, Plus } from 'lucide-react'
+import { CalendarDays, Plane, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog'
@@ -48,6 +48,7 @@ export function MyLeavePage() {
         {balances.map((b) => (
           <Stat
             key={b.id}
+            icon={Plane}
             label={`${b.type.name}${b.type.is_paid ? '' : ' (unpaid)'}`}
             value={b.unlimited ? 'Unlimited' : `${b.available} of ${b.entitled}`}
             delta={{ value: `${b.used} used, ${b.pending} pending`, tone: 'neutral' }}

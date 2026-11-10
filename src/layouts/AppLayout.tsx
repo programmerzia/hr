@@ -8,6 +8,7 @@ import { useAuthed } from '../mock/session'
 import { LogoutDialog } from '../pages/Auth/LogoutDialog'
 import { MobileTabBar } from './MobileTabBar'
 import { Sidebar } from './Sidebar'
+import { TopBar } from './TopBar'
 import { useHeartbeat } from './useHeartbeat'
 
 const COLLAPSED_KEY = 'vivacom.sidebar_collapsed'
@@ -29,6 +30,7 @@ export function AppLayout() {
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const groups = useMemo(() => navFor(role, employee), [role, employee])
 
@@ -79,20 +81,27 @@ export function AppLayout() {
   }
 
   return (
-    <div className="flex min-h-screen bg-bg">
-      <Sidebar
+    <div className="flex min-h-screen bg-bg [--sticky-top:48px]">
+      <Sidebar groups={groups} collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar
+          groups={groups}
+          onOpenPalette={() => setPaletteOpen(true)}
+          onOpenMenu={() => setMenuOpen(true)}
+          onSignOut={() => setLogoutOpen(true)}
+        />
+        <main className="mx-auto w-full max-w-content flex-1 px-4 pb-24 pt-4 md:px-6 md:pb-8 md:pt-6">
+          <Suspense fallback={<PageSkeleton />}>
+            <Outlet />
+          </Suspense>
+        </main>
+      </div>
+      <MobileTabBar
         groups={groups}
-        collapsed={collapsed}
-        onToggleCollapsed={toggleCollapsed}
-        onOpenPalette={() => setPaletteOpen(true)}
+        menuOpen={menuOpen}
+        onMenuOpenChange={setMenuOpen}
         onSignOut={() => setLogoutOpen(true)}
       />
-      <main className="min-w-0 flex-1 px-4 pb-24 pt-4 md:px-6 md:pb-6 md:pt-6">
-        <Suspense fallback={<PageSkeleton />}>
-          <Outlet />
-        </Suspense>
-      </main>
-      <MobileTabBar groups={groups} onSignOut={() => setLogoutOpen(true)} />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} items={commands} />
       <LogoutDialog open={logoutOpen} onOpenChange={setLogoutOpen} />
     </div>

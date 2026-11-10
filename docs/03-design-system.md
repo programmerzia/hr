@@ -56,7 +56,7 @@ Motion: 120–160ms ease-out on hover/open only. No entrance animations on page 
 
 ## Layout
 - **Sidebar** 240px, `bg-surface`, right border. Logo + workspace name top (plain text "Vivacom"), nav groups with 11px… no: group heading 12px `text-fg-subtle` font-medium, items 14px with 16px icon, active = `bg-accent-soft text-accent` with 500 weight. Collapsible to 56px icon rail (persisted). Bottom: current user row (avatar, name, role) → menu (profile, theme, sign out).
-- **Top bar** per page is *inside* the page: `PageHeader` with title, optional description (one line), optional tabs, actions on the right. Not a global header. Global elements (search Ctrl-K, inbox bell) sit at the top of the sidebar.
+- **Page header** inside the page: `PageHeader` with title, optional description (one line), optional tabs, actions on the right. Global elements (search Ctrl-K, status chip, inbox bell, account) live in the global top bar, see Revision 2.
 - **Content** max width 1280px for forms/dashboards; tables may go full width.
 - **Mobile** < 768px: sidebar becomes a sheet; bottom tab bar with 4–5 items *derived from the same nav config* (Home, My day, Tasks, Chat, More).
 

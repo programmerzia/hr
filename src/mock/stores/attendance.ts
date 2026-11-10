@@ -27,11 +27,23 @@ export type StartWorkResult =
   | 'overtime_started'
   | 'needs_overtime_confirm'
 
+export interface Presence {
+  /** True when the day is `working` but the last heartbeat is older than PRESENCE_STALE_MS. */
+  offline: boolean
+  /** ISO time of the last heartbeat when offline. */
+  since: string | null
+}
+
+export const PRESENCE_STALE_MS = 2 * 60_000
+
 export type RegularizationDecision = 'approved' | 'rejected'
 
 export interface DayTotals {
   workSeconds: number
+  /** User-chosen breaks only. Idle and offline time are reported separately and are not worked. */
   breakSeconds: number
+  idleSeconds: number
+  offlineSeconds: number
   /** Lunch minutes over the policy cap (0 when within it). */
   lunchOverCapMinutes: number
 }
@@ -53,6 +65,15 @@ interface AttendanceState {
   startBreak: (employeeId: string, category: BreakCategory, note?: string) => boolean
   endDay: (employeeId: string) => boolean
   heartbeat: (employeeId: string) => void
+  /**
+   * Called on app start, tab visible and network back. When the gap since `lastSeenIso` exceeds the policy idle
+   * timeout and the person was working (or on an idle break that began at the last heartbeat), the gap becomes an
+   * `offline` segment and work resumes. Returns true when the day changed.
+   */
+  reconcileOffline: (employeeId: string, lastSeenIso: string, nowMs: number) => boolean
+  /** Rebuilds a working day after a reload of the in-memory mock: work from the last heartbeat. */
+  restoreAfterReload: (employeeId: string, lastSeenMs: number) => boolean
+  presenceOf: (employeeId: string, nowMs?: number) => Presence
   setCurrentTask: (employeeId: string, taskId: string | null) => void
   requestRegularization: (dayId: string, reason: string) => RegularizationRequest | null
   decideRegularization: (
@@ -80,10 +101,14 @@ function segSeconds(s: TimeSegment, nowMs: number): number {
 export function computeTotals(segments: TimeSegment[], nowMs: number): DayTotals {
   let work = 0
   let brk = 0
+  let idle = 0
+  let offline = 0
   let lunch = 0
   for (const s of segments) {
     const secs = segSeconds(s, nowMs)
     if (s.type === 'work') work += secs
+    else if (s.break_category === 'idle') idle += secs
+    else if (s.break_category === 'offline') offline += secs
     else {
       brk += secs
       if (s.break_category === 'lunch') lunch += secs
@@ -92,6 +117,8 @@ export function computeTotals(segments: TimeSegment[], nowMs: number): DayTotals
   return {
     workSeconds: work,
     breakSeconds: brk,
+    idleSeconds: idle,
+    offlineSeconds: offline,
     lunchOverCapMinutes: Math.max(0, Math.floor(lunch / 60) - attendancePolicy.lunch_cap_minutes),
   }
 }
@@ -104,6 +131,33 @@ export function scopeEmployees(viewerEmployeeId: string, role: Role): Employee[]
     return own.some((e) => e.id === viewerEmployeeId) ? own : [...own, ...employees.filter((e) => e.id === viewerEmployeeId)]
   }
   return employees.filter((e) => e.id === viewerEmployeeId)
+}
+
+/**
+ * Last-seen times for the seeded team (not the signed-in person, who uses `heartbeats`). Live members are refreshed
+ * every tick to simulate their clients; two working members stay stale so team views have offline rows.
+ * Kept outside the zustand state: it changes every second and views already re-render on `now`.
+ */
+const peerBeats = new Map<string, number>()
+const stalePeers = new Map<string, number>()
+{
+  const t0 = Date.now()
+  const todayStr = dateKey(new Date(t0))
+  const working = attendanceDays
+    .filter((d) => d.date === todayStr && d.status === 'working')
+    .map((d) => d.employee_id)
+    .sort((a, b) => {
+      const wa = employees.find((e) => e.id === a)?.team_id === 'team-web' ? 0 : 1
+      const wb = employees.find((e) => e.id === b)?.team_id === 'team-web' ? 0 : 1
+      return wa - wb || a.localeCompare(b)
+    })
+  const staleMinutes = [15, 7]
+  working.forEach((id, i) => {
+    if (i < staleMinutes.length) {
+      stalePeers.set(id, t0 - staleMinutes[i]! * 60_000)
+      peerBeats.set(id, t0 - staleMinutes[i]! * 60_000)
+    } else peerBeats.set(id, t0 - 3000)
+  })
 }
 
 let segCounter = 100000
@@ -261,7 +315,7 @@ export const useAttendance = create<AttendanceState>((set, get) => {
           status: 'ended',
           last_out_at: iso(nowMs),
           work_seconds: Math.round(totals.workSeconds),
-          break_seconds: Math.round(totals.breakSeconds),
+          break_seconds: Math.round(totals.breakSeconds + totals.idleSeconds + totals.offlineSeconds),
         }),
       }))
       return true
@@ -277,6 +331,93 @@ export const useAttendance = create<AttendanceState>((set, get) => {
         return
       }
       if (day?.status === 'working') set((s) => ({ heartbeats: { ...s.heartbeats, [employeeId]: nowMs } }))
+    },
+
+    reconcileOffline: (employeeId, lastSeenIso, nowMs) => {
+      const idleMs = attendancePolicy.idle_timeout_minutes * 60_000
+      let lastSeen = new Date(lastSeenIso).getTime()
+      if (!Number.isFinite(lastSeen) || nowMs - lastSeen <= idleMs) return false
+      const day = get().days.find((d) => d.employee_id === employeeId && d.date === todayKey())
+      if (!day) return false
+      const open = get().segments.find((x) => x.attendance_day_id === day.id && x.ended_at === null)
+      if (!open) return false
+      let convertIdle = false
+      if (day.status === 'working' && open.type === 'work') {
+        // A heartbeat from before this work segment started says nothing about it.
+        lastSeen = Math.max(lastSeen, new Date(open.started_at).getTime())
+        if (nowMs - lastSeen <= idleMs) return false
+      } else if (
+        day.status === 'on_break' &&
+        open.break_category === 'idle' &&
+        new Date(open.started_at).getTime() >= lastSeen - 5000
+      ) {
+        convertIdle = true
+        lastSeen = new Date(open.started_at).getTime()
+      } else {
+        // On a break the person chose, or the day is not running: the gap is not extra lost time.
+        return false
+      }
+      const offlineSeg: TimeSegment = {
+        id: nextSegId(),
+        attendance_day_id: day.id,
+        type: 'break',
+        break_category: 'offline',
+        started_at: iso(lastSeen),
+        ended_at: iso(nowMs),
+        note: 'App closed or no connection',
+        source: 'offline',
+      }
+      const work: TimeSegment = {
+        id: nextSegId(),
+        attendance_day_id: day.id,
+        type: 'work',
+        break_category: null,
+        started_at: iso(nowMs),
+        ended_at: null,
+        note: null,
+        source: 'login',
+      }
+      const task = get().currentTask[employeeId] ?? null
+      set((s) => {
+        let segments: TimeSegment[]
+        if (convertIdle) {
+          segments = s.segments.map((x) => (x.id === open.id ? { ...offlineSeg, id: x.id } : x))
+        } else {
+          // Close the open work segment where the last heartbeat was; an empty remainder is dropped.
+          segments = s.segments
+            .map((x) => (x.id === open.id ? { ...x, ended_at: iso(lastSeen) } : x))
+            .filter((x) => !(x.id === open.id && lastSeen <= new Date(x.started_at).getTime()))
+          segments.push(offlineSeg)
+        }
+        segments.push(work)
+        return {
+          segments,
+          days: patchDay(s.days, day.id, { status: 'working', last_out_at: null }),
+          taskTimeEntries: [
+            ...closeEntries(s.taskTimeEntries, employeeId, lastSeen),
+            ...(task ? [openEntry(employeeId, work.id, task, nowMs)] : []),
+          ],
+          heartbeats: { ...s.heartbeats, [employeeId]: nowMs },
+        }
+      })
+      return true
+    },
+
+    restoreAfterReload: (employeeId, lastSeenMs) => {
+      const day = ensureToday(employeeId)
+      if (day.status !== 'not_started') return false
+      // The real first sign-in is unknown (the mock lost it on reload), so no lateness is invented.
+      openWork(employeeId, day, lastSeenMs, null, { first_in_at: iso(lastSeenMs), late_minutes: 0 })
+      return true
+    },
+
+    presenceOf: (employeeId, nowMs) => {
+      const at = nowMs ?? Date.now()
+      const day = get().days.find((d) => d.employee_id === employeeId && d.date === todayKey())
+      if (!day || day.status !== 'working') return { offline: false, since: null }
+      const last = get().heartbeats[employeeId] ?? peerBeats.get(employeeId)
+      if (last === undefined || at - last <= PRESENCE_STALE_MS) return { offline: false, since: null }
+      return { offline: true, since: iso(last) }
     },
 
     setCurrentTask: (employeeId, taskId) => {
@@ -354,6 +495,7 @@ export const useAttendance = create<AttendanceState>((set, get) => {
 // ---- live tick + idle sweep (single subscription) ----
 onTick((now) => {
   const nowMs = now.getTime()
+  for (const id of peerBeats.keys()) if (!stalePeers.has(id)) peerBeats.set(id, nowMs - 3000)
   const state = useAttendance.getState()
   const idleMs = attendancePolicy.idle_timeout_minutes * 60_000
   const date = dateKey(now)

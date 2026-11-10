@@ -10,6 +10,7 @@ const map: Record<string, StatusMeta> = {
   not_started: { label: 'Not started', variant: 'neutral' },
   working: { label: 'Working', variant: 'success' },
   on_break: { label: 'On break', variant: 'warning' },
+  offline: { label: 'Offline', variant: 'neutral' },
   ended: { label: 'Ended', variant: 'neutral' },
   on_leave: { label: 'On leave', variant: 'info' },
   holiday: { label: 'Holiday', variant: 'neutral' },
@@ -58,4 +59,8 @@ export const breakCategoryLabels: Record<string, string> = {
   official: 'Official step-out',
   idle: 'Idle',
   signed_out: 'Signed out',
+  offline: 'Offline',
 }
+
+/** Categories the system writes; never offered in a picker. */
+export const systemBreakCategories = ['idle', 'offline'] as const

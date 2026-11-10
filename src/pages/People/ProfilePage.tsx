@@ -1,4 +1,4 @@
-import { Ellipsis, FileText, Laptop, Plus } from 'lucide-react'
+import { Ellipsis, FileText, Laptop, Landmark, Plus, Receipt, Wallet, Clock } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { EmptyTable } from '../../components/shared/EmptyTable'
@@ -224,12 +224,12 @@ function CompensationTab({ employee: e, onNew }: { employee: Employee; onNew: ()
       {current && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {hourly ? (
-            <Stat label="Hourly rate" value={<MoneyCell amount={current.hourly_rate} className="text-left" />} />
+            <Stat icon={Clock} label="Hourly rate" value={<MoneyCell amount={current.hourly_rate} className="text-left" />} />
           ) : (
             <>
-              <Stat label="Gross per month" value={<MoneyCell amount={current.gross} className="text-left" />} />
-              <Stat label="Provident fund" value={`${current.pf_percent}%`} />
-              <Stat label="Monthly tax" value={<MoneyCell amount={current.tax_monthly} className="text-left" />} />
+              <Stat icon={Wallet} label="Gross per month" value={<MoneyCell amount={current.gross} className="text-left" />} />
+              <Stat icon={Landmark} label="Provident fund" value={`${current.pf_percent}%`} />
+              <Stat icon={Receipt} label="Monthly tax" value={<MoneyCell amount={current.tax_monthly} className="text-left" />} />
             </>
           )}
         </div>

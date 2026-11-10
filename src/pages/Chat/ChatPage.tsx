@@ -61,7 +61,7 @@ export function ChatPage() {
     : ''
 
   return (
-    <div className="flex h-[calc(100dvh-10rem)] min-h-[420px] overflow-hidden rounded-md border border-border md:h-[calc(100dvh-3rem)]">
+    <div className="flex h-[calc(100dvh-13rem)] min-h-[420px] overflow-hidden rounded-md border border-border shadow-xs md:h-[calc(100dvh-7rem)]">
       <ConversationList
         rows={rows}
         query={search}

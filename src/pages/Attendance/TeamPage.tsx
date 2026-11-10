@@ -1,4 +1,4 @@
-import { Users } from 'lucide-react'
+import { Coffee, Moon, Plane, UserCheck, UserRound, Users, WifiOff } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { DurationText } from '../../components/shared/DurationText'
 import { EmptyTable } from '../../components/shared/EmptyTable'
@@ -27,10 +27,14 @@ import type { AttendanceDayStatus, Employee, Role } from '../../types'
 import { totalsOf, useSegmentsByDay } from './lib'
 import { useWorkTasks } from './useMyTasks'
 
-const statusOrder: AttendanceDayStatus[] = ['working', 'on_break', 'not_started', 'ended', 'on_leave']
+/** Row state: the day status, except a working person whose heartbeat went quiet shows as offline. */
+type RowState = AttendanceDayStatus | 'offline'
+const statusOrder: (keyof typeof statusIcons)[] = ['working', 'offline', 'on_break', 'not_started', 'ended', 'on_leave']
+const statusIcons = { working: UserCheck, offline: WifiOff, on_break: Coffee, not_started: UserRound, ended: Moon, on_leave: Plane }
 const statusFilters: { value: string; label: string }[] = [
   { value: 'all', label: 'All statuses' },
   { value: 'working', label: 'Working' },
+  { value: 'offline', label: 'Offline' },
   { value: 'on_break', label: 'On break' },
   { value: 'not_started', label: 'Not started' },
   { value: 'ended', label: 'Ended' },
@@ -48,6 +52,7 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
   const now = useAttendance((s) => s.now)
   const days = useAttendance((s) => s.days)
   const entries = useAttendance((s) => s.taskTimeEntries)
+  const presenceOf = useAttendance((s) => s.presenceOf)
   const segsByDay = useSegmentsByDay()
   const tasks = useWorkTasks()
   const [search, setSearch] = useState('')
@@ -59,8 +64,10 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
 
   const rows = scope.map((e) => {
     const day = days.find((d) => d.employee_id === e.id && d.date === today)
-    const st: AttendanceDayStatus =
+    const base: AttendanceDayStatus =
       day?.status === 'holiday' || day?.status === 'absent' || !day ? 'not_started' : day.status
+    const presence = presenceOf(e.id, now)
+    const st: RowState = presence.offline ? 'offline' : base
     const segs = (day && segsByDay.get(day.id)) || []
     const open = segs.find((s) => s.ended_at === null)
     const totals = totalsOf(segs, now)
@@ -69,10 +76,10 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
     const since =
       st === 'ended'
         ? day?.last_out_at
-        : st === 'working' || st === 'on_break'
+        : st === 'working' || st === 'on_break' || st === 'offline'
           ? open?.started_at
           : undefined
-    return { e, day, st, open, totals, task, taskId: entry?.task_id, since }
+    return { e, day, st, open, totals, task, taskId: entry?.task_id, since, offlineSince: presence.since }
   })
 
   const counts = statusOrder.map((s) => ({ s, n: rows.filter((r) => r.st === s).length }))
@@ -87,6 +94,7 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
   const teamName = (id: string | null) => teams.find((t) => t.id === id)?.name ?? '-'
   const labels: Record<string, string> = {
     working: 'Working',
+    offline: 'Offline',
     on_break: 'On break',
     not_started: 'Not started',
     ended: 'Ended',
@@ -96,9 +104,9 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
   return (
     <>
       <PageHeader title="Team" description="Live status for today. Updates every second." />
-      <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-5">
+      <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
         {counts.map(({ s, n }) => (
-          <Stat key={s} label={labels[s]} value={n} />
+          <Stat key={s} label={labels[s]} value={n} icon={statusIcons[s]} />
         ))}
       </div>
 
@@ -164,6 +172,9 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
                 <Td>
                   <span className="inline-flex items-center gap-2">
                     <StatusBadge status={r.st} />
+                    {r.st === 'offline' && r.offlineSince && (
+                      <span className="text-fg-muted">since {formatTime(r.offlineSince)}</span>
+                    )}
                     {r.st === 'on_break' && r.open?.break_category && (
                       <span className="text-fg-muted">{breakCategoryLabels[r.open.break_category]}</span>
                     )}

@@ -2,6 +2,7 @@ import { addDays, format, startOfWeek } from 'date-fns'
 import { Coffee, LogOut, Play } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Clock } from '../../components/shared/Clock'
+import { BreakDialog } from '../../components/shared/BreakDialog'
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog'
 import { DurationText } from '../../components/shared/DurationText'
 import { EmptyTable } from '../../components/shared/EmptyTable'
@@ -28,7 +29,6 @@ import { attendancePolicy, dateKey, isHoliday, isWeekend, shiftTime } from '../.
 import { useSession } from '../../mock/session'
 import { useAttendance } from '../../mock/stores/attendance'
 import type { AttendanceDay, TimeSegment } from '../../types'
-import { BreakDialog } from './BreakDialog'
 import { totalsOf, useSegmentsByDay } from './lib'
 import { ReasonDialog } from './RegularizeDialog'
 import { useMyTasks } from './useMyTasks'
@@ -120,7 +120,18 @@ function MyDay({ employeeId }: { employeeId: string }) {
               <p className="mt-1 text-sm text-fg-muted">
                 {sinceText}
                 {sinceText && ' · '}
-                Break <DurationText seconds={totals.breakSeconds} /> · Target{' '}
+                Break <DurationText seconds={totals.breakSeconds} />
+                {totals.offlineSeconds >= 60 && (
+                  <>
+                    {' · '}Offline today <DurationText seconds={totals.offlineSeconds} />
+                  </>
+                )}
+                {totals.idleSeconds >= 60 && (
+                  <>
+                    {' · '}Idle <DurationText seconds={totals.idleSeconds} />
+                  </>
+                )}
+                {' · '}Target{' '}
                 {formatDuration(attendancePolicy.standard_minutes * 60)}
               </p>
             </div>
@@ -207,6 +218,7 @@ function MyDay({ employeeId }: { employeeId: string }) {
               <Th numeric>Out</Th>
               <Th numeric>Work</Th>
               <Th numeric>Break</Th>
+              <Th numeric>Offline</Th>
               <Th numeric>Late</Th>
               <Th>Status</Th>
               <Th>
@@ -229,6 +241,7 @@ function MyDay({ employeeId }: { employeeId: string }) {
                   <Td numeric>{rec?.last_out_at ? formatTime(rec.last_out_at) : '-'}</Td>
                   <Td numeric>{rec && rec.first_in_at ? formatDuration(t.workSeconds) : '-'}</Td>
                   <Td numeric>{rec && rec.first_in_at ? formatDuration(t.breakSeconds) : '-'}</Td>
+                  <Td numeric>{rec && rec.first_in_at && t.offlineSeconds >= 60 ? formatDuration(t.offlineSeconds) : '-'}</Td>
                   <Td numeric>{rec && rec.late_minutes > 0 ? `${rec.late_minutes}m` : '-'}</Td>
                   <Td>
                     {rec ? (
@@ -324,7 +337,7 @@ function SegmentsTable({ segs, now }: { segs: TimeSegment[]; now: number }) {
           const end = s.ended_at ? new Date(s.ended_at).getTime() : now
           return (
             <Tr key={s.id}>
-              <Td>{s.type === 'work' ? 'Work' : 'Break'}</Td>
+              <Td>{s.type === 'work' ? 'Work' : s.break_category === 'offline' ? 'Offline' : 'Break'}</Td>
               <Td className="text-fg-muted">
                 {s.type === 'break' ? breakCategoryLabels[s.break_category ?? 'short'] : '-'}
               </Td>

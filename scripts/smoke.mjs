@@ -61,6 +61,8 @@ async function main() {
   try {
     for (const role of roles) await runRole(browser, role)
     await attendanceLoop(browser)
+    await offlineReload(browser)
+    await presenceCheck(browser)
     await keyboard(browser)
     await darkMode(browser)
   } finally {
@@ -109,6 +111,7 @@ async function check(page, errors, role, route, { shot = true, mobile = false } 
         path: location.pathname + location.search,
         overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
         noAccess: /don.t have access|no access/i.test(text),
+        topbar: !!document.querySelector('[data-testid="topbar"]'),
       }
     })
     if (info.empty) notes.push('blank root')
@@ -116,6 +119,8 @@ async function check(page, errors, role, route, { shot = true, mobile = false } 
     if (!info.h1 && !mobile) notes.push('no h1')
     if (info.overflowX) notes.push('horizontal overflow')
     if (info.noAccess) notes.push('no-access page')
+    // Print views (payslip, invoice print) are bare by design; every other authenticated route has the top bar.
+    if (!info.topbar && !/\/payslip\/|\/print$/.test(route) && !info.noAccess) notes.push('top bar missing')
     if (info.path !== route && !route.includes('?') && route !== '/chat') notes.push(`redirected to ${info.path}`)
     if (shot) await page.screenshot({ path: path.join(shots, `${role}-${slug(route)}${mobile ? '-mobile' : ''}.png`) })
   } catch (e) {
@@ -202,13 +207,22 @@ async function attendanceLoop(browser) {
   const notes = []
   try {
     await login(page, 'Sadia Sultana')
+    const chipText = () => page.evaluate(() => document.querySelector('[data-testid="work-chip"]')?.textContent ?? '')
+    if (!/Working/.test(await chipText())) notes.push(`chip should say Working after sign-in, got "${await chipText()}"`)
+    // Break from the top bar chip.
+    await clickText(page, 'Take a break', '[data-testid="work-chip"] button')
+    await clickText(page, 'Start break', '[role="dialog"] button')
+    await page.waitForFunction(() => /On break/.test(document.querySelector('[data-testid="work-chip"]')?.textContent ?? ''), { timeout: 3000 })
+    await page.screenshot({ path: path.join(shots, 'employee-chip-on-break.png') })
+    await clickText(page, 'Resume', '[data-testid="work-chip"] button')
+    await page.waitForFunction(() => /Working/.test(document.querySelector('[data-testid="work-chip"]')?.textContent ?? ''), { timeout: 3000 })
     await clickText(page, 'My day', 'a')
     await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'My day', { timeout: 5000 })
-    await clickText(page, 'Take a break')
+    await clickText(page, 'Take a break', 'main button')
     await page.screenshot({ path: path.join(shots, 'employee-break-dialog.png') })
-    await clickText(page, 'Start break')
+    await clickText(page, 'Start break', '[role="dialog"] button')
     await page.waitForFunction(() => /Resume/.test(document.body.innerText), { timeout: 3000 })
-    await clickText(page, 'Resume')
+    await clickText(page, 'Resume', 'main button')
     await page.waitForFunction(() => /Take a break/.test(document.body.innerText), { timeout: 3000 })
     await page.click('button[aria-label="Account menu"]')
     await new Promise((r) => setTimeout(r, 200))
@@ -226,6 +240,69 @@ async function attendanceLoop(browser) {
   }
   notes.push(...errors)
   results.push({ role: 'employee', route: 'attendance loop', status: notes.length ? 'ERROR' : 'ok', notes })
+  await page.close()
+}
+
+// Offline tracking: persisted heartbeat 25 minutes old, then reload (attendance is rebuilt from the seed).
+async function offlineReload(browser) {
+  const page = await browser.newPage()
+  await page.setViewport({ width: 1366, height: 900 })
+  const errors = track(page)
+  const notes = []
+  try {
+    await login(page, 'Sadia Sultana')
+    const stamped = await page.evaluate(() => {
+      const t = new Date(Date.now() - 25 * 60_000).toISOString()
+      localStorage.setItem('vivacom.last_heartbeat', t)
+      return localStorage.getItem('vivacom.last_heartbeat') === t
+    })
+    if (!stamped) notes.push('could not stamp last heartbeat')
+    await page.goto(BASE + '/my-day', { waitUntil: 'networkidle0' })
+    await new Promise((r) => setTimeout(r, 400))
+    const info = await page.evaluate(() => ({
+      bands: document.querySelectorAll('[data-segment="offline"]').length,
+      row: [...document.querySelectorAll('main tbody tr')].some((tr) => /Offline/.test(tr.textContent) && /2[45]m/.test(tr.textContent)),
+      today: /Offline today\s+2[45]m/.test(document.body.innerText),
+      chip: document.querySelector('[data-testid="work-chip"]')?.textContent ?? '',
+    }))
+    if (info.bands < 1) notes.push('no [data-segment=offline] band in the timeline')
+    if (!info.row) notes.push('no Offline row of about 25m in Today segments')
+    if (!info.today) notes.push('status card missing "Offline today 25m"')
+    if (!/Working/.test(info.chip)) notes.push(`chip should say Working after reconcile, got "${info.chip}"`)
+    await page.screenshot({ path: path.join(shots, 'employee-my-day-offline.png') })
+  } catch (e) {
+    notes.push(e.message.slice(0, 200))
+  }
+  notes.push(...errors)
+  results.push({ role: 'employee', route: 'offline reconcile after reload', status: notes.length ? 'ERROR' : 'ok', notes })
+  await page.close()
+}
+
+// Team views show a stale working member as Offline, with the time of the last heartbeat.
+async function presenceCheck(browser) {
+  const page = await browser.newPage()
+  await page.setViewport({ width: 1366, height: 900 })
+  const errors = track(page)
+  const notes = []
+  try {
+    await login(page, 'Tanvir Hossain')
+    await page.goto(BASE + '/team', { waitUntil: 'networkidle0' })
+    await new Promise((r) => setTimeout(r, 400))
+    const info = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('main tbody tr')]
+      return {
+        working: rows.filter((tr) => /Working/.test(tr.textContent)).length,
+        offline: rows.filter((tr) => /Offline\s*since \d{2}:\d{2}/.test(tr.textContent)).length,
+      }
+    })
+    // Before the 10:15 seed cut-off nobody is working yet, so there is nothing to go stale.
+    if (info.working + info.offline > 0 && info.offline < 1) notes.push('no "Offline since HH:MM" row on the team page')
+    await page.screenshot({ path: path.join(shots, 'lead-team-offline.png') })
+  } catch (e) {
+    notes.push(e.message.slice(0, 200))
+  }
+  notes.push(...errors)
+  results.push({ role: 'lead', route: 'team presence (offline rows)', status: notes.length ? 'ERROR' : 'ok', notes })
   await page.close()
 }
 
@@ -267,11 +344,10 @@ async function darkMode(browser) {
   const notes = []
   try {
     await login(page, 'Rafiq Ahmed')
-    await page.click('button[aria-label="Account menu"]')
-    await clickText(page, 'Dark theme')
+    await page.click('button[aria-label="Switch to dark theme"]')
     const dark = await page.evaluate(() => document.documentElement.classList.contains('dark'))
     if (!dark) notes.push('dark class not applied')
-    for (const r of ['/', '/payroll', '/invoices', '/projects/PULSE', '/chat']) {
+    for (const r of ['/', '/my-day', '/team', '/payroll', '/invoices', '/projects/PULSE', '/chat']) {
       await page.goto(BASE + r, { waitUntil: 'networkidle0' })
       await page.screenshot({ path: path.join(shots, `management-dark-${slug(r)}.png`) })
     }

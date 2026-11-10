@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Button, Dialog, Field, Input, RadioGroup } from '../../components/ui'
+import { Button, Dialog, Field, Input, RadioGroup } from '../ui'
 import { attendancePolicy } from '../../mock/db/attendance'
 import type { BreakCategory } from '../../types'
 
+// Only categories a person may choose. `idle` and `offline` are written by the system and never listed here.
 const options = [
   { value: 'short', label: 'Short break' },
   { value: 'tea', label: 'Tea break' },

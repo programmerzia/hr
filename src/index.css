@@ -23,6 +23,15 @@
   --info: 43 108 176;
   --info-soft: 227 238 251;
   --ring: 48 86 211;
+  --shadow-xs-alpha: 0.04;
+  --avatar-1-bg: 224 233 252; --avatar-1-fg: 40 75 170;
+  --avatar-2-bg: 215 241 238; --avatar-2-fg: 21 111 104;
+  --avatar-3-bg: 220 241 226; --avatar-3-fg: 36 114 63;
+  --avatar-4-bg: 250 238 211; --avatar-4-fg: 140 90 15;
+  --avatar-5-bg: 252 226 214; --avatar-5-fg: 170 70 30;
+  --avatar-6-bg: 250 224 232; --avatar-6-fg: 165 40 85;
+  --avatar-7-bg: 233 226 250; --avatar-7-fg: 100 65 180;
+  --avatar-8-bg: 226 230 236; --avatar-8-fg: 70 80 98;
   color-scheme: light;
 }
 
@@ -47,6 +56,15 @@
   --info: 106 168 234;
   --info-soft: 20 34 53;
   --ring: 107 140 255;
+  --shadow-xs-alpha: 0;
+  --avatar-1-bg: 28 40 76; --avatar-1-fg: 150 175 255;
+  --avatar-2-bg: 18 51 49; --avatar-2-fg: 110 205 195;
+  --avatar-3-bg: 22 48 31; --avatar-3-fg: 120 205 150;
+  --avatar-4-bg: 56 43 16; --avatar-4-fg: 225 185 105;
+  --avatar-5-bg: 60 33 22; --avatar-5-fg: 240 160 125;
+  --avatar-6-bg: 59 28 40; --avatar-6-fg: 240 150 180;
+  --avatar-7-bg: 42 33 66; --avatar-7-fg: 185 160 240;
+  --avatar-8-bg: 38 44 55; --avatar-8-fg: 170 180 198;
   color-scheme: dark;
 }
 

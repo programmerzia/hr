@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react'
-import { Breadcrumb, type Crumb } from '../ui'
+import { useBreadcrumb, type Crumb } from '../../app/pageTitle'
 import { cn } from '../../lib/cn'
 
 interface PageHeaderProps {
   title: string
   description?: string
+  /** Shown in the top bar (module › record), not above the title. */
   breadcrumb?: Crumb[]
   actions?: ReactNode
   /** Tabs row rendered under the title. */
@@ -13,13 +14,13 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, description, breadcrumb, actions, tabs, className }: PageHeaderProps) {
+  useBreadcrumb(breadcrumb)
   return (
     <header className={cn('mb-4', className)}>
-      {breadcrumb && <Breadcrumb items={breadcrumb} />}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold">{title}</h1>
-          {description && <p className="mt-0.5 text-sm text-fg-muted">{description}</p>}
+          {description && <p className="mt-0.5 text-base text-fg-muted">{description}</p>}
         </div>
         {actions && <div className="flex items-center gap-2">{actions}</div>}
       </div>

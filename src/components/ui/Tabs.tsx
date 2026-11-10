@@ -22,7 +22,7 @@ export const TabsTrigger = forwardRef<HTMLButtonElement, ComponentPropsWithoutRe
       <RTabs.Trigger
         ref={ref}
         className={cn(
-          '-mb-px h-9 whitespace-nowrap border-b-2 border-transparent text-base text-fg-muted transition-colors duration-150 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-fg',
+          '-mb-px h-9 whitespace-nowrap border-b-2 border-transparent text-base text-fg-muted transition-colors duration-150 hover:border-border-strong hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 data-[state=active]:border-accent data-[state=active]:font-medium hover:data-[state=active]:border-accent data-[state=active]:text-fg',
           className,
         )}
         {...props}

@@ -37,7 +37,8 @@ export default {
         sm: ['13px', '20px'],
         base: ['14px', '20px'],
         lg: ['15px', '22px'],
-        xl: ['20px', '28px'],
+        xl: ['22px', { lineHeight: '28px', letterSpacing: '-0.01em' }],
+        '2xl': ['24px', { lineHeight: '32px', letterSpacing: '-0.01em' }],
       },
       borderRadius: {
         DEFAULT: '4px',
@@ -45,9 +46,17 @@ export default {
         lg: '8px',
       },
       boxShadow: {
+        xs: '0 1px 2px rgb(0 0 0 / var(--shadow-xs-alpha))',
         float: '0 4px 16px rgb(0 0 0 / 0.12), 0 0 0 1px rgb(var(--border) / 1)',
       },
       maxWidth: { content: '1280px' },
+      keyframes: {
+        'status-pulse': {
+          '0%': { transform: 'scale(1)', opacity: '0.55' },
+          '70%, 100%': { transform: 'scale(2.4)', opacity: '0' },
+        },
+      },
+      animation: { 'status-pulse': 'status-pulse 2s ease-out infinite' },
     },
   },
   plugins: [],

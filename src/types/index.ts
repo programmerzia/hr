@@ -152,8 +152,8 @@ export interface AttendanceDay {
 }
 
 export type SegmentType = 'work' | 'break'
-export type BreakCategory = 'short' | 'tea' | 'lunch' | 'official' | 'idle' | 'signed_out'
-export type SegmentSource = 'login' | 'logout' | 'idle_sweep' | 'manual'
+export type BreakCategory = 'short' | 'tea' | 'lunch' | 'official' | 'idle' | 'signed_out' | 'offline'
+export type SegmentSource = 'login' | 'logout' | 'idle_sweep' | 'offline' | 'manual'
 
 export interface TimeSegment {
   id: Id
@@ -526,4 +526,4 @@ export type Ability =
   | 'manage_projects'
   | 'manage_settings'
 
-export type BadgeVariant = 'neutral' | 'success' | 'warning' | 'danger' | 'info'
+export type BadgeVariant = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'accent'

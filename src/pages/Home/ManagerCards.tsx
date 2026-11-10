@@ -1,3 +1,4 @@
+import { AlertCircle, Coffee, FileText, Plane, Receipt, UserCheck, UserMinus, UserPlus, UserRound, Users } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link } from 'react-router'
 import { PersonCell } from '../../components/shared/PersonCell'
@@ -42,7 +43,7 @@ export function TeamNowCard({ employeeId, role }: { employeeId: string; role: Ro
       {rows.length === 0 ? (
         <EmptyState title="No team members" description="People in your team will appear here." className="py-8" />
       ) : (
-        <div className="max-h-96 overflow-auto">
+        <div className="max-h-96 overflow-auto [--sticky-top:0px]">
           <Table>
             <Thead>
               <Tr>
@@ -124,10 +125,10 @@ export function PeopleStats() {
   }, [people])
   return (
     <section aria-label="People" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <Stat label="Headcount" value={stats.headcount} />
-      <Stat label="On probation" value={stats.probation} />
-      <Stat label="Marked on leave" value={stats.onLeave} />
-      <Stat label="Joining this month" value={stats.joining} />
+      <Stat icon={Users} label="Headcount" value={stats.headcount} />
+      <Stat icon={UserRound} label="On probation" value={stats.probation} />
+      <Stat icon={Plane} label="Marked on leave" value={stats.onLeave} />
+      <Stat icon={UserPlus} label="Joining this month" value={stats.joining} />
     </section>
   )
 }
@@ -168,14 +169,14 @@ export function CompanyStats() {
     const active = new Set(people.filter((p) => p.exited_on === null).map((p) => p.id))
     const todays = days.filter((d) => d.date === today && active.has(d.employee_id))
     const n = (...s: string[]) => todays.filter((d) => s.includes(d.status)).length
-    return { working: n('working'), onBreak: n('on_break'), leave: n('on_leave'), absent: n('absent') }
+    return { active: active.size, working: n('working'), onBreak: n('on_break'), leave: n('on_leave'), absent: n('absent') }
   }, [people, days, today])
   return (
     <section aria-label="Company today" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <Stat label="Working now" value={counts.working} />
-      <Stat label="On break" value={counts.onBreak} />
-      <Stat label="On leave" value={counts.leave} />
-      <Stat label="Absent" value={counts.absent} />
+      <Stat icon={UserCheck} label="Working now" value={counts.working} delta={{ value: `of ${counts.active} active` }} />
+      <Stat icon={Coffee} label="On break" value={counts.onBreak} />
+      <Stat icon={Plane} label="On leave" value={counts.leave} />
+      <Stat icon={UserMinus} label="Absent" value={counts.absent} />
     </section>
   )
 }
@@ -196,10 +197,11 @@ export function FinanceStats() {
       {invoices && (
         <>
           <Link to="/invoices" className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
-            <Stat label="Invoices outstanding" value={open.length} delta={amounts ? { value: amounts } : undefined} />
+            <Stat icon={FileText} label="Invoices outstanding" value={open.length} delta={amounts ? { value: amounts } : undefined} />
           </Link>
           <Link to="/invoices" className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
             <Stat
+              icon={AlertCircle}
               label="Invoices overdue"
               value={overdue.length}
               delta={overdue.length > 0 ? { value: 'Follow up with clients', tone: 'danger' } : undefined}
@@ -209,7 +211,7 @@ export function FinanceStats() {
       )}
       {claims && (
         <Link to="/claims" className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
-          <Stat label="Claims awaiting approval" value={waiting} />
+          <Stat icon={Receipt} label="Claims awaiting approval" value={waiting} />
         </Link>
       )}
     </section>

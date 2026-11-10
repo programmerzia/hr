@@ -1,4 +1,4 @@
-import { Check, FileText, RefreshCw, Send, Trash2, Users, Wallet } from 'lucide-react'
+import { Banknote, Check, FileText, MinusCircle, RefreshCw, Send, Trash2, Users, Wallet } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog'
@@ -338,10 +338,10 @@ export function RunDetailPage() {
       />
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Employees" value={totals.employees} />
-        <Stat label="Gross" value={formatMoney(totals.gross)} />
-        <Stat label="Deductions" value={formatMoney(totals.deductions)} />
-        <Stat label="Net payable" value={formatMoney(totals.net)} />
+        <Stat icon={Users} label="Employees" value={totals.employees} />
+        <Stat icon={Wallet} label="Gross" value={formatMoney(totals.gross)} />
+        <Stat icon={MinusCircle} label="Deductions" value={formatMoney(totals.deductions)} />
+        <Stat icon={Banknote} label="Net payable" value={formatMoney(totals.net)} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[1fr_18rem]">
