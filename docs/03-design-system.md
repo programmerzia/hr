@@ -75,3 +75,30 @@ Rules: components accept `className` and merge with `cn()`. No component reads g
 - **Forms**: labels above inputs, hints below, errors replace hints in danger color. Primary action bottom-right of dialog, cancel to its left as ghost. Destructive actions require a confirm dialog with the record name in the text.
 - **Tables**: toolbar row (search left, filters, actions right) → table → footer (count, pagination). Row click opens detail; row actions in a `...` menu on hover/focus.
 - **Detail pages** over drawers for anything with tabs (employee, project, invoice). Drawers for quick views (task, attendance day).
+
+## Revision 2 — visual depth and top bar (added 2026-11-10)
+
+The first build was correct but flat. Add depth and identity without breaking the rules above.
+
+**Top bar (new, global, 48px, sticky, `bg-surface` + bottom border).**
+Left: breadcrumb for the current page (module › record) so the page title no longer repeats the module. Center-left: global search field (moved out of the sidebar; Ctrl/Cmd-K). Right, in order: **work status chip** (status dot + today's work time ticking + one-click action: Start / Break / Resume; visible on every page so the clock is never far away), Inbox bell with count, theme toggle, user avatar menu. On mobile the bar keeps logo, status chip and menu.
+Sidebar becomes navigation only: logomark + "Vivacom" top, groups, collapse toggle bottom. No user row (moved to top bar).
+
+**Surface depth.** Cards get `shadow-xs` (`0 1px 2px rgb(0 0 0 / .04)`) in light, none in dark. Page background stays one step darker than cards. Floating layers use `shadow-float`. Table headers `bg-surface-2` sticky. Hovered rows `bg-surface-2`. Selected row: 2px accent inset-left.
+
+**Identity.** Simple logomark (rounded square, accent, white "V" path) at 24px. Avatar backgrounds from a deterministic 8-hue muted palette by name hash (text stays legible in both themes). Status dot before status text; "Working" dot has a slow 2s pulse (disabled under reduced motion).
+
+**Type.** Page title 22px/600 letter-spacing -0.01em. Section titles 15px/600. Numeric table cells `font-mono tabular-nums`. Stat value 24px/600 mono.
+
+**Stat cards.** Label, value, and a muted icon in a 32px `bg-surface-2` circle at right; optional one-line delta ("+2 vs last month") in success/danger text. No sparklines unless there is real series data.
+
+**Empty states.** 32px icon in a muted circle, title, one sentence, optional action. Centered, 48px vertical padding.
+
+**Tabs.** Underline style, 2px accent, 500 weight when active.
+
+**Buttons.** Primary gets a 1px darker bottom border for a slight physical feel (`shadow-[inset_0_-1px_0_rgb(0_0_0/.15)]`). Secondary is white/surface with `border-border-strong`. Hover states on every interactive element.
+
+Still forbidden: gradients, glass, glow, rainbow accents, rounded-2xl, uppercase labels, marketing copy.
+
+## Offline tracking (added 2026-11-10)
+A new break category `offline` is distinct from `idle`: idle = tab open, no activity; offline = app closed, device asleep, or network down while the day was `working`/`on_break`. Detect: (1) persisted last-heartbeat time; on app load or `visibilitychange`→visible, if the gap exceeds the policy idle timeout and the day was working, close the work segment at the last heartbeat and record an `offline` segment up to now, then resume working; (2) `navigator.onLine` false→true transitions record the same way. Timeline bar draws offline as a hatched gray band (idle is hatched warning). My day shows "Offline today" next to break time. Team views show "Offline" (gray dot) for a working member whose last heartbeat is older than 2 minutes, with "since HH:MM". History tables include an Offline column. Payroll and claims treat offline time like break time (not worked).
