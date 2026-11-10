@@ -50,10 +50,11 @@ export function TaskCard({ taskKey }: { taskKey: string }) {
   if (!task) return null
   const column = columns.find((c) => c.id === task.column_id)
   return (
-    <div className="mt-1.5 flex max-w-md items-center gap-3 rounded-md border border-border bg-surface px-3 py-2">
+    <div className="mt-1.5 flex max-w-md items-center gap-3 rounded-md border border-border bg-surface px-3 py-2 shadow-xs">
       <TaskKey taskKey={task.key} className="shrink-0" />
       <span className="min-w-0 flex-1 truncate text-base">{task.title}</span>
-      <Badge variant={column?.is_done ? 'success' : 'neutral'} className="shrink-0">
+      <Badge variant={column?.is_done ? 'success' : 'neutral'} className="shrink-0 gap-1.5">
+        <span className={cn('size-1.5 rounded-full', column?.is_done ? 'bg-success' : 'bg-fg-subtle')} aria-hidden />
         {column?.name ?? 'Task'}
       </Badge>
       <span className="hidden shrink-0 text-sm text-fg-muted sm:inline">{assignee ?? 'Unassigned'}</span>

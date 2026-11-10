@@ -1,13 +1,15 @@
-import { Coffee, Moon, Plane, UserCheck, UserRound, Users, WifiOff } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
+import { Users } from 'lucide-react'
+import { StackedBar, type StackSegment } from '../../components/charts/StackedBar'
 import { DurationText } from '../../components/shared/DurationText'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { PersonCell } from '../../components/shared/PersonCell'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import {
+  Card,
+  CardBody,
   NativeSelect,
-  Stat,
   Table,
   TableFooter,
   TableToolbar,
@@ -18,7 +20,7 @@ import {
   Tr,
 } from '../../components/ui'
 import { formatTime } from '../../lib/format'
-import { breakCategoryLabels } from '../../lib/status'
+import { breakCategoryLabels, presenceTone } from '../../lib/status'
 import { dateKey } from '../../mock/db/attendance'
 import { teams } from '../../mock/db/people'
 import { useSession } from '../../mock/session'
@@ -29,8 +31,15 @@ import { useWorkTasks } from './useMyTasks'
 
 /** Row state: the day status, except a working person whose heartbeat went quiet shows as offline. */
 type RowState = AttendanceDayStatus | 'offline'
-const statusOrder: (keyof typeof statusIcons)[] = ['working', 'offline', 'on_break', 'not_started', 'ended', 'on_leave']
-const statusIcons = { working: UserCheck, offline: WifiOff, on_break: Coffee, not_started: UserRound, ended: Moon, on_leave: Plane }
+const statusOrder = ['working', 'offline', 'on_break', 'not_started', 'ended', 'on_leave'] as const
+const statusColors: Record<(typeof statusOrder)[number], StackSegment['color']> = {
+  working: 'success',
+  offline: 'muted',
+  on_break: 'warning',
+  not_started: 'chart-3',
+  ended: 'chart-7',
+  on_leave: 'info',
+}
 const statusFilters: { value: string; label: string }[] = [
   { value: 'all', label: 'All statuses' },
   { value: 'working', label: 'Working' },
@@ -84,14 +93,20 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
 
   const counts = statusOrder.map((s) => ({ s, n: rows.filter((r) => r.st === s).length }))
   const q = search.trim().toLowerCase()
+  const grouped = role === 'hr' || role === 'management'
+  const teamName = (id: string | null) => teams.find((t) => t.id === id)?.name ?? 'No team'
   const visible = rows
     .filter((r) => (team === 'all' ? true : r.e.team_id === team))
     .filter((r) => (status === 'all' ? true : r.st === status))
     .filter((r) => !q || r.e.name.toLowerCase().includes(q) || r.e.designation.toLowerCase().includes(q))
-    .sort((a, b) => statusOrder.indexOf(a.st) - statusOrder.indexOf(b.st) || a.e.name.localeCompare(b.e.name))
+    .sort(
+      (a, b) =>
+        (grouped ? teamName(a.e.team_id).localeCompare(teamName(b.e.team_id)) : 0) ||
+        statusOrder.indexOf(a.st) - statusOrder.indexOf(b.st) ||
+        a.e.name.localeCompare(b.e.name),
+    )
 
   const showTeamFilter = role !== 'team_lead'
-  const teamName = (id: string | null) => teams.find((t) => t.id === id)?.name ?? '-'
   const labels: Record<string, string> = {
     working: 'Working',
     offline: 'Offline',
@@ -104,11 +119,15 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
   return (
     <>
       <PageHeader title="Team" description="Live status for today. Updates every second." />
-      <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
-        {counts.map(({ s, n }) => (
-          <Stat key={s} label={labels[s]} value={n} icon={statusIcons[s]} />
-        ))}
-      </div>
+      <Card className="mb-4">
+        <CardBody>
+          <StackedBar
+            data-testid="presence-bar"
+            segments={counts.map(({ s, n }) => ({ label: labels[s] ?? s, value: n, color: statusColors[s] }))}
+            aria-label={`Presence: ${counts.filter((c) => c.n > 0).map((c) => `${c.n} ${(labels[c.s] ?? c.s).toLowerCase()}`).join(', ')}`}
+          />
+        </CardBody>
+      </Card>
 
       <TableToolbar
         search={search}
@@ -154,7 +173,6 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
           <Thead>
             <Tr className="hover:bg-transparent">
               <Th>Person</Th>
-              {showTeamFilter && <Th>Team</Th>}
               <Th>Status</Th>
               <Th numeric>Since</Th>
               <Th numeric>Work today</Th>
@@ -163,12 +181,22 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
             </Tr>
           </Thead>
           <Tbody>
-            {visible.map((r) => (
-              <Tr key={r.e.id}>
+            {visible.map((r, idx) => (
+              <Fragment key={r.e.id}>
+                {grouped && (idx === 0 || visible[idx - 1]!.e.team_id !== r.e.team_id) && (
+                  <Tr className="bg-surface-2/60 hover:bg-surface-2/60">
+                    <Td colSpan={6} className="h-8 text-xs font-medium text-fg-muted">
+                      {teamName(r.e.team_id)}
+                      <span className="ml-2 font-normal text-fg-subtle">
+                        {visible.filter((v) => v.e.team_id === r.e.team_id).length}
+                      </span>
+                    </Td>
+                  </Tr>
+                )}
+              <Tr>
                 <Td>
-                  <PersonCell name={r.e.name} subtitle={r.e.designation} />
+                  <PersonCell name={r.e.name} subtitle={r.e.designation} presence={presenceTone(r.st === 'offline' ? 'ended' : r.st)} />
                 </Td>
-                {showTeamFilter && <Td className="text-fg-muted">{teamName(r.e.team_id)}</Td>}
                 <Td>
                   <span className="inline-flex items-center gap-2">
                     <StatusBadge status={r.st} />
@@ -204,6 +232,7 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
                   )}
                 </Td>
               </Tr>
+              </Fragment>
             ))}
           </Tbody>
         </Table>

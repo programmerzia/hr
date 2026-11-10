@@ -10,6 +10,7 @@ const avatarVariants = cva(
         md: 'size-8 text-sm',
         lg: 'size-10 text-base',
         xl: 'size-16 text-xl',
+        xxl: 'size-12 text-lg',
       },
     },
     defaultVariants: { size: 'md' },
@@ -30,16 +31,24 @@ export function avatarHue(name: string): number {
   return (h % 8) + 1
 }
 
+const presenceRing = {
+  success: 'ring-2 ring-success ring-offset-2 ring-offset-surface',
+  warning: 'ring-2 ring-warning ring-offset-2 ring-offset-surface',
+  neutral: 'ring-2 ring-border-strong ring-offset-2 ring-offset-surface',
+} as const
+
 export interface AvatarProps extends VariantProps<typeof avatarVariants> {
   name: string
   className?: string
+  /** Presence ring: green working, amber on break, gray offline or ended. */
+  presence?: keyof typeof presenceRing
 }
 
-export function Avatar({ name, size, className }: AvatarProps) {
+export function Avatar({ name, size, className, presence }: AvatarProps) {
   const n = avatarHue(name)
   return (
     <span
-      className={cn(avatarVariants({ size }), className)}
+      className={cn(avatarVariants({ size }), presence && presenceRing[presence], className)}
       style={{ backgroundColor: `rgb(var(--avatar-${n}-bg))`, color: `rgb(var(--avatar-${n}-fg))` }}
       aria-hidden
     >

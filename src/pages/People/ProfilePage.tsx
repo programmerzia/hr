@@ -1,12 +1,15 @@
 import { Ellipsis, FileText, Laptop, Landmark, Plus, Receipt, Wallet, Clock } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
+import { Bars } from '../../components/charts/Bars'
+import { HeatStrip } from '../../components/charts/HeatStrip'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { MoneyCell } from '../../components/shared/MoneyCell'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import {
   Avatar,
+  Badge,
   Button,
   buttonVariants,
   Card,
@@ -31,7 +34,12 @@ import {
   Thead,
   Tr,
 } from '../../components/ui'
-import { formatDate } from '../../lib/format'
+import { useBreadcrumb } from '../../app/pageTitle'
+import { formatDate, formatDuration } from '../../lib/format'
+import { presenceTone } from '../../lib/status'
+import { teams } from '../../mock/db/people'
+import { useAttendance, todayKey } from '../../mock/stores/attendance'
+import { formatHours, useAttendanceHeat, useMonthWeekHours } from '../Attendance/useAttendanceSeries'
 import { can } from '../../lib/permissions'
 import { useAuthed } from '../../mock/session'
 import { useLeaveStore } from '../../mock/stores/leave'
@@ -69,6 +77,8 @@ export function ProfilePage() {
   const people = usePeopleStore()
   const [dialog, setDialog] = useState<DialogKind>(null)
   const employee = people.employeeById(id)
+  const todayStatus = useAttendance((s) => s.days.find((d) => d.employee_id === id && d.date === todayKey())?.status ?? 'not_started')
+  useBreadcrumb(employee ? [{ label: 'People', to: '/people' }, { label: employee.name }] : undefined)
 
   if (!employee) {
     return (
@@ -84,11 +94,22 @@ export function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-content">
-      <PageHeader
-        title={employee.name}
-        breadcrumb={[{ label: 'People', to: '/people' }, { label: employee.name }]}
-        actions={
-          <>
+      <header className="mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-4">
+            <Avatar name={employee.name} size="xxl" presence={presenceTone(todayStatus)} className="m-1" />
+            <div className="min-w-0">
+              <h1 className="truncate text-xl font-semibold">{employee.name}</h1>
+              <p className="text-base text-fg-muted">{employee.designation}</p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                {teams.find((t) => t.id === employee.team_id) && (
+                  <Badge variant="accent">{teams.find((t) => t.id === employee.team_id)?.name}</Badge>
+                )}
+                <StatusBadge status={employee.status} />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
             <Button onClick={() => setDialog('edit')}>Edit</Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -99,19 +120,25 @@ export function ProfilePage() {
                 <DropdownMenuItem onSelect={() => setDialog('edit')}>Edit details</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </>
-        }
-      />
-      <div className="mb-4 flex items-center gap-3">
-        <Avatar name={employee.name} size="lg" />
-        <div className="min-w-0">
-          <p className="text-base font-medium">{employee.designation}</p>
-          <p className="flex items-center gap-2 text-sm text-fg-muted">
-            <span className="font-mono">{employee.code}</span>
-            <StatusBadge status={employee.status} />
-          </p>
+          </div>
         </div>
-      </div>
+        <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-border pt-4 text-sm">
+          <div className="flex gap-2">
+            <dt className="text-fg-muted">Code</dt>
+            <dd className="font-mono">{employee.code}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="text-fg-muted">Joined</dt>
+            <dd>{formatDate(employee.joined_on)}</dd>
+          </div>
+          {people.leadOf(employee.id) && (
+            <div className="flex gap-2">
+              <dt className="text-fg-muted">Lead</dt>
+              <dd>{people.leadOf(employee.id)?.name}</dd>
+            </div>
+          )}
+        </dl>
+      </header>
 
       <Tabs defaultValue="overview">
         <TabsList>
@@ -131,7 +158,7 @@ export function ProfilePage() {
         <TabsContent value="documents"><DocumentsTab employee={employee} onAdd={() => setDialog('document')} /></TabsContent>
         <TabsContent value="assets"><AssetsTab employee={employee} onAdd={() => setDialog('asset')} /></TabsContent>
         <TabsContent value="attendance">
-          <Card><CardBody><p className="text-sm text-fg-muted">Attendance summary</p></CardBody></Card>
+          <AttendanceTab employeeId={employee.id} />
         </TabsContent>
         <TabsContent value="leave"><LeaveTab employee={employee} /></TabsContent>
       </Tabs>
@@ -370,6 +397,35 @@ function LeaveTab({ employee: e }: { employee: Employee }) {
           delta={{ value: `${b.used} used, ${b.pending} pending`, tone: 'neutral' }}
         />
       ))}
+    </div>
+  )
+}
+
+function AttendanceTab({ employeeId }: { employeeId: string }) {
+  const cells = useAttendanceHeat(employeeId, 30)
+  const month = useMonthWeekHours(employeeId)
+  const worked = cells.filter((c) => c.value !== null && c.value > 0).length
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card>
+        <CardHeader title="Last 30 days" actions={<span className="text-sm text-fg-muted">{worked} days worked</span>} />
+        <CardBody>
+          <HeatStrip cells={cells} height={40} aria-label={`${worked} days worked in the last 30 days`} />
+          <p className="mt-2 text-xs text-fg-subtle">Darker means closer to a full day. Weekends and holidays are blank.</p>
+        </CardBody>
+      </Card>
+      <Card>
+        <CardHeader title={`${month.month} by week`} actions={<span className="font-mono text-sm tabular-nums text-fg-muted">{formatDuration(month.totalSeconds)}</span>} />
+        <CardBody>
+          <Bars
+            data={month.data}
+            series={[{ name: 'Worked' }]}
+            height={96}
+            format={formatHours}
+            aria-label={`Hours worked per week in ${month.month}, ${formatDuration(month.totalSeconds)} in total`}
+          />
+        </CardBody>
+      </Card>
     </div>
   )
 }

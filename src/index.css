@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --bg: 247 247 248;
+  --bg: 248 249 251;
+  --sidebar: 243 244 246;
   --surface: 255 255 255;
   --surface-2: 242 243 245;
   --border: 228 229 233;
@@ -11,7 +12,8 @@
   --fg: 22 24 29;
   --fg-muted: 92 99 112;
   --fg-subtle: 138 145 158;
-  --accent: 48 86 211;
+  --accent: 47 95 227;
+  --accent-strong: 31 70 201;
   --accent-fg: 255 255 255;
   --accent-soft: 232 237 251;
   --success: 31 138 76;
@@ -22,8 +24,17 @@
   --danger-soft: 253 232 232;
   --info: 43 108 176;
   --info-soft: 227 238 251;
-  --ring: 48 86 211;
+  --ring: 47 95 227;
   --shadow-xs-alpha: 0.04;
+  --shadow-sm-alpha: 0.08;
+  --chart-1: 47 95 227;
+  --chart-2: 20 150 140;
+  --chart-3: 124 82 214;
+  --chart-4: 214 146 28;
+  --chart-5: 217 70 110;
+  --chart-6: 34 150 84;
+  --chart-7: 100 112 132;
+  --chart-8: 224 108 36;
   --avatar-1-bg: 224 233 252; --avatar-1-fg: 40 75 170;
   --avatar-2-bg: 215 241 238; --avatar-2-fg: 21 111 104;
   --avatar-3-bg: 220 241 226; --avatar-3-fg: 36 114 63;
@@ -37,14 +48,16 @@
 
 .dark {
   --bg: 15 17 21;
-  --surface: 22 26 34;
-  --surface-2: 28 33 43;
+  --sidebar: 18 21 27;
+  --surface: 24 28 37;
+  --surface-2: 31 36 47;
   --border: 39 45 56;
   --border-strong: 52 59 72;
   --fg: 231 233 238;
   --fg-muted: 154 163 178;
   --fg-subtle: 107 116 132;
   --accent: 107 140 255;
+  --accent-strong: 138 163 255;
   --accent-fg: 11 16 32;
   --accent-soft: 27 36 64;
   --success: 76 195 138;
@@ -57,6 +70,15 @@
   --info-soft: 20 34 53;
   --ring: 107 140 255;
   --shadow-xs-alpha: 0;
+  --shadow-sm-alpha: 0;
+  --chart-1: 107 140 255;
+  --chart-2: 62 200 188;
+  --chart-3: 169 140 245;
+  --chart-4: 232 176 78;
+  --chart-5: 244 125 160;
+  --chart-6: 76 195 138;
+  --chart-7: 140 152 172;
+  --chart-8: 242 145 84;
   --avatar-1-bg: 28 40 76; --avatar-1-fg: 150 175 255;
   --avatar-2-bg: 18 51 49; --avatar-2-fg: 110 205 195;
   --avatar-3-bg: 22 48 31; --avatar-3-fg: 120 205 150;
@@ -76,11 +98,34 @@
   * { @apply border-border; }
   ::placeholder { @apply text-fg-subtle; }
   :focus-visible { outline: none; }
+  h1, h2, h3 { line-height: 1.25; }
 }
+
+@layer components {
+  /* Page content fades and rises 4px on route change. */
+  .page-enter { animation: page-enter 120ms ease-out both; }
+  /* Chart marks grow on mount. */
+  .grow-y { transform-origin: bottom; animation: grow-y 240ms ease-out both; }
+  .grow-x { transform-origin: left; animation: grow-x 240ms ease-out both; }
+  /* Hover-able cards lift 1px. */
+  .card-lift { transition: transform 120ms ease-out, box-shadow 120ms ease-out, border-color 120ms ease-out; }
+  .card-lift:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgb(0 0 0 / var(--shadow-sm-alpha)); border-color: rgb(var(--border-strong)); }
+  /* Login only: quiet dot grid. */
+  .dot-grid {
+    background-image: radial-gradient(rgb(var(--accent) / 0.12) 1.5px, transparent 1.5px);
+    background-size: 16px 16px;
+  }
+}
+
+@keyframes page-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes grow-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
+  .card-lift:hover { transform: none; }
 }

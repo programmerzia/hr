@@ -3,6 +3,7 @@ import { useMemo, useState, type DragEvent } from 'react'
 import { useParams, useSearchParams } from 'react-router'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { Avatar, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger, IconButton } from '../../components/ui'
+import { chartColor, seriesColor } from '../../components/charts/colors'
 import { cn } from '../../lib/cn'
 import { formatDate } from '../../lib/format'
 import { useAuthed } from '../../mock/session'
@@ -82,7 +83,7 @@ function Board({ project }: { project: Project }) {
     <div className="mx-auto max-w-full">
       <ProjectHeader project={project} view="board" />
       <div className="-mx-1 flex items-start gap-3 overflow-x-auto px-1 pb-4">
-        {columns.map((c) => {
+        {columns.map((c, ci) => {
           const list = byColumn.get(c.id) ?? []
           const visible = list.filter((t) => t.id !== dragId)
           const active = target?.columnId === c.id
@@ -93,13 +94,17 @@ function Board({ project }: { project: Project }) {
               onDragOver={(e) => overColumn(e, c.id)}
               onDrop={drop}
               className={cn(
-                'flex w-72 shrink-0 flex-col rounded-md border bg-surface-2 transition-colors duration-150',
-                active ? 'border-accent' : 'border-border',
+                'flex w-72 shrink-0 flex-col overflow-hidden rounded-md border bg-surface-2/70 transition-colors duration-150',
+                active ? 'border-accent ring-2 ring-accent/30' : 'border-border',
               )}
             >
-              <header className="flex h-10 items-center justify-between px-3">
-                <h2 className="text-base font-semibold">
-                  {c.name} <span className="font-normal text-fg-muted">{list.length}</span>
+              <div className="h-0.5" style={{ backgroundColor: chartColor(seriesColor(ci)) }} aria-hidden data-testid="column-strip" />
+              <header className="flex h-11 items-center justify-between px-3">
+                <h2 className="flex items-center gap-2 text-base font-semibold">
+                  {c.name}
+                  <span className="rounded-full bg-surface px-1.5 text-xs font-medium tabular-nums text-fg-muted shadow-[inset_0_0_0_1px_rgb(var(--border))]">
+                    {list.length}
+                  </span>
                 </h2>
                 {canWrite && (
                   <IconButton label={`Add task to ${c.name}`} size="sm" onClick={() => setAddIn(c.id)}>
@@ -182,13 +187,13 @@ function TaskCard({
       }}
       onDragEnd={onDragEnd}
       className={cn(
-        'group rounded-md border border-border bg-surface p-3 hover:border-border-strong',
+        'card-lift group rounded-md border border-border bg-surface p-3 shadow-xs',
         draggable && 'cursor-grab active:cursor-grabbing',
-        dragging && 'opacity-40',
+        dragging && 'opacity-80 outline-dashed outline-1 outline-accent',
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="font-mono text-sm text-fg-muted">{task.key}</span>
+        <span className="font-mono text-xs text-fg-muted">{task.key}</span>
         <div className="-mr-1.5 -mt-1.5 flex items-center gap-1">
           <PriorityIcon priority={task.priority} />
           {draggable && (
@@ -226,7 +231,13 @@ function TaskCard({
       <div className="mt-2 flex items-center justify-between gap-2 text-sm">
         <div className="flex items-center gap-2 text-fg-muted">
           {task.due_on && (
-            <span className={cn(isOverdue(task, columns) && 'font-medium text-danger')} title={column?.is_done ? 'Completed' : undefined}>
+            <span
+              className={cn(
+                'rounded px-1.5 py-0.5 text-xs',
+                isOverdue(task, columns) ? 'bg-danger-soft font-medium text-danger' : 'bg-surface-2',
+              )}
+              title={column?.is_done ? 'Completed' : undefined}
+            >
               {formatDate(task.due_on)}
             </span>
           )}

@@ -1,6 +1,7 @@
 import { Check, Circle, Pencil, Printer } from 'lucide-react'
 import { useState } from 'react'
 import { useParams } from 'react-router'
+import { Bars } from '../../components/charts/Bars'
 import { HistoryPanel } from '../../components/shared/HistoryPanel'
 import { MoneyCell } from '../../components/shared/MoneyCell'
 import { PageHeader } from '../../components/shared/PageHeader'
@@ -95,6 +96,9 @@ export function ClaimDetailPage() {
   const bank = people.bankOf(claim.employee_id)
   const lead = people.leadOf(claim.employee_id)
   const weeks = b.weeklyBreakdown(claim.employee_id, claim.year, claim.month)
+  // Claimed minutes are a monthly figure, so each week gets its share in proportion to tracked time.
+  const ratio = claim.tracked_minutes > 0 ? claim.claimed_minutes / claim.tracked_minutes : 1
+  const weekBars = weeks.map((w, i) => ({ label: `Wk ${i + 1}`, values: [w.minutes / 60, (w.minutes * ratio) / 60] }))
   const audit = b.auditFor('claim', claim.id)
   const nameOf = (eid: string) => people.employeeById(eid)?.name ?? eid
   const diff = claim.claimed_minutes - claim.tracked_minutes
@@ -259,6 +263,20 @@ export function ClaimDetailPage() {
               </ol>
             </CardBody>
           </Card>
+          {weekBars.length > 0 && (
+            <Card>
+              <CardHeader title="Hours by week" />
+              <CardBody>
+                <Bars
+                  data={weekBars}
+                  series={[{ name: 'Tracked' }, { name: 'Claimed', color: 'chart-2' }]}
+                  height={96}
+                  format={(v) => hoursText(Math.round(v * 60))}
+                  aria-label={`Tracked and claimed hours for each week of ${period}`}
+                />
+              </CardBody>
+            </Card>
+          )}
           <Card>
             <CardHeader title="Actions" />
             <CardBody className="flex flex-col gap-2">

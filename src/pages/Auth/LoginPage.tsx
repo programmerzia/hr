@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router'
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog'
-import { Button, Field, Input } from '../../components/ui'
+import { Avatar, Badge, Button, Field, Input } from '../../components/ui'
 import { employees, users } from '../../mock/db/people'
 import { useSession } from '../../mock/session'
 import { todayKey, useAttendance } from '../../mock/stores/attendance'
@@ -90,10 +90,13 @@ export function LoginPage() {
                 onClick={() => enter(employeeId)}
                 className="flex h-9 w-full items-center justify-between gap-2 rounded px-2 text-left text-base transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
-                <span className="truncate">{employee.name}</span>
-                <span className="text-sm text-fg-muted">
-                  {caption === 'Contractor' ? caption : roleLabel[users.find((u) => u.employee_id === employeeId)!.role]}
+                <span className="flex min-w-0 items-center gap-2">
+                  <Avatar name={employee.name} size="sm" />
+                  <span className="truncate">{employee.name}</span>
                 </span>
+                <Badge>
+                  {caption === 'Contractor' ? caption : roleLabel[users.find((u) => u.employee_id === employeeId)!.role]}
+                </Badge>
               </button>
             </li>
           ))}

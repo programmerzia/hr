@@ -8,6 +8,7 @@ export default {
     extend: {
       colors: {
         bg: c('bg'),
+        sidebar: c('sidebar'),
         surface: c('surface'),
         'surface-2': c('surface-2'),
         border: c('border'),
@@ -16,6 +17,7 @@ export default {
         'fg-muted': c('fg-muted'),
         'fg-subtle': c('fg-subtle'),
         accent: c('accent'),
+        'accent-strong': c('accent-strong'),
         'accent-fg': c('accent-fg'),
         'accent-soft': c('accent-soft'),
         success: c('success'),
@@ -27,6 +29,14 @@ export default {
         info: c('info'),
         'info-soft': c('info-soft'),
         ring: c('ring'),
+        'chart-1': c('chart-1'),
+        'chart-2': c('chart-2'),
+        'chart-3': c('chart-3'),
+        'chart-4': c('chart-4'),
+        'chart-5': c('chart-5'),
+        'chart-6': c('chart-6'),
+        'chart-7': c('chart-7'),
+        'chart-8': c('chart-8'),
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
@@ -38,7 +48,8 @@ export default {
         base: ['14px', '20px'],
         lg: ['15px', '22px'],
         xl: ['22px', { lineHeight: '28px', letterSpacing: '-0.01em' }],
-        '2xl': ['24px', { lineHeight: '32px', letterSpacing: '-0.01em' }],
+        '2xl': ['24px', { lineHeight: '32px', letterSpacing: '-0.02em' }],
+        '3xl': ['32px', { lineHeight: '40px', letterSpacing: '-0.02em' }],
       },
       borderRadius: {
         DEFAULT: '4px',
@@ -47,6 +58,7 @@ export default {
       },
       boxShadow: {
         xs: '0 1px 2px rgb(0 0 0 / var(--shadow-xs-alpha))',
+        sm: '0 2px 6px rgb(0 0 0 / var(--shadow-sm-alpha))',
         float: '0 4px 16px rgb(0 0 0 / 0.12), 0 0 0 1px rgb(var(--border) / 1)',
       },
       maxWidth: { content: '1280px' },

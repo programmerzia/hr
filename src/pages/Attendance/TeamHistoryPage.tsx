@@ -1,6 +1,7 @@
 import { format, subDays } from 'date-fns'
 import { CalendarDays, Download } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { HeatStrip } from '../../components/charts/HeatStrip'
 import { DurationText } from '../../components/shared/DurationText'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { PageHeader } from '../../components/shared/PageHeader'
@@ -9,6 +10,8 @@ import { StatusBadge } from '../../components/shared/StatusBadge'
 import {
   Badge,
   Button,
+  Card,
+  CardHeader,
   DateRangePicker,
   NativeSelect,
   Table,
@@ -26,8 +29,20 @@ import { teams } from '../../mock/db/people'
 import { useSession } from '../../mock/session'
 import { scopeEmployees, useAttendance } from '../../mock/stores/attendance'
 import { downloadCsv, totalsOf, useSegmentsByDay } from './lib'
+import { useAttendanceHeat } from './useAttendanceSeries'
 
 const ROW_LIMIT = 500
+
+function MemberHeat({ employeeId, name }: { employeeId: string; name: string }) {
+  const cells = useAttendanceHeat(employeeId, 30)
+  const worked = cells.filter((c) => c.value !== null && c.value > 0).length
+  return (
+    <li className="flex items-center gap-3">
+      <span className="w-36 shrink-0 truncate text-sm">{name}</span>
+      <HeatStrip cells={cells} height={16} aria-label={`${name}: ${worked} days worked in the last 30 days`} />
+    </li>
+  )
+}
 
 export function TeamHistoryPage() {
   const employee = useSession((s) => s.employee)
@@ -87,6 +102,13 @@ export function TeamHistoryPage() {
   }
 
   const shown = rows.slice(0, ROW_LIMIT)
+  const members = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return scope
+      .filter((e) => (team === 'all' ? true : e.team_id === team))
+      .filter((e) => !q || e.name.toLowerCase().includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [scope, team, search])
 
   return (
     <>
@@ -117,6 +139,29 @@ export function TeamHistoryPage() {
           ) : undefined
         }
       />
+      {members.length > 0 && (
+        <Card className="mb-4">
+          <CardHeader
+            title="Last 30 days"
+            actions={
+              <span className="flex items-center gap-1.5 text-xs text-fg-muted">
+                Less
+                <span className="size-2.5 rounded-sm bg-success/25" aria-hidden />
+                <span className="size-2.5 rounded-sm bg-success/60" aria-hidden />
+                <span className="size-2.5 rounded-sm bg-success" aria-hidden />
+                Full day
+                <span className="ml-2 size-2.5 rounded-sm bg-danger/20" aria-hidden />
+                No record
+              </span>
+            }
+          />
+          <ul className="grid gap-x-8 gap-y-2.5 p-4 lg:grid-cols-2" data-testid="heat-strips">
+            {members.map((e) => (
+              <MemberHeat key={e.id} employeeId={e.id} name={e.name} />
+            ))}
+          </ul>
+        </Card>
+      )}
       {shown.length === 0 ? (
         <EmptyTable icon={CalendarDays} title="No records" description="Nothing was recorded for this range and filter." />
       ) : (

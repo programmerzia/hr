@@ -148,7 +148,7 @@ export function Composer({ placeholder, memberIds, selfId, onSend }: ComposerPro
           value={text}
           placeholder={placeholder}
           aria-label="Message"
-          className="max-h-40 min-h-[52px] resize-none"
+          className="max-h-40 min-h-[52px] resize-none focus:border-accent focus-visible:ring-2 focus-visible:ring-accent/25"
           onChange={(e) => {
             setText(e.target.value)
             setCaret(e.target.selectionStart)

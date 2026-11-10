@@ -59,11 +59,13 @@ export function NavList({ groups, collapsed, onNavigate }: NavListProps) {
                   aria-label={collapsed ? item.label : undefined}
                   className={cn(
                     'relative flex h-8 items-center gap-2 rounded px-2 text-base transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
-                    active ? 'bg-accent-soft font-medium text-accent' : 'text-fg-muted hover:bg-surface-2 hover:text-fg',
+                    active
+                      ? 'bg-accent-soft font-medium text-accent before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-accent'
+                      : 'text-fg-muted hover:bg-surface hover:text-fg hover:shadow-xs',
                     collapsed && 'justify-center px-0',
                   )}
                 >
-                  <Icon size={16} className="shrink-0" aria-hidden />
+                  <Icon size={16} strokeWidth={1.75} className="shrink-0" aria-hidden />
                   {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
                   <NavBadge id={item.id} className={collapsed ? 'absolute right-0.5 top-0.5' : undefined} />
                 </Link>

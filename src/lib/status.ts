@@ -64,3 +64,8 @@ export const breakCategoryLabels: Record<string, string> = {
 
 /** Categories the system writes; never offered in a picker. */
 export const systemBreakCategories = ['idle', 'offline'] as const
+
+/** Avatar presence ring for a day status: green working, amber on break, gray otherwise. */
+export function presenceTone(status: string): 'success' | 'warning' | 'neutral' {
+  return status === 'working' ? 'success' : status === 'on_break' ? 'warning' : 'neutral'
+}

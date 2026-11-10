@@ -51,24 +51,29 @@ export function WorkStatusChip() {
     <>
       <div
         data-testid="work-chip"
-        className="flex h-8 items-stretch overflow-hidden rounded-md border border-border-strong bg-surface shadow-xs"
+        className={cn(
+          'flex h-8 items-stretch overflow-hidden rounded-md border shadow-xs transition-colors duration-150',
+          status === 'working' && 'border-success/30 bg-success-soft',
+          status === 'on_break' && 'border-warning/30 bg-warning-soft',
+          status !== 'working' && status !== 'on_break' && 'border-border-strong bg-surface-2',
+        )}
       >
         <button
           type="button"
           onClick={() => navigate('/my-day')}
           aria-label={`Work status: ${meta.label}. Open my day`}
-          className="flex items-center gap-2 px-2.5 text-sm transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
+          className="flex items-center gap-2 px-2.5 text-sm transition-colors duration-150 hover:bg-fg/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
         >
           <StatusDot variant={meta.variant} pulse={status === 'working'} />
           <span className={cn('hidden font-medium sm:inline', status === 'not_started' && 'text-fg-muted')}>
             {meta.label}
           </span>
-          <span className="font-mono tabular-nums text-fg-muted">{formatClock(seconds)}</span>
+          <span className="font-mono tabular-nums text-fg">{formatClock(seconds)}</span>
         </button>
         <button
           type="button"
           onClick={act.run}
-          className="flex items-center gap-1.5 border-l border-border px-2.5 text-sm font-medium text-fg transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
+          className="flex items-center gap-1.5 border-l border-fg/10 px-2.5 text-sm font-medium text-fg transition-colors duration-150 hover:bg-fg/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
         >
           {act.icon}
           <span className="hidden md:inline">{act.label}</span>

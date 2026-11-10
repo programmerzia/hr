@@ -1,6 +1,7 @@
-import { Banknote, Check, FileText, MinusCircle, RefreshCw, Send, Trash2, Users, Wallet } from 'lucide-react'
+import { Check, FileText, RefreshCw, Send, Trash2, Users, Wallet } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
+import { StackedBar } from '../../components/charts/StackedBar'
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { HistoryPanel } from '../../components/shared/HistoryPanel'
@@ -11,13 +12,14 @@ import { StatusBadge } from '../../components/shared/StatusBadge'
 import {
   Button,
   buttonVariants,
+  Card,
+  CardBody,
   Dialog,
   EmptyState,
   Field,
   Input,
   NativeSelect,
   Sheet,
-  Stat,
   Table,
   Tbody,
   Td,
@@ -30,6 +32,7 @@ import {
 import { formatDate, formatDuration, formatMoney } from '../../lib/format'
 import { useAuthed } from '../../mock/session'
 import { monthLabel, netAdjustment, usePayroll } from '../../mock/stores/payroll'
+import { useDeductionMix } from './usePayrollSeries'
 import { todayIso, usePeopleStore } from '../../mock/stores/people'
 import type { PayrollAdjustmentKind } from '../../types'
 
@@ -238,6 +241,7 @@ export function RunDetailPage() {
   const approveRun = usePayroll((s) => s.approveRun)
   const totalsFor = usePayroll((s) => s.totalsFor)
   const people = usePeopleStore()
+  const mix = useDeductionMix(runId)
 
   const [selected, setSelected] = useState<string | null>(null)
   const [payOpen, setPayOpen] = useState(false)
@@ -337,12 +341,29 @@ export function RunDetailPage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat icon={Users} label="Employees" value={totals.employees} />
-        <Stat icon={Wallet} label="Gross" value={formatMoney(totals.gross)} />
-        <Stat icon={MinusCircle} label="Deductions" value={formatMoney(totals.deductions)} />
-        <Stat icon={Banknote} label="Net payable" value={formatMoney(totals.net)} />
-      </div>
+      <Card className="mb-4">
+        <CardBody className="space-y-5">
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4">
+            {[
+              { label: 'Employees', value: String(totals.employees) },
+              { label: 'Gross', value: formatMoney(totals.gross) },
+              { label: 'Deductions', value: formatMoney(totals.deductions) },
+              { label: 'Net payable', value: formatMoney(totals.net), strong: true },
+            ].map((f) => (
+              <div key={f.label}>
+                <dt className="text-sm text-fg-muted">{f.label}</dt>
+                <dd className={`mt-1 font-mono tabular-nums ${f.strong ? 'text-xl font-semibold' : 'text-xl font-medium'}`}>{f.value}</dd>
+              </div>
+            ))}
+          </dl>
+          {mix.some((m) => m.value > 0) && (
+            <div className="border-t border-border pt-4">
+              <p className="mb-2 text-sm text-fg-muted">Deductions by type</p>
+              <StackedBar segments={mix} height={8} aria-label="Deductions by type" />
+            </div>
+          )}
+        </CardBody>
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[1fr_18rem]">
         <div className="min-w-0">

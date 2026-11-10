@@ -1,83 +1,14 @@
-import { Coffee, LogOut, MessageSquare, Play } from 'lucide-react'
+import { CheckCircle2, ChevronRight, MessageSquare } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link } from 'react-router'
-import { Clock } from '../../components/shared/Clock'
-import { StatusBadge } from '../../components/shared/StatusBadge'
 import { TaskKey } from '../../components/shared/TaskKey'
-import { TimelineBar } from '../../components/shared/TimelineBar'
-import { Button, Card, CardBody, CardHeader, EmptyState, toast } from '../../components/ui'
-import { formatDate, formatTime } from '../../lib/format'
-import { attendancePolicy, shiftTime } from '../../mock/db/attendance'
-import { useAttendance, computeTotals, todayKey } from '../../mock/stores/attendance'
+import { Badge, Card, CardBody, CardHeader, EmptyState, Progress } from '../../components/ui'
+import { formatDate } from '../../lib/format'
+import { todayKey } from '../../mock/stores/attendance'
 import { useChat } from '../../mock/stores/chat'
 import { useLeaveStore } from '../../mock/stores/leave'
 import { useMyTasks } from '../../mock/stores/work'
-
-export function TodayCard({ employeeId }: { employeeId: string }) {
-  const now = useAttendance((s) => s.now)
-  const days = useAttendance((s) => s.days)
-  const allSegments = useAttendance((s) => s.segments)
-  const startWork = useAttendance((s) => s.startWork)
-  const startBreak = useAttendance((s) => s.startBreak)
-  const endDay = useAttendance((s) => s.endDay)
-  const today = todayKey()
-  const day = useMemo(() => days.find((d) => d.employee_id === employeeId && d.date === today), [days, employeeId, today])
-  const segments = useMemo(
-    () => (day ? allSegments.filter((s) => s.attendance_day_id === day.id) : []),
-    [allSegments, day],
-  )
-  const totals = computeTotals(segments, now)
-  const status = day?.status ?? 'not_started'
-  const rangeStart = shiftTime(today, attendancePolicy.shift_start).toISOString()
-  const rangeEnd = shiftTime(today, attendancePolicy.shift_end).toISOString()
-  const canAct = status === 'not_started' || status === 'working' || status === 'on_break'
-
-  return (
-    <Card>
-      <CardHeader title="Today" actions={<StatusBadge status={status} />} />
-      <CardBody className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <Clock seconds={totals.workSeconds} />
-            <p className="text-sm text-fg-muted">
-              Worked today{day?.first_in_at ? `, started ${formatTime(day.first_in_at)}` : ''}
-            </p>
-          </div>
-          {canAct && (
-            <div className="flex flex-wrap gap-2">
-              {status !== 'working' && (
-                <Button
-                  variant="primary"
-                  icon={<Play size={16} />}
-                  onClick={() => {
-                    const r = startWork(employeeId)
-                    if (r === 'needs_overtime_confirm') toast.error('Your day has ended. Open My day to start overtime.')
-                  }}
-                >
-                  {status === 'on_break' ? 'Resume work' : 'Start work'}
-                </Button>
-              )}
-              {status === 'working' && (
-                <Button icon={<Coffee size={16} />} onClick={() => startBreak(employeeId, 'short')}>
-                  Take a break
-                </Button>
-              )}
-              {status !== 'not_started' && (
-                <Button icon={<LogOut size={16} />} onClick={() => endDay(employeeId)}>
-                  End day
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-        <TimelineBar segments={segments} rangeStart={rangeStart} rangeEnd={rangeEnd} />
-        <Link to="/my-day" className="text-sm text-accent hover:underline">
-          Open my day
-        </Link>
-      </CardBody>
-    </Card>
-  )
-}
+import { PriorityIcon } from '../Work/shared'
 
 export function MyTasksCard() {
   const tasks = useMyTasks()
@@ -95,23 +26,27 @@ export function MyTasksCard() {
         title="My tasks"
         actions={
           <Link to="/tasks" className="text-sm text-accent hover:underline">
-            View all
+            View all{tasks.length > top.length ? ` ${tasks.length}` : ''}
           </Link>
         }
       />
       {top.length === 0 ? (
-        <EmptyState title="No open tasks" description="Tasks assigned to you will appear here." className="py-8" />
+        <EmptyState icon={CheckCircle2} title="Nothing assigned" description="Tasks assigned to you will appear here." className="py-8" />
       ) : (
         <ul>
           {top.map((t) => (
-            <li key={t.id} className="flex items-center gap-3 border-b border-border px-4 py-2 last:border-b-0">
+            <li
+              key={t.id}
+              className="flex items-center gap-3 border-b border-border px-4 py-2.5 transition-colors duration-150 last:border-b-0 hover:bg-surface-2"
+            >
+              <PriorityIcon priority={t.priority} />
               <TaskKey taskKey={t.key} className="w-20 shrink-0" />
               <span className="min-w-0 flex-1 truncate">{t.title}</span>
               {t.due_on && (
-                <span className={t.due_on < today ? 'shrink-0 text-sm text-danger' : 'shrink-0 text-sm text-fg-muted'}>
+                <Badge variant={t.due_on < today ? 'danger' : 'neutral'} className="shrink-0">
                   {t.due_on < today ? 'Overdue ' : 'Due '}
                   {formatDate(t.due_on)}
-                </span>
+                </Badge>
               )}
             </li>
           ))}
@@ -124,7 +59,7 @@ export function MyTasksCard() {
 export function LeaveBalancesCard({ employeeId }: { employeeId: string }) {
   useLeaveStore((s) => s.balances)
   const balances = useLeaveStore.getState().balancesFor(employeeId, new Date().getFullYear())
-  const shown = balances.filter((b) => !b.unlimited)
+  const shown = balances.filter((b) => !b.unlimited && b.entitled > 0)
   return (
     <Card>
       <CardHeader
@@ -138,14 +73,22 @@ export function LeaveBalancesCard({ employeeId }: { employeeId: string }) {
       {shown.length === 0 ? (
         <EmptyState title="No leave balances" description="Your balances will show once leave types are set up." className="py-8" />
       ) : (
-        <ul>
+        <ul className="space-y-3 p-4">
           {shown.map((b) => (
-            <li key={b.id} className="flex items-center justify-between border-b border-border px-4 py-2 last:border-b-0">
-              <span>{b.type.name}</span>
-              <span className="font-mono tabular-nums">
-                {b.available}
-                <span className="text-fg-muted"> of {b.entitled} days</span>
-              </span>
+            <li key={b.id}>
+              <div className="mb-1.5 flex items-baseline justify-between">
+                <span>{b.type.name}</span>
+                <span className="font-mono text-sm tabular-nums">
+                  {b.available}
+                  <span className="text-fg-muted"> of {b.entitled} days</span>
+                </span>
+              </div>
+              <Progress
+                value={b.available}
+                max={b.entitled}
+                tone={b.available / b.entitled < 0.2 ? 'warning' : 'accent'}
+                aria-label={`${b.type.name}: ${b.available} of ${b.entitled} days left`}
+              />
             </li>
           ))}
         </ul>
@@ -154,20 +97,26 @@ export function LeaveBalancesCard({ employeeId }: { employeeId: string }) {
   )
 }
 
+/** Shown only when there is something unread. */
 export function ChatCard({ employeeId }: { employeeId: string }) {
   const unread = useChat((s) => s.totalUnread(employeeId))
+  if (unread === 0) return null
   return (
-    <Card>
-      <CardHeader title="Chat" />
-      <CardBody className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <MessageSquare size={16} className="text-fg-muted" aria-hidden />
-          <span>{unread === 0 ? 'No unread messages' : `${unread} unread ${unread === 1 ? 'message' : 'messages'}`}</span>
-        </div>
-        <Link to="/chat" className="text-sm text-accent hover:underline">
-          Open chat
-        </Link>
-      </CardBody>
-    </Card>
+    <Link to="/chat" className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+      <Card interactive>
+        <CardBody className="flex items-center gap-3">
+          <span className="flex size-8 items-center justify-center rounded-full bg-accent-soft text-accent" aria-hidden>
+            <MessageSquare size={16} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">Chat</p>
+            <p className="text-sm text-fg-muted">
+              {unread} unread {unread === 1 ? 'message' : 'messages'}
+            </p>
+          </div>
+          <ChevronRight size={16} className="text-fg-subtle" aria-hidden />
+        </CardBody>
+      </Card>
+    </Link>
   )
 }

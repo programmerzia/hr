@@ -18,7 +18,7 @@ pnpm smoke        # drives every role through every route in headless Chrome
 
 `pnpm smoke` starts its own dev server on port 5199 and uses the system Chrome (`/usr/bin/google-chrome`, override with `CHROME_PATH`). It logs in as each demo account, visits every route in that role's sidebar plus detail pages, fails on console errors, error boundaries, blank pages and horizontal overflow, and writes screenshots to `scripts/screens/` (git-ignored).
 
-Besides the per-role route sweep, the smoke script asserts that the top bar (`[data-testid=topbar]`) renders on every authenticated route except the bare print views, that the work status chip text changes after Take a break and Resume, that a stale heartbeat produces an Offline row and an offline timeline band after a reload, and that the Team page lists stale working members as "Offline since HH:MM".
+Besides the per-role route sweep, a visual check asserts the presence bar on Home, the ring and week bars on My day, the login brand panel and that management Home shows no zero-value stats; also, the smoke script asserts that the top bar (`[data-testid=topbar]`) renders on every authenticated route except the bare print views, that the work status chip text changes after Take a break and Resume, that a stale heartbeat produces an Offline row and an offline timeline band after a reload, and that the Team page lists stale working members as "Offline since HH:MM".
 
 State lives in memory and resets on reload. Only the signed-in person, the theme, the sidebar state and the last heartbeat (see Offline tracking) are kept in `localStorage`.
 
@@ -29,6 +29,10 @@ State lives in memory and resets on reload. Only the signed-in person, the theme
 - **Breadcrumb**: by default the nav label of the current route. A page can name its record with `usePageTitle.getState().setBreadcrumb(['Payroll', 'November 2026'])` or the `useBreadcrumb()` hook (`src/app/pageTitle.ts`). `PageHeader`'s `breadcrumb` prop calls the hook, so detail pages publish their crumbs to the top bar instead of rendering them above the title.
 - **Sidebar**: logomark and name, nav groups, collapse toggle. Navigation only.
 - Routes with `handle.bare` still render without the shell.
+
+## Design notes (revision 3)
+
+Spec: `docs/03-design-system.md`, "Revision 3". Three planes (sidebar, page, card), chart palette tokens `--chart-1..8`, and small SVG-free-of-libraries charts in `src/components/charts/` (`Bars`, `StackedBar`, `Sparkline`, `Ring`, `HeatStrip`). Charts take their data from selector hooks next to the page that uses them (`useWeeklyHours`, `useAttendanceHeat`, `usePayrollSeries`, `useDeductionMix`, `useInvoiceAging`, `useHiresSeries`, `usePresenceSegments`), always computed from the seed stores. Home leads with one presence card instead of stat boxes; stats that are zero are hidden unless they are warnings (`data-warning`). Motion (route fade, bar growth, card lift, button press) is off under `prefers-reduced-motion`. The login dot grid is the only gradient in the app.
 
 ## Offline tracking
 

@@ -1,5 +1,5 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
-import { Outlet, useMatches, useNavigate } from 'react-router'
+import { Outlet, useLocation, useMatches, useNavigate } from 'react-router'
 import type { RouteHandle } from '../app/guards'
 import { navFor } from '../app/nav'
 import { PageSkeleton } from '../components/shared/PageSkeleton'
@@ -24,6 +24,7 @@ function readCollapsed(): boolean {
 export function AppLayout() {
   const { employee, role } = useAuthed()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   useHeartbeat()
   const bare = useMatches().some((m) => (m.handle as RouteHandle | undefined)?.bare)
 
@@ -90,7 +91,10 @@ export function AppLayout() {
           onOpenMenu={() => setMenuOpen(true)}
           onSignOut={() => setLogoutOpen(true)}
         />
-        <main className="mx-auto w-full max-w-content flex-1 px-4 pb-24 pt-4 md:px-6 md:pb-8 md:pt-6">
+        <main
+          key={pathname}
+          className="page-enter mx-auto w-full max-w-content flex-1 px-4 pb-24 pt-4 md:px-6 md:pb-8 md:pt-6"
+        >
           <Suspense fallback={<PageSkeleton />}>
             <Outlet />
           </Suspense>

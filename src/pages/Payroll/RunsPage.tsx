@@ -5,17 +5,20 @@ import { EmptyTable } from '../../components/shared/EmptyTable'
 import { MoneyCell } from '../../components/shared/MoneyCell'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { StatusBadge } from '../../components/shared/StatusBadge'
-import { Button, Table, Tbody, Td, Th, Thead, Tr, toast } from '../../components/ui'
-import { formatDate } from '../../lib/format'
+import { Bars } from '../../components/charts/Bars'
+import { Button, Card, CardBody, CardHeader, Table, Tbody, Td, Th, Thead, Tr, toast } from '../../components/ui'
+import { formatDate, formatMoney } from '../../lib/format'
 import { useAuthed } from '../../mock/session'
 import { monthLabel, usePayroll } from '../../mock/stores/payroll'
 import { usePeopleStore } from '../../mock/stores/people'
+import { usePayrollSeries } from './usePayrollSeries'
 
 export function RunsPage() {
   const { employee } = useAuthed()
   const navigate = useNavigate()
   const runs = usePayroll((s) => s.runs)
   const items = usePayroll((s) => s.items)
+  const series = usePayrollSeries(12)
   const draftRun = usePayroll((s) => s.draftRun)
   const employeeById = usePeopleStore((s) => s.employeeById)
 
@@ -46,6 +49,23 @@ export function RunsPage() {
           </Button>
         }
       />
+      {series.data.length > 1 && (
+        <Card className="mb-4">
+          <CardHeader
+            title="Gross by month"
+            actions={<span className="font-mono text-sm tabular-nums text-fg-muted">{formatMoney(series.latestGross)} latest</span>}
+          />
+          <CardBody>
+            <Bars
+              data={series.data}
+              series={[{ name: 'Gross' }]}
+              height={112}
+              format={(v) => formatMoney(v)}
+              aria-label={`Gross payroll for the last ${series.data.length} runs`}
+            />
+          </CardBody>
+        </Card>
+      )}
       {sorted.length === 0 ? (
         <EmptyTable icon={Wallet} title="No payroll runs yet" description="Start the first run to calculate salaries for full-time staff." />
       ) : (

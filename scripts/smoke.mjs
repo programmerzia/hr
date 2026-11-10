@@ -63,6 +63,7 @@ async function main() {
     await attendanceLoop(browser)
     await offlineReload(browser)
     await presenceCheck(browser)
+    await visualChecks(browser)
     await keyboard(browser)
     await darkMode(browser)
   } finally {
@@ -306,6 +307,40 @@ async function presenceCheck(browser) {
   await page.close()
 }
 
+// Revision 3 visuals: charts render from seed data, no zero stats, split login.
+async function visualChecks(browser) {
+  const page = await browser.newPage()
+  await page.setViewport({ width: 1366, height: 900 })
+  const errors = track(page)
+  const notes = []
+  const has = (sel) => page.evaluate((s) => !!document.querySelector(s), sel)
+  try {
+    await page.goto(`${BASE}/login`, { waitUntil: 'networkidle0' })
+    await page.evaluate(() => localStorage.clear())
+    await page.goto(`${BASE}/login`, { waitUntil: 'networkidle0' })
+    if (!(await has('[data-testid="login-brand"]'))) notes.push('login-brand panel missing at 1366px')
+    await page.screenshot({ path: path.join(shots, 'login-desktop.png') })
+    await login(page, 'Rafiq Ahmed')
+    await page.goto(BASE + '/', { waitUntil: 'networkidle0' })
+    await new Promise((r) => setTimeout(r, 400))
+    if (!(await has('[data-testid="presence-bar"]'))) notes.push('presence-bar missing on Home')
+    const zeros = await page.evaluate(() =>
+      [...document.querySelectorAll('.stat-value')].filter((e) => e.textContent.trim() === '0' && !e.hasAttribute('data-warning')).length,
+    )
+    if (zeros > 0) notes.push(`${zeros} zero-value .stat-value on management Home`)
+    await login(page, 'Sadia Sultana')
+    await page.goto(BASE + '/my-day', { waitUntil: 'networkidle0' })
+    await new Promise((r) => setTimeout(r, 400))
+    if (!(await has('[data-testid="ring"]'))) notes.push('ring missing on My day')
+    if (!(await has('[data-testid="week-bars"]'))) notes.push('week-bars missing on My day')
+  } catch (e) {
+    notes.push(e.message.slice(0, 200))
+  }
+  notes.push(...errors)
+  results.push({ role: 'mixed', route: 'visual checks (home, my day, login)', status: notes.length ? 'ERROR' : 'ok', notes })
+  await page.close()
+}
+
 async function keyboard(browser) {
   const page = await browser.newPage()
   await page.setViewport({ width: 1366, height: 900 })
@@ -347,7 +382,7 @@ async function darkMode(browser) {
     await page.click('button[aria-label="Switch to dark theme"]')
     const dark = await page.evaluate(() => document.documentElement.classList.contains('dark'))
     if (!dark) notes.push('dark class not applied')
-    for (const r of ['/', '/my-day', '/team', '/payroll', '/invoices', '/projects/PULSE', '/chat']) {
+    for (const r of ['/', '/my-day', '/team', '/team/history', '/payroll', '/invoices', '/projects/PULSE', '/chat']) {
       await page.goto(BASE + r, { waitUntil: 'networkidle0' })
       await page.screenshot({ path: path.join(shots, `management-dark-${slug(r)}.png`) })
     }

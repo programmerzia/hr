@@ -1,16 +1,18 @@
-import { AlertCircle, CircleCheck, FileText, Hourglass, Plus, Search } from 'lucide-react'
+import { FileText, Plus, Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { MoneyCell } from '../../components/shared/MoneyCell'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { StatusBadge } from '../../components/shared/StatusBadge'
-import { Button, Input, NativeSelect, Stat, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
+import { StackedBar } from '../../components/charts/StackedBar'
+import { Button, Card, CardBody, Input, NativeSelect, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { formatDate } from '../../lib/format'
 import { useBilling } from '../../mock/stores/billing'
 import { useWork } from '../../mock/stores/work'
 import type { InvoiceStatus } from '../../types'
 import { balanceOf, isoToday, sumByCurrency } from './helpers'
+import { useInvoiceAging } from './useInvoiceAging'
 
 const statusOptions: { value: 'all' | InvoiceStatus; label: string }[] = [
   { value: 'all', label: 'All statuses' },
@@ -46,6 +48,7 @@ export function InvoicesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoices, clients, query, status, clientId])
 
+  const aging = useInvoiceAging()
   const monthPrefix = isoToday().slice(0, 7)
   const open = invoices.filter((i) => i.status === 'sent' || i.status === 'overdue')
   const currencyOf = (invoiceId: string) => invoices.find((i) => i.id === invoiceId)?.currency ?? 'BDT'
@@ -62,25 +65,46 @@ export function InvoicesPage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Stat icon={Hourglass} label="Outstanding" value={sumByCurrency(open.map((i) => ({ currency: i.currency, amount: balanceOf(i) })))} />
-        <Stat
-          icon={AlertCircle}
-          label="Overdue"
-          value={sumByCurrency(
-            invoices.filter((i) => i.status === 'overdue').map((i) => ({ currency: i.currency, amount: balanceOf(i) })),
+      <Card className="mb-4">
+        <CardBody className="space-y-5">
+          <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <dt className="text-sm text-fg-muted">Outstanding</dt>
+              <dd className="mt-1 font-mono text-xl font-medium tabular-nums">
+                {sumByCurrency(open.map((i) => ({ currency: i.currency, amount: balanceOf(i) })))}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm text-fg-muted">Overdue</dt>
+              <dd className="mt-1 font-mono text-xl font-medium tabular-nums text-danger" data-warning>
+                {sumByCurrency(
+                  invoices.filter((i) => i.status === 'overdue').map((i) => ({ currency: i.currency, amount: balanceOf(i) })),
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm text-fg-muted">Paid this month</dt>
+              <dd className="mt-1 font-mono text-xl font-medium tabular-nums">
+                {sumByCurrency(
+                  payments
+                    .filter((p) => p.paid_on.startsWith(monthPrefix))
+                    .map((p) => ({ currency: currencyOf(p.invoice_id), amount: p.amount })),
+                )}
+              </dd>
+            </div>
+          </dl>
+          {aging.length > 0 && (
+            <div className="grid gap-5 border-t border-border pt-4 lg:grid-cols-2">
+              {aging.map((row) => (
+                <div key={row.currency}>
+                  <p className="mb-2 text-sm text-fg-muted">Aging, {row.currency}</p>
+                  <StackedBar segments={row.segments} height={8} aria-label={`Outstanding ${row.currency} by age`} />
+                </div>
+              ))}
+            </div>
           )}
-        />
-        <Stat
-          icon={CircleCheck}
-          label="Paid this month"
-          value={sumByCurrency(
-            payments
-              .filter((p) => p.paid_on.startsWith(monthPrefix))
-              .map((p) => ({ currency: currencyOf(p.invoice_id), amount: p.amount })),
-          )}
-        />
-      </div>
+        </CardBody>
+      </Card>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="relative w-full sm:w-64">

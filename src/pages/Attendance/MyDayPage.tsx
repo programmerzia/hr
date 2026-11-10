@@ -1,4 +1,6 @@
 import { addDays, format, startOfWeek } from 'date-fns'
+import { Bars } from '../../components/charts/Bars'
+import { Ring } from '../../components/charts/Ring'
 import { Coffee, LogOut, Play } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Clock } from '../../components/shared/Clock'
@@ -31,6 +33,7 @@ import { useAttendance } from '../../mock/stores/attendance'
 import type { AttendanceDay, TimeSegment } from '../../types'
 import { totalsOf, useSegmentsByDay } from './lib'
 import { ReasonDialog } from './RegularizeDialog'
+import { formatHours, targetSeconds, useWeeklyHours } from './useAttendanceSeries'
 import { useMyTasks } from './useMyTasks'
 
 const NO_TASK = 'none'
@@ -69,8 +72,13 @@ function MyDay({ employeeId }: { employeeId: string }) {
 
   const shiftStart = shiftTime(new Date(now), attendancePolicy.shift_start)
   const firstIn = day?.first_in_at ? new Date(day.first_in_at) : null
-  const rangeStart = firstIn && firstIn < shiftStart ? firstIn : shiftStart
-  const rangeEnd = new Date(Math.max(now, rangeStart.getTime() + 3_600_000))
+  const shiftEnd = shiftTime(new Date(now), attendancePolicy.shift_end)
+  const floorHour = (d: Date) => new Date(new Date(d).setMinutes(0, 0, 0))
+  const rangeStart = floorHour(firstIn && firstIn < shiftStart ? firstIn : shiftStart)
+  const rangeEnd = new Date(Math.max(shiftEnd.getTime(), floorHour(new Date(now)).getTime() + 3_600_000))
+  const weekly = useWeeklyHours(employeeId)
+  const target = targetSeconds()
+  const pct = Math.min(100, Math.round((totals.workSeconds / target) * 100))
 
   const sinceText =
     status === 'working' && openSeg
@@ -105,7 +113,7 @@ function MyDay({ employeeId }: { employeeId: string }) {
 
       <Card>
         <CardBody className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="grid gap-6 md:grid-cols-[1fr_auto_auto] md:items-center">
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={status} />
@@ -131,11 +139,20 @@ function MyDay({ employeeId }: { employeeId: string }) {
                     {' · '}Idle <DurationText seconds={totals.idleSeconds} />
                   </>
                 )}
-                {' · '}Target{' '}
-                {formatDuration(attendancePolicy.standard_minutes * 60)}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-3 md:px-6">
+              <Ring value={pct} size={64} stroke={6} aria-label={`${pct}% of the daily target worked`}>
+                <span className="font-mono text-sm font-medium tabular-nums">{pct}%</span>
+              </Ring>
+              <div>
+                <p className="text-sm font-medium">Daily target</p>
+                <p className="text-sm text-fg-muted">
+                  {formatDuration(totals.workSeconds)} of {formatDuration(target)}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 md:flex-col md:items-stretch">
               {status === 'working' && (
                 <Button icon={<Coffee size={16} />} onClick={() => setBreakOpen(true)}>
                   Take a break
@@ -164,7 +181,13 @@ function MyDay({ employeeId }: { employeeId: string }) {
             </div>
           </div>
 
-          <TimelineBar segments={segs} rangeStart={rangeStart.toISOString()} rangeEnd={rangeEnd.toISOString()} />
+          <TimelineBar
+            segments={segs}
+            rangeStart={rangeStart.toISOString()}
+            rangeEnd={rangeEnd.toISOString()}
+            now={now}
+            targetAt={shiftEnd.toISOString()}
+          />
 
           <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
             <span className="text-sm font-medium">Current task</span>
@@ -207,9 +230,35 @@ function MyDay({ employeeId }: { employeeId: string }) {
       </section>
 
       <section className="mt-6" aria-labelledby="week-h">
-        <h2 id="week-h" className="mb-2 text-lg font-semibold">
+        <h2 id="week-h" className="mb-3 text-lg font-semibold">
           This week
         </h2>
+        <Card className="mb-4">
+          <CardBody className="grid gap-6 md:grid-cols-[1fr_16rem] md:items-center">
+            <Bars
+              data-testid="week-bars"
+              data={weekly.data}
+              series={[{ name: 'Worked' }]}
+              target={{ value: weekly.targetHours, label: `${weekly.targetHours}h target` }}
+              height={128}
+              format={formatHours}
+              aria-label={`Hours worked each day this week, ${formatDuration(weekly.totalSeconds)} in total`}
+            />
+            <dl className="grid grid-cols-2 gap-4 md:grid-cols-1">
+              <div>
+                <dt className="text-sm text-fg-muted">Worked this week</dt>
+                <dd className="font-mono text-2xl font-semibold tabular-nums">{formatDuration(weekly.totalSeconds)}</dd>
+                <dd className="text-xs text-fg-subtle">of {formatDuration(weekly.workdays * target)} expected</dd>
+              </div>
+              <div>
+                <dt className="text-sm text-fg-muted">Average per worked day</dt>
+                <dd className="font-mono text-lg font-medium tabular-nums">
+                  {formatDuration(weekly.data.filter((d) => (d.values[0] ?? 0) > 0).length ? weekly.totalSeconds / weekly.data.filter((d) => (d.values[0] ?? 0) > 0).length : 0)}
+                </dd>
+              </div>
+            </dl>
+          </CardBody>
+        </Card>
         <Table>
           <Thead>
             <Tr className="hover:bg-transparent">
@@ -236,7 +285,7 @@ function MyDay({ employeeId }: { employeeId: string }) {
               const rejected = rec && regs.some((r) => r.attendance_day_id === rec.id && r.status === 'rejected')
               return (
                 <Tr key={key} className={key === today ? 'bg-accent-soft/40' : undefined}>
-                  <Td>{format(d, 'EEE d MMM')}</Td>
+                  <Td className="whitespace-nowrap">{format(d, 'EEE d MMM')}</Td>
                   <Td numeric>{rec?.first_in_at ? formatTime(rec.first_in_at) : '-'}</Td>
                   <Td numeric>{rec?.last_out_at ? formatTime(rec.last_out_at) : '-'}</Td>
                   <Td numeric>{rec && rec.first_in_at ? formatDuration(t.workSeconds) : '-'}</Td>

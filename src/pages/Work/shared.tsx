@@ -55,12 +55,24 @@ export function DueDate({ task, columns, className }: { task: Task; columns: Boa
   )
 }
 
+const labelDot: Record<Label['color'], string> = {
+  neutral: 'bg-fg-subtle',
+  success: 'bg-chart-6',
+  warning: 'bg-chart-4',
+  danger: 'bg-chart-5',
+  info: 'bg-chart-2',
+  accent: 'bg-chart-1',
+}
+
 export function LabelChips({ labels }: { labels: Label[] }) {
   if (labels.length === 0) return null
   return (
     <>
       {labels.map((l) => (
-        <Badge key={l.id}>{l.name}</Badge>
+        <Badge key={l.id} className="gap-1.5 bg-surface-2 text-fg-muted">
+          <span className={cn('size-1.5 rounded-full', labelDot[l.color])} aria-hidden />
+          {l.name}
+        </Badge>
       ))}
     </>
   )
