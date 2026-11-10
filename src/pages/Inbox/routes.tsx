@@ -1,9 +1,4 @@
 import type { RouteObject } from 'react-router'
-import { InboxPlaceholder } from './Placeholder'
+import { InboxPage } from './InboxPage'
 
-export const inboxRoutes: RouteObject[] = [
-  {
-    path: 'inbox',
-    element: <InboxPlaceholder title="Inbox" />,
-  },
-]
+export const inboxRoutes: RouteObject[] = [{ path: 'inbox', element: <InboxPage /> }]

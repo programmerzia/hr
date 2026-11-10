@@ -1,13 +1,22 @@
-import type { RouteObject } from 'react-router'
-import { ChatPlaceholder } from './Placeholder'
+import { Outlet, type RouteObject } from 'react-router'
+import { TaskDrawer } from '../Work/routes'
+import { ChatPage } from './ChatPage'
+
+function ChatLayout() {
+  return (
+    <>
+      <Outlet />
+      <TaskDrawer />
+    </>
+  )
+}
 
 export const chatRoutes: RouteObject[] = [
   {
-    path: 'chat',
-    element: <ChatPlaceholder title="Chat" />,
-  },
-  {
-    path: 'chat/:conversationId',
-    element: <ChatPlaceholder title="Chat" />,
+    element: <ChatLayout />,
+    children: [
+      { path: 'chat', element: <ChatPage /> },
+      { path: 'chat/:conversationId', element: <ChatPage /> },
+    ],
   },
 ]

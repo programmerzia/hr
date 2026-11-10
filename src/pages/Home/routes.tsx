@@ -1,4 +1,14 @@
-import type { RouteObject } from 'react-router'
+import { Outlet, type RouteObject } from 'react-router'
+import { TaskDrawer } from '../Work/routes'
 import { HomePage } from './HomePage'
 
-export const homeRoutes: RouteObject[] = [{ index: true, element: <HomePage /> }]
+function HomeLayout() {
+  return (
+    <>
+      <Outlet />
+      <TaskDrawer />
+    </>
+  )
+}
+
+export const homeRoutes: RouteObject[] = [{ element: <HomeLayout />, children: [{ index: true, element: <HomePage /> }] }]
