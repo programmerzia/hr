@@ -155,7 +155,7 @@ export function OnboardPage() {
           {step === 0 && (
             <>
               <Field label="Full name" error={errors.name} required><Input {...text('name')} /></Field>
-              <Field label="Work email" error={errors.email} hint="The invite is sent here." required><Input type="email" {...text('email')} /></Field>
+              <Field label="Work email" error={errors.email} hint="Used as the sign-in username." required><Input type="email" {...text('email')} /></Field>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Phone" error={errors.phone} required><Input {...text('phone')} placeholder="+8801712345678" /></Field>
                 <Field label="National ID" error={errors.nid} required><Input {...text('nid')} className="font-mono" /></Field>

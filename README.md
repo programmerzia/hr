@@ -1,6 +1,6 @@
 # Vivacom Pulse
 
-Internal HR, work and billing tool for a small software company. This repo is a front-end mock: React screens running on in-memory stores and deterministic seed data, built so the same code moves into a Laravel 13 + Inertia app later. Requirements and design decisions are in `docs/`.
+Internal HR, work and billing tool for a small software company. This repo is a front-end mock: React screens running on client-side stores over deterministic seed data, built so the same code moves into a Laravel 13 + Inertia app later. Requirements and design decisions are in `docs/`.
 
 ## Run
 
@@ -20,7 +20,13 @@ pnpm smoke        # drives every role through every route in headless Chrome
 
 Besides the per-role route sweep, a visual check asserts the presence bar on Home, the ring and week bars on My day, the login brand panel and that management Home shows no zero-value stats; also, the smoke script asserts that the top bar (`[data-testid=topbar]`) renders on every authenticated route except the bare print views, that the work status chip text changes after Take a break and Resume, that a stale heartbeat produces an Offline row and an offline timeline band after a reload, and that the Team page lists stale working members as "Offline since HH:MM".
 
-State lives in memory and resets on reload. Only the signed-in person, the theme, the sidebar state and the last heartbeat (see Offline tracking) are kept in `localStorage`.
+Stores persist to `localStorage` under `vivacom.v1.*` and are merged over a regenerated seed (see `src/mock/persist.ts`), so changes survive a reload. The signed-in person, theme, sidebar state and last heartbeat (see Offline tracking) are kept there too. Run `window.__vivacomReset()` in the browser console to clear demo data and return to the seed.
+
+### Accounts
+
+- Seeded accounts sign in with the password `password` (or the demo account buttons on the login page).
+- People created through Onboarding get the temporary password `welcome123` and must change it on first sign-in; until then every route redirects to `/account/password`, shown in a locked shell without the sidebar or top bar.
+- `/account` shows the profile and lets anyone change their password.
 
 ## App shell
 
@@ -48,7 +54,7 @@ How it is detected (`attendance.reconcileOffline`, wired in `src/mock/bootstrap.
 
 Limits of the mock:
 
-- Attendance is in memory, so a reload resets the day to the seed. If a persisted session has a heartbeat from earlier today and the seed day is `not_started`, the day is rebuilt as working from that heartbeat (first sign-in time becomes the last heartbeat, no lateness is invented) and the gap is then reconciled. Earlier segments from before the reload are lost.
+- Attendance is rebuilt from the seed on reload. If a persisted session has a heartbeat from earlier today and the seed day is `not_started`, the day is rebuilt as working from that heartbeat (first sign-in time becomes the last heartbeat, no lateness is invented) and the gap is then reconciled. Earlier segments from before the reload are lost.
 - A heartbeat from a previous calendar day is ignored.
 - The heartbeat is a local timer, so a dropped network alone does not stop it; the `offline` and `online` events stand in for failed heartbeat posts. The real implementation derives offline time on the server from missed heartbeats.
 - Other people's presence is simulated; real presence needs the server heartbeat table.

@@ -4,7 +4,9 @@ import type { RouteHandle } from '../app/guards'
 import { navFor } from '../app/nav'
 import { PageSkeleton } from '../components/shared/PageSkeleton'
 import { CommandPalette, type CommandItem } from '../components/ui'
-import { useAuthed } from '../mock/session'
+import { useAuthed, useSession } from '../mock/session'
+import { usePeopleStore } from '../mock/stores/people'
+import { Logomark } from '../components/shared/Logomark'
 import { LogoutDialog } from '../pages/Auth/LogoutDialog'
 import { MobileTabBar } from './MobileTabBar'
 import { Sidebar } from './Sidebar'
@@ -21,7 +23,37 @@ function readCollapsed(): boolean {
   }
 }
 
+/** Minimal shell shown while a temporary password must be replaced: no sidebar, no top bar. */
+function LockedShell() {
+  const [logoutOpen, setLogoutOpen] = useState(false)
+  return (
+    <div className="flex min-h-screen flex-col items-center bg-bg px-4 py-8">
+      <div className="mb-6 flex items-center gap-2">
+        <Logomark size={28} />
+        <span className="text-xl font-semibold">Vivacom</span>
+      </div>
+      <main className="w-full max-w-lg">
+        <Suspense fallback={null}>
+          <Outlet />
+        </Suspense>
+      </main>
+      <button type="button" className="mt-6 text-sm text-fg-muted underline hover:text-fg" onClick={() => setLogoutOpen(true)}>
+        Sign out
+      </button>
+      <LogoutDialog open={logoutOpen} onOpenChange={setLogoutOpen} />
+    </div>
+  )
+}
+
 export function AppLayout() {
+  const userId = useSession((s) => s.user?.id)
+  const mustChange = usePeopleStore((s) => s.users.find((u) => u.id === userId)?.must_change_password ?? false)
+  const { pathname } = useLocation()
+  if (mustChange && pathname === '/account/password') return <LockedShell />
+  return <AppShell />
+}
+
+function AppShell() {
   const { employee, role } = useAuthed()
   const navigate = useNavigate()
   const { pathname } = useLocation()

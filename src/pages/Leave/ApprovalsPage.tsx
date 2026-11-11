@@ -4,7 +4,7 @@ import { EmptyTable } from '../../components/shared/EmptyTable'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { PersonCell } from '../../components/shared/PersonCell'
 import { StatusBadge } from '../../components/shared/StatusBadge'
-import { Button, Dialog, Field, Sheet, Table, Tbody, Td, Textarea, Th, Thead, Tr } from '../../components/ui'
+import { Button, Dialog, Field, Sheet, Table, Tbody, Td, Textarea, Th, Thead, Tr, toast } from '../../components/ui'
 import { formatDate } from '../../lib/format'
 import { useAuthed } from '../../mock/session'
 import { isUnlimited, useLeaveStore } from '../../mock/stores/leave'
@@ -27,10 +27,18 @@ export function ApprovalsPage() {
   const nameOf = (id: string) => people.employeeById(id)?.name ?? id
   const stageOf = (r: LeaveRequest) => (r.status === 'pending_lead' ? 'lead' : 'hr')
 
+  const summary = (r: LeaveRequest) => `${typeOf(r.leave_type_id)?.name ?? 'Leave'}, ${formatDays(r.days)}`
+
   const approve = (r: LeaveRequest) => {
     const res = stageOf(r) === 'lead' ? leave.approveAsLead(r.id, employee.id) : leave.approveAsHr(r.id, employee.id)
-    if (res.ok) setSelectedId(null)
-    else setError(res.error)
+    if (res.ok) {
+      setSelectedId(null)
+      setError(undefined)
+      toast.success(`Approved · ${summary(r)}`)
+    } else {
+      setError(res.error)
+      toast.error(res.error)
+    }
   }
 
   const confirmReject = () => {
@@ -38,8 +46,10 @@ export function ApprovalsPage() {
     const res = leave.reject(rejecting.id, stageOf(rejecting), employee.id, note)
     if (!res.ok) {
       setError(res.error)
+      toast.error(res.error)
       return
     }
+    toast.success(`Rejected · ${summary(rejecting)}`)
     setRejecting(null)
     setSelectedId(null)
     setNote('')
