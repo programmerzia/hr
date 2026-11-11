@@ -156,6 +156,14 @@ class DemoSeeder extends Seeder
                 ]);
             }
         }
+    
+        // Module demo seeders (owned by module agents; skipped until the class exists).
+        foreach (['Work', 'Leave', 'Payroll', 'Billing', 'Inbox'] as $module) {
+            $class = "Database\\Seeders\\{$module}DemoSeeder";
+            if (class_exists($class)) {
+                $this->call($class);
+            }
+        }
     }
 
     private function structure(string $employeeId, string $from, int $gross, string $type): array

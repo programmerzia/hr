@@ -52,7 +52,7 @@ class HandleInertiaRequests extends Middleware
     /** Nav badge counts keyed by nav item id. Module agents fill these in. */
     public static function badges($user): array
     {
-        return ['inbox' => 0, 'leave-approvals' => 0, 'regularizations' => 0, 'claims' => 0, 'payroll' => 0];
+        return \App\Support\Badges::for($user);
     }
 
     public static function attendance(Request $request): array

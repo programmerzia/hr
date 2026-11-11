@@ -27,5 +27,8 @@ Route::middleware('auth')->group(function () {
             Route::post('/end-day', 'endDay')->name('end-day');
             Route::post('/current-task', 'currentTask')->name('current-task');
         });
+        foreach (['attendance', 'people', 'work', 'leave', 'payroll', 'billing', 'inbox'] as $module) {
+            require __DIR__."/modules/{$module}.php";
+        }
     });
 });
