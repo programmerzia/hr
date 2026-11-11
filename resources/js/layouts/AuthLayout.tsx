@@ -1,8 +1,8 @@
-import { Suspense } from 'react'
-import { Outlet } from 'react-router'
+import type { ReactNode } from 'react'
+import { FlashToasts } from '../inertia/FlashToasts'
 import { Logomark } from '../components/shared/Logomark'
 
-export function AuthLayout() {
+export function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-bg lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
       <aside
@@ -22,9 +22,8 @@ export function AuthLayout() {
             <span className="text-xl font-semibold">Vivacom</span>
           </div>
           <div className="rounded-lg border border-border bg-surface p-6 shadow-xs">
-            <Suspense fallback={null}>
-              <Outlet />
-            </Suspense>
+            <FlashToasts />
+            {children}
           </div>
         </main>
       </div>

@@ -1,26 +1,47 @@
 # Vivacom Pulse
 
-Internal HR, work and billing tool for a small software company. This repo is a front-end mock: React screens running on client-side stores over deterministic seed data, built so the same code moves into a Laravel 13 + Inertia app later. Requirements and design decisions are in `docs/`.
+Internal HR, work and billing tool for a small software company. Laravel 13 + Inertia app. The React screens started as a front-end mock over client-side stores; modules are being ported to server props wave by wave (`docs/06-backend-plan.md`), and unported pages still read `resources/js/mock` until B3. Requirements and design decisions are in `docs/`.
 
 ## Run
 
-Requires Node 20+ and pnpm.
+Laravel 13 + Inertia (React 19, TypeScript). Requires PHP 8.3+, Composer, Node 20+, pnpm, and the local MySQL from `.env`
+(`vivacom_hr` on 127.0.0.1:3310). Contract between server and pages: `docs/06-backend-plan.md`.
 
 ```
-pnpm install
-pnpm dev          # http://localhost:3000
-pnpm build        # typecheck + production build into dist/
-pnpm preview      # serve the production build
-pnpm typecheck
-pnpm lint
-pnpm smoke        # drives every role through every route in headless Chrome
+composer install && pnpm install
+php artisan migrate:fresh --seed   # DemoSeeder: 8 people, password `password`
+php artisan serve                  # the app, http://127.0.0.1:8000
+pnpm dev                           # Vite on :5180 for assets + HMR (writes public/hot)
+pnpm build                         # typecheck + production assets into public/build
+pnpm typecheck && pnpm lint
+php artisan test
+pnpm smoke                         # e2e against Laravel in headless Chrome
+pnpm qa                            # e2e auth/attendance flow walk
 ```
 
-`pnpm smoke` starts its own dev server on port 5199 and uses the system Chrome (`/usr/bin/google-chrome`, override with `CHROME_PATH`). It logs in as each demo account, visits every route in that role's sidebar plus detail pages, fails on console errors, error boundaries, blank pages and horizontal overflow, and writes screenshots to `scripts/screens/` (git-ignored).
+`pnpm smoke` and `pnpm qa` **reset the local database** (`migrate:fresh --seed`) unless `E2E_NO_RESET=1`, build assets
+if `public/build` is missing (`E2E_BUILD=1` forces a build; with `pnpm dev` running they use it instead), start their own
+`php artisan serve` (`SMOKE_PORT` default 8199, `QA_PORT` default 8198) and use the system Chrome (`CHROME_PATH`).
+Smoke covers: login page, Sadia signs in to Home with the top bar and a "Working" chip, the heartbeat POST, Take a break
+→ "On break", Resume, local timer tick, sign out with End my day; then a per-role sweep of ported routes at desktop and
+390px width. Nav routes whose module is not ported yet are reported as skipped. Screenshots go to `scripts/screens/`.
 
-Besides the per-role route sweep, a visual check asserts the presence bar on Home, the ring and week bars on My day, the login brand panel and that management Home shows no zero-value stats; also, the smoke script asserts that the top bar (`[data-testid=topbar]`) renders on every authenticated route except the bare print views, that the work status chip text changes after Take a break and Resume, that a stale heartbeat produces an Offline row and an offline timeline band after a reload, and that the Team page lists stale working members as "Offline since HH:MM".
+### Deploy (vivadev)
 
-Stores persist to `localStorage` under `vivacom.v1.*` and are merged over a regenerated seed (see `src/mock/persist.ts`), so changes survive a reload. The signed-in person, theme, sidebar state and last heartbeat (see Offline tracking) are kept there too. Run `window.__vivacomReset()` in the browser console to clear demo data and return to the seed.
+`composer install --no-dev --optimize-autoloader`, `php artisan migrate --force`, first time
+`php artisan db:seed --class=ProductionSeeder`, `npx pnpm@12 install && npx pnpm@12 build`, `php artisan storage:link`,
+cron `schedule:run`, then `php artisan config:cache route:cache view:cache`. Apache serves `public/`.
+
+### Porting a page (B1/B2)
+
+1. Controller: `return Inertia::render('Leave/MyLeavePage', [...props])`; the name is the path under `resources/js/pages/`.
+2. Page: `export default function MyLeavePage()`; read props with `useShared<{ requests: LeaveRequest[] }>()`,
+   the viewer with `useAuth()` (`resources/js/inertia/props.ts`). No layout code: the resolver wraps pages in
+   `AppLayout` (`Auth/*` get `AuthLayout`; set `Page.layout = null` or `BareLayout` for print views).
+3. Mutations: `router.post(route('leave.store'), data, { preserveScroll: true })` or `useForm(...).post(route(...))`;
+   errors arrive in `form.errors` and render through `Field error=`. Flash `success`/`error` become toasts.
+4. Links: `Link` from `@inertiajs/react` with `href`; current path from `usePathname()`. Drop the module's `routes.tsx`
+   and its `mock/stores` imports, then add the route to `PORTED` in `scripts/smoke.mjs`.
 
 ### Accounts
 
@@ -84,8 +105,11 @@ Use the buttons under "Demo accounts" on the login page. Signing in starts the w
 ## Folder structure
 
 ```
-src/
-  app/          router, nav config, guards, providers, theme, lazy route helper
+resources/views/app.blade.php   Inertia root (@routes, @vite, @inertia)
+resources/js/
+  main.tsx      createInertiaApp, page resolver + layout rule
+  inertia/      SharedProps types, useShared/useAuth/usePathname, flash toasts, server clock
+  app/          nav icon map, legacy guards, providers, theme, lazy route helper
   layouts/      AppLayout, TopBar, WorkStatusChip, Sidebar, MobileTabBar, AuthLayout
   components/
     ui/         design-system kit (Button, Dialog, DataTable, ...)
@@ -98,7 +122,7 @@ src/
     session.ts  current user and role
   lib/ types/   helpers and domain types (Laravel column names, snake_case)
 docs/           requirements, architecture, design system, frontend structure, build plan
-scripts/        smoke.mjs
+scripts/        smoke.mjs, qa-flows.mjs, lib/laravel.mjs (e2e harness)
 ```
 
 Pages are thin; business rules live in `mock/stores`. Routes can set `handle: { roles, allow, bare }`; `bare` renders a page without the app shell (payslip and invoice print views). Route pages are lazy-loaded.

@@ -1,51 +1,52 @@
-import { Coffee, Play } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { router } from '@inertiajs/react'
+import { Coffee, Play, WifiOff } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { BreakDialog } from '../components/shared/BreakDialog'
 import { StatusDot } from '../components/shared/StatusBadge'
+import { useWorkSeconds } from '../inertia/clock'
+import { useShared } from '../inertia/props'
 import { cn } from '../lib/cn'
 import { formatClock } from '../lib/format'
 import { statusMeta } from '../lib/status'
-import { computeTotals, todayKey, useAttendance } from '../mock/stores/attendance'
-import { useAuthed } from '../mock/session'
+
+const keep = { preserveScroll: true, preserveState: true } as const
+
+/** Browser online/offline, for display only. The server records offline gaps from missed heartbeats. */
+function useOnline(): boolean {
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine))
+  useEffect(() => {
+    const on = () => setOnline(true)
+    const off = () => setOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => {
+      window.removeEventListener('online', on)
+      window.removeEventListener('offline', off)
+    }
+  }, [])
+  return online
+}
 
 /** Today's status and work time, with the one action that matters right now. Visible on every page. */
 export function WorkStatusChip() {
-  const { employee } = useAuthed()
-  const navigate = useNavigate()
-  const now = useAttendance((s) => s.now)
-  const days = useAttendance((s) => s.days)
-  const segments = useAttendance((s) => s.segments)
-  const startWork = useAttendance((s) => s.startWork)
-  const startBreak = useAttendance((s) => s.startBreak)
+  const { attendance } = useShared()
+  const online = useOnline()
   const [breakOpen, setBreakOpen] = useState(false)
+  const seconds = useWorkSeconds(attendance)
 
-  const today = todayKey()
-  const day = useMemo(
-    () => days.find((d) => d.employee_id === employee.id && d.date === today),
-    [days, employee.id, today],
-  )
-  const status = day?.status ?? 'not_started'
-  const seconds = useMemo(
-    () => (day ? computeTotals(segments.filter((s) => s.attendance_day_id === day.id), now).workSeconds : 0),
-    [day, segments, now],
-  )
+  const status = attendance?.day?.status ?? 'not_started'
   const meta = statusMeta(status)
 
   const act =
     status === 'working'
       ? { label: 'Take a break', icon: <Coffee size={14} />, run: () => setBreakOpen(true) }
-      : status === 'on_break'
-        ? { label: 'Resume', icon: <Play size={14} />, run: () => void startWork(employee.id) }
-        : status === 'ended'
-          ? { label: 'Start overtime', icon: <Play size={14} />, run: () => navigate('/my-day') }
-          : {
-              label: 'Start work',
-              icon: <Play size={14} />,
-              run: () => {
-                if (startWork(employee.id) === 'needs_overtime_confirm') navigate('/my-day')
-              },
-            }
+      : status === 'on_break' || status === 'not_started'
+        ? {
+            label: status === 'on_break' ? 'Resume' : 'Start work',
+            icon: <Play size={14} />,
+            run: () => router.post(route('attendance.resume'), {}, keep),
+          }
+        : { label: 'Start overtime', icon: <Play size={14} />, run: () => router.visit('/my-day') }
 
   return (
     <>
@@ -60,11 +61,15 @@ export function WorkStatusChip() {
       >
         <button
           type="button"
-          onClick={() => navigate('/my-day')}
-          aria-label={`Work status: ${meta.label}. Open my day`}
+          onClick={() => router.visit('/my-day')}
+          aria-label={`Work status: ${meta.label}${online ? '' : ', offline'}. Open my day`}
           className="flex items-center gap-2 px-2.5 text-sm transition-colors duration-150 hover:bg-fg/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
         >
-          <StatusDot variant={meta.variant} pulse={status === 'working'} />
+          {online ? (
+            <StatusDot variant={meta.variant} pulse={status === 'working'} />
+          ) : (
+            <WifiOff size={14} className="text-fg-muted" aria-hidden />
+          )}
           <span className={cn('hidden font-medium sm:inline', status === 'not_started' && 'text-fg-muted')}>
             {meta.label}
           </span>
@@ -83,7 +88,9 @@ export function WorkStatusChip() {
       <BreakDialog
         open={breakOpen}
         onOpenChange={setBreakOpen}
-        onConfirm={(category, note) => startBreak(employee.id, category, note)}
+        onConfirm={(category, note) =>
+          router.post(route('attendance.break'), { category, note: note || null }, keep)
+        }
       />
     </>
   )

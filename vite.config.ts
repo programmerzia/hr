@@ -1,13 +1,13 @@
 import { defineConfig } from 'vite'
+import laravel from 'laravel-vite-plugin'
 import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
+// Dev: `php artisan serve` (app) + `pnpm dev` (assets/HMR). Build output: public/build (manifest read by @vite).
 export default defineConfig({
-  plugins: [react()],
-  server: {
-    port: 3000,
-    host: true,
-  },
+  plugins: [
+    laravel({ input: ['resources/js/main.tsx'], refresh: true }),
+    react(),
+  ],
   build: {
     rollupOptions: {
       output: {

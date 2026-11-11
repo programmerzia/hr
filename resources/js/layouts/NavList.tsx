@@ -1,23 +1,12 @@
-import { useSyncExternalStore } from 'react'
-import { Link, useLocation } from 'react-router'
-import { flatNav, isNavActive, navBadges, type NavItem, type VisibleGroup } from '../app/nav'
+import { Link } from '@inertiajs/react'
+import { flatNav, isNavActive, type NavItem, type VisibleGroup } from '../app/nav'
+import { useShared, usePathname } from '../inertia/props'
 import { cn } from '../lib/cn'
 import { Tooltip } from '../components/ui'
 
-function useBadgeVersion() {
-  return useSyncExternalStore(navBadges.subscribe, navBadges.version)
-}
-
-/** Reads the registered count hook for an item. Renders nothing for zero. */
+/** Count from the `badges` shared prop for a nav item id. Renders nothing for zero. */
 export function NavBadge({ id, className }: { id: string; className?: string }) {
-  useBadgeVersion()
-  const fn = navBadges.get(id)
-  if (!fn) return null
-  return <BadgeValue fn={fn} className={className} />
-}
-
-function BadgeValue({ fn, className }: { fn: () => number; className?: string }) {
-  const count = fn()
+  const count = useShared().badges?.[id] ?? 0
   if (count <= 0) return null
   return (
     <span
@@ -38,7 +27,7 @@ interface NavListProps {
 }
 
 export function NavList({ groups, collapsed, onNavigate }: NavListProps) {
-  const { pathname } = useLocation()
+  const pathname = usePathname()
   const all: NavItem[] = flatNav(groups)
 
   return (
@@ -53,7 +42,7 @@ export function NavList({ groups, collapsed, onNavigate }: NavListProps) {
               const Icon = item.icon
               const link = (
                 <Link
-                  to={item.to}
+                  href={item.to}
                   onClick={onNavigate}
                   aria-current={active ? 'page' : undefined}
                   aria-label={collapsed ? item.label : undefined}

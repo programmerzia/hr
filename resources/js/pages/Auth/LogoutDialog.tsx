@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
+import { router } from '@inertiajs/react'
 import { Button, Dialog, Field, NativeSelect, RadioGroup } from '../../components/ui'
-import { useSession } from '../../mock/session'
 import type { BreakCategory } from '../../types'
 
 type Mode = 'break' | 'end_day'
@@ -14,15 +13,12 @@ const categories: { value: BreakCategory; label: string }[] = [
 ]
 
 export function LogoutDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const logout = useSession((s) => s.logout)
-  const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('break')
   const [category, setCategory] = useState<BreakCategory>('short')
 
   const submit = () => {
-    logout(mode, mode === 'break' ? category : undefined)
     onOpenChange(false)
-    navigate('/login', { replace: true })
+    router.post(route('logout'), { mode, break_category: mode === 'break' ? category : null })
   }
 
   return (

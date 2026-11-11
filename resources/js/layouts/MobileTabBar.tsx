@@ -1,9 +1,9 @@
 import { LogOut, Menu, Moon, Sun } from 'lucide-react'
-import { Link, useLocation } from 'react-router'
+import { Link } from '@inertiajs/react'
 import { flatNav, isNavActive, mobileTabIds, type VisibleGroup } from '../app/nav'
 import { useTheme } from '../app/theme'
 import { Avatar, Button, Sheet } from '../components/ui'
-import { useAuthed } from '../mock/session'
+import { useAuth, usePathname } from '../inertia/props'
 import { cn } from '../lib/cn'
 import { NavBadge, NavList } from './NavList'
 
@@ -18,9 +18,9 @@ export function MobileTabBar({
   onMenuOpenChange: (open: boolean) => void
   onSignOut: () => void
 }) {
-  const { employee } = useAuthed()
+  const { employee } = useAuth()
   const { theme, toggle } = useTheme()
-  const { pathname } = useLocation()
+  const pathname = usePathname()
   const all = flatNav(groups)
   const tabs = mobileTabIds.map((id) => all.find((i) => i.id === id)).filter((i) => i !== undefined)
   const tabClass =
@@ -38,7 +38,7 @@ export function MobileTabBar({
           return (
             <Link
               key={item.id}
-              to={item.to}
+              href={item.to}
               aria-current={active ? 'page' : undefined}
               className={cn(tabClass, active ? 'font-medium text-accent' : 'text-fg-muted')}
             >

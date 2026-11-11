@@ -1,12 +1,15 @@
+import { router } from '@inertiajs/react'
 import { useEffect } from 'react'
-import { useSession } from '../mock/session'
 
-/** Stub for POST /heartbeat. Calls session.heartbeat() every 60 seconds while the layout is mounted. */
+/** POST /heartbeat every 60 s while the shell is mounted; refreshes only `attendance` and `badges`. */
 export function useHeartbeat() {
-  const heartbeat = useSession((s) => s.heartbeat)
   useEffect(() => {
-    heartbeat()
-    const id = window.setInterval(heartbeat, 60_000)
+    const beat = () => {
+      if (!navigator.onLine) return
+      router.post(route('heartbeat'), {}, { preserveState: true, preserveScroll: true, only: ['attendance', 'badges'], async: true })
+    }
+    beat()
+    const id = window.setInterval(beat, 60_000)
     return () => window.clearInterval(id)
-  }, [heartbeat])
+  }, [])
 }

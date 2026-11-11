@@ -2,7 +2,7 @@ const c = (name) => `rgb(var(--${name}) / <alpha-value>)`
 
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  content: ['./resources/views/**/*.blade.php', './resources/js/**/*.{js,ts,jsx,tsx}'],
   darkMode: 'class',
   theme: {
     extend: {

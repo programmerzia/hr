@@ -1,5 +1,5 @@
 import { ChevronRight } from 'lucide-react'
-import { Link } from 'react-router'
+import { Link } from '@inertiajs/react'
 import { cn } from '../../lib/cn'
 
 export interface Crumb {
@@ -16,7 +16,7 @@ export function Breadcrumb({ items, className }: { items: Crumb[]; className?: s
             {i > 0 && <ChevronRight size={14} aria-hidden />}
             {c.to && i < items.length - 1 ? (
               <Link
-                to={c.to}
+                href={c.to}
                 className="rounded hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 {c.label}

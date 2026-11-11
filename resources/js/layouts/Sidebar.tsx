@@ -1,5 +1,5 @@
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
-import { Link } from 'react-router'
+import { Link } from '@inertiajs/react'
 import type { VisibleGroup } from '../app/nav'
 import { Logomark } from '../components/shared/Logomark'
 import { cn } from '../lib/cn'
@@ -21,7 +21,7 @@ export function Sidebar({ groups, collapsed, onToggleCollapsed }: SidebarProps) 
       )}
     >
       <Link
-        to="/"
+        href="/"
         aria-label="Vivacom home"
         className={cn(
           'flex h-12 shrink-0 items-center gap-2 border-b border-border px-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40',

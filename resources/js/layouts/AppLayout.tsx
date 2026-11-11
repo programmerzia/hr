@@ -1,11 +1,9 @@
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
-import { Outlet, useLocation, useMatches, useNavigate } from 'react-router'
-import type { RouteHandle } from '../app/guards'
-import { navFor } from '../app/nav'
-import { PageSkeleton } from '../components/shared/PageSkeleton'
+import { router } from '@inertiajs/react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { navFromProps } from '../app/nav'
 import { CommandPalette, type CommandItem } from '../components/ui'
-import { useAuthed, useSession } from '../mock/session'
-import { usePeopleStore } from '../mock/stores/people'
+import { useShared, usePathname } from '../inertia/props'
+import { FlashToasts } from '../inertia/FlashToasts'
 import { Logomark } from '../components/shared/Logomark'
 import { LogoutDialog } from '../pages/Auth/LogoutDialog'
 import { MobileTabBar } from './MobileTabBar'
@@ -24,7 +22,7 @@ function readCollapsed(): boolean {
 }
 
 /** Minimal shell shown while a temporary password must be replaced: no sidebar, no top bar. */
-function LockedShell() {
+function LockedShell({ children }: { children: ReactNode }) {
   const [logoutOpen, setLogoutOpen] = useState(false)
   return (
     <div className="flex min-h-screen flex-col items-center bg-bg px-4 py-8">
@@ -33,9 +31,7 @@ function LockedShell() {
         <span className="text-xl font-semibold">Vivacom</span>
       </div>
       <main className="w-full max-w-lg">
-        <Suspense fallback={null}>
-          <Outlet />
-        </Suspense>
+        {children}
       </main>
       <button type="button" className="mt-6 text-sm text-fg-muted underline hover:text-fg" onClick={() => setLogoutOpen(true)}>
         Sign out
@@ -45,27 +41,41 @@ function LockedShell() {
   )
 }
 
-export function AppLayout() {
-  const userId = useSession((s) => s.user?.id)
-  const mustChange = usePeopleStore((s) => s.users.find((u) => u.id === userId)?.must_change_password ?? false)
-  const { pathname } = useLocation()
-  if (mustChange && pathname === '/account/password') return <LockedShell />
-  return <AppShell />
+/**
+ * Persistent shell for every signed-in page (set by the page resolver in main.tsx, so it survives visits).
+ * While `auth.user.must_change_password` is set the server only serves the account page; it gets the locked shell.
+ */
+export function AppLayout({ children }: { children: ReactNode }) {
+  const mustChange = useShared().auth?.user.must_change_password ?? false
+  return (
+    <>
+      <FlashToasts />
+      {mustChange ? <LockedShell>{children}</LockedShell> : <AppShell>{children}</AppShell>}
+    </>
+  )
 }
 
-function AppShell() {
-  const { employee, role } = useAuthed()
-  const navigate = useNavigate()
-  const { pathname } = useLocation()
+/** Print views: no sidebar or top bar. Pages opt in with `Page.layout = BareLayout`. */
+export function BareLayout({ children }: { children: ReactNode }) {
+  return (
+    <main className="min-h-screen bg-bg px-4 py-6 print:p-0">
+      <FlashToasts />
+      {children}
+    </main>
+  )
+}
+
+function AppShell({ children }: { children: ReactNode }) {
+  const { nav } = useShared()
+  const pathname = usePathname()
   useHeartbeat()
-  const bare = useMatches().some((m) => (m.handle as RouteHandle | undefined)?.bare)
 
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const groups = useMemo(() => navFor(role, employee), [role, employee])
+  const groups = useMemo(() => navFromProps(nav), [nav])
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((c) => {
@@ -97,21 +107,11 @@ function AppShell() {
           label: i.label,
           group: g.label,
           icon: i.icon,
-          onSelect: () => navigate(i.to),
+          onSelect: () => router.visit(i.to),
         })),
       ),
-    [groups, navigate],
+    [groups],
   )
-
-  if (bare) {
-    return (
-      <main className="min-h-screen bg-bg px-4 py-6 print:p-0">
-        <Suspense fallback={<PageSkeleton />}>
-          <Outlet />
-        </Suspense>
-      </main>
-    )
-  }
 
   return (
     <div className="flex min-h-screen bg-bg [--sticky-top:48px]">
@@ -127,9 +127,7 @@ function AppShell() {
           key={pathname}
           className="page-enter mx-auto w-full max-w-content flex-1 px-4 pb-24 pt-4 md:px-6 md:pb-8 md:pt-6"
         >
-          <Suspense fallback={<PageSkeleton />}>
-            <Outlet />
-          </Suspense>
+          {children}
         </main>
       </div>
       <MobileTabBar

@@ -1,5 +1,5 @@
 import { Bell, LogOut, Menu, Moon, Search, Settings, Sun, UserRound } from 'lucide-react'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { Link, router } from '@inertiajs/react'
 import { usePageTitle } from '../app/pageTitle'
 import { flatNav, isNavActive, type VisibleGroup } from '../app/nav'
 import { useTheme } from '../app/theme'
@@ -17,7 +17,7 @@ import {
   Kbd,
   Tooltip,
 } from '../components/ui'
-import { useAuthed } from '../mock/session'
+import { useAuth, usePathname } from '../inertia/props'
 import { NavBadge } from './NavList'
 import { WorkStatusChip } from './WorkStatusChip'
 
@@ -32,10 +32,9 @@ interface TopBarProps {
 }
 
 export function TopBar({ groups, onOpenPalette, onOpenMenu, onSignOut }: TopBarProps) {
-  const { employee, role } = useAuthed()
+  const { employee, role } = useAuth()
   const { theme, toggle } = useTheme()
-  const { pathname } = useLocation()
-  const navigate = useNavigate()
+  const pathname = usePathname()
   const crumbs = usePageTitle((s) => s.crumbs)
 
   const all = flatNav(groups)
@@ -48,7 +47,7 @@ export function TopBar({ groups, onOpenPalette, onOpenMenu, onSignOut }: TopBarP
       data-testid="topbar"
       className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 md:px-6"
     >
-      <Link to="/" aria-label="Vivacom home" className="flex items-center rounded md:hidden">
+      <Link href="/" aria-label="Vivacom home" className="flex items-center rounded md:hidden">
         <Logomark />
       </Link>
 
@@ -72,7 +71,7 @@ export function TopBar({ groups, onOpenPalette, onOpenMenu, onSignOut }: TopBarP
         <div className="hidden items-center gap-0.5 md:flex">
           <Tooltip content="Inbox">
             <Link
-              to="/inbox"
+              href="/inbox"
               aria-label="Inbox"
               className="relative inline-flex size-8 items-center justify-center rounded text-fg-muted transition-colors duration-150 hover:bg-surface-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
@@ -100,13 +99,13 @@ export function TopBar({ groups, onOpenPalette, onOpenMenu, onSignOut }: TopBarP
               </div>
               <DropdownMenuSeparator />
               {canProfile && (
-                <DropdownMenuItem onSelect={() => navigate(`/people/${employee.id}`)}>
+                <DropdownMenuItem onSelect={() => router.visit(`/people/${employee.id}`)}>
                   <UserRound />
                   Profile
                 </DropdownMenuItem>
               )}
               <DropdownMenuLabel className="sr-only">Account</DropdownMenuLabel>
-              <DropdownMenuItem onSelect={() => navigate('/account')}>
+              <DropdownMenuItem onSelect={() => router.visit(route('account.password'))}>
                 <Settings />
                 Account
               </DropdownMenuItem>

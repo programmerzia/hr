@@ -1,22 +1,26 @@
+import { Link } from '@inertiajs/react'
 import { format } from 'date-fns'
-import { Link } from 'react-router'
 import { Ring } from '../../components/charts/Ring'
 import { PageHeader } from '../../components/shared/PageHeader'
+import { useWorkSeconds } from '../../inertia/clock'
+import { useAuth, useShared } from '../../inertia/props'
 import { formatDuration } from '../../lib/format'
-import { useAuthed } from '../../mock/session'
-import { useTodayProgress } from '../Attendance/useAttendanceSeries'
-import { ChatCard, LeaveBalancesCard, MyTasksCard } from './EmployeeCards'
-import { AttentionCard, BillingCard, HiringCard, OverviewCard, PayrollCard, TeamNowCard } from './ManagerCards'
+
+// The module wave adds Home props (team presence, tasks, leave balances, payroll, billing…) and ports
+// EmployeeCards / ManagerCards to read them. Until then only the header and today's ring render.
 
 function greeting(hour: number): string {
   return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
 }
 
-function TodayRing({ employeeId }: { employeeId: string }) {
-  const { workSeconds, target, pct } = useTodayProgress(employeeId)
+function TodayRing() {
+  const { attendance } = useShared()
+  const workSeconds = useWorkSeconds(attendance)
+  const target = (attendance?.policy?.standard_minutes ?? 480) * 60
+  const pct = target > 0 ? Math.min(100, Math.round((workSeconds / target) * 100)) : 0
   return (
     <Link
-      to="/my-day"
+      href="/my-day"
       className="group flex items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
     >
       <div className="text-right">
@@ -30,12 +34,10 @@ function TodayRing({ employeeId }: { employeeId: string }) {
   )
 }
 
-export function HomePage() {
-  const { employee, role } = useAuthed()
+export default function HomePage() {
+  const { employee } = useAuth()
   const now = new Date()
   const first = employee.name.split(' ')[0]
-  const isManager = role !== 'employee'
-  const isHr = role === 'hr' || role === 'management'
 
   return (
     <div className="mx-auto max-w-content space-y-6">
@@ -43,25 +45,8 @@ export function HomePage() {
         title={`${greeting(now.getHours())}, ${first}`}
         description={format(now, 'EEEE d MMMM yyyy')}
         className="mb-0"
-        actions={<TodayRing employeeId={employee.id} />}
+        actions={<TodayRing />}
       />
-
-      <OverviewCard employeeId={employee.id} role={role} />
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          {isManager && <TeamNowCard employeeId={employee.id} role={role} />}
-          <MyTasksCard />
-          {isHr && <PayrollCard />}
-        </div>
-        <div className="space-y-6">
-          {isManager && <AttentionCard role={role} />}
-          {role === 'management' && <BillingCard />}
-          <LeaveBalancesCard employeeId={employee.id} />
-          {isHr && <HiringCard />}
-          <ChatCard employeeId={employee.id} />
-        </div>
-      </div>
     </div>
   )
 }

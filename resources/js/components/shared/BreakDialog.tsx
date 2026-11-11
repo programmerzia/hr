@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import { Button, Dialog, Field, Input, RadioGroup } from '../ui'
-import { attendancePolicy } from '../../mock/db/attendance'
+import { useShared } from '../../inertia/props'
 import type { BreakCategory } from '../../types'
 
 // Only categories a person may choose. `idle` and `offline` are written by the system and never listed here.
-const options = [
-  { value: 'short', label: 'Short break' },
-  { value: 'tea', label: 'Tea break' },
-  { value: 'lunch', label: 'Lunch', hint: `Capped at ${attendancePolicy.lunch_cap_minutes} minutes` },
-  { value: 'official', label: 'Official step-out' },
-]
+function breakOptions(lunchCap: number) {
+  return [
+    { value: 'short', label: 'Short break' },
+    { value: 'tea', label: 'Tea break' },
+    { value: 'lunch', label: 'Lunch', hint: `Capped at ${lunchCap} minutes` },
+    { value: 'official', label: 'Official step-out' },
+  ]
+}
 
 export function BreakDialog({
   open,
@@ -22,6 +24,7 @@ export function BreakDialog({
 }) {
   const [category, setCategory] = useState<BreakCategory>('short')
   const [note, setNote] = useState('')
+  const options = breakOptions(useShared().attendance?.policy?.lunch_cap_minutes ?? 60)
   return (
     <Dialog
       open={open}

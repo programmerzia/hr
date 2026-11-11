@@ -1,42 +1,44 @@
+import { useForm } from '@inertiajs/react'
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { Button, Card, CardBody, CardFooter, CardHeader, Field, Input } from '../../components/ui'
+import { useAuth, useShared } from '../../inertia/props'
 import { formatDate } from '../../lib/format'
-import { useAuthed, useSession } from '../../mock/session'
-import { MIN_PASSWORD, usePeopleStore } from '../../mock/stores/people'
 import { roleLabels, typeLabels } from '../People/helpers'
 
-export function AccountPage() {
-  const { user, employee, role } = useAuthed()
-  const people = usePeopleStore()
-  const navigate = useNavigate()
-  const forced = people.users.find((u) => u.id === user.id)?.must_change_password ?? false
-  const [current, setCurrent] = useState('')
-  const [next, setNext] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [errors, setErrors] = useState<{ current?: string; next?: string; confirm?: string }>({})
+const MIN_PASSWORD = 8
+
+interface AccountProps {
+  /** Team the viewer belongs to, when any. */
+  team?: { name: string } | null
+}
+
+export default function AccountPage() {
+  const { user, employee, role } = useAuth()
+  const { team } = useShared<AccountProps>()
+  const forced = user.must_change_password
   const [saved, setSaved] = useState(false)
+  const form = useForm({ current: '', next: '', next_confirmation: '' })
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
     setSaved(false)
-    if (next !== confirm) return setErrors({ confirm: 'Passwords do not match' })
-    const res = people.changePassword(user.id, current, next)
-    if (!res.ok) {
-      const field = res.error.startsWith('Current') ? 'current' : 'next'
-      return setErrors({ [field]: res.error })
+    // On a forced change the server redirects home; otherwise it returns here.
+    form.clearErrors()
+    if (form.data.next !== form.data.next_confirmation) {
+      form.setError('next_confirmation', 'Passwords do not match')
+      return
     }
-    useSession.setState({ user: res.value })
-    setErrors({})
-    setCurrent('')
-    setNext('')
-    setConfirm('')
-    if (forced) navigate('/', { replace: true })
-    else setSaved(true)
+    form.transform(({ current, next }) => ({ current, next }))
+    form.post(route('account.password.update'), {
+      preserveScroll: true,
+      onSuccess: () => {
+        form.reset()
+        setSaved(true)
+      },
+    })
   }
 
-  const team = people.teamOf(employee.id)
   const rows: [string, string][] = [
     ['Name', employee.name],
     ['Email', employee.email],
@@ -79,19 +81,19 @@ export function AccountPage() {
               <h2 className="text-base font-semibold">Password</h2>
             </CardHeader>
             <CardBody className="flex max-w-sm flex-col gap-4">
-              <Field label="Current password" error={errors.current}>
-                <Input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+              <Field label="Current password" error={form.errors.current}>
+                <Input type="password" autoComplete="current-password" value={form.data.current} onChange={(e) => form.setData('current', e.target.value)} />
               </Field>
-              <Field label="New password" hint={`At least ${MIN_PASSWORD} characters.`} error={errors.next}>
-                <Input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />
+              <Field label="New password" hint={`At least ${MIN_PASSWORD} characters.`} error={form.errors.next}>
+                <Input type="password" autoComplete="new-password" value={form.data.next} onChange={(e) => form.setData('next', e.target.value)} />
               </Field>
-              <Field label="Confirm new password" error={errors.confirm}>
-                <Input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+              <Field label="Confirm new password" error={form.errors.next_confirmation}>
+                <Input type="password" autoComplete="new-password" value={form.data.next_confirmation} onChange={(e) => form.setData('next_confirmation', e.target.value)} />
               </Field>
               {saved && <p role="status" className="text-sm text-success">Password changed.</p>}
             </CardBody>
             <CardFooter className="justify-end">
-              <Button type="submit" variant="primary">Change password</Button>
+              <Button type="submit" variant="primary" disabled={form.processing}>Change password</Button>
             </CardFooter>
           </Card>
         </form>
