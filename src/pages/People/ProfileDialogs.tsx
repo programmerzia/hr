@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Credentials } from '../../components/shared/Credentials'
 import { Button, Dialog, Field, Input, NativeSelect } from '../../components/ui'
 import { todayIso, usePeopleStore } from '../../mock/stores/people'
 import type { Employee, EmployeeDocumentKind, EmployeeStatus } from '../../types'
@@ -23,6 +24,37 @@ function Footer({ onCancel, onSubmit, label, disabled }: { onCancel: () => void;
       <Button variant="ghost" onClick={onCancel}>Cancel</Button>
       <Button variant="primary" onClick={onSubmit} disabled={disabled}>{label}</Button>
     </>
+  )
+}
+
+export function ResetPasswordDialog({ open, onOpenChange, employee }: DialogProps) {
+  const reset = usePeopleStore((s) => s.resetPassword)
+  const [temp, setTemp] = useState<string | null>(null)
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Reset password"
+      description={employee.name}
+      footer={
+        temp === null ? (
+          <>
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button variant="primary" onClick={() => setTemp(reset(employee.id))}>Reset password</Button>
+          </>
+        ) : (
+          <Button variant="primary" onClick={() => onOpenChange(false)}>Done</Button>
+        )
+      }
+    >
+      <div className="pb-2">
+        {temp === null ? (
+          <p className="text-sm text-fg-muted">Issues a new temporary password. The current one stops working immediately.</p>
+        ) : (
+          <Credentials email={employee.email} password={temp} />
+        )}
+      </div>
+    </Dialog>
   )
 }
 

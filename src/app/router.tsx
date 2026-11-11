@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router'
 import { AppLayout } from '../layouts/AppLayout'
 import { AuthLayout } from '../layouts/AuthLayout'
+import { accountRoutes } from '../pages/Account/routes'
 import { attendanceRoutes } from '../pages/Attendance/routes'
 import { authRoutes } from '../pages/Auth/routes'
 import { billingRoutes } from '../pages/Billing/routes'
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
               ...chatRoutes,
               ...inboxRoutes,
               ...settingsRoutes,
+              ...accountRoutes,
               { path: '*', element: <Navigate to="/" replace /> },
             ],
           },

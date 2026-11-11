@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
+import { persistStore } from '../persist'
 import {
   attachments as seedAttachments,
   boardColumns as seedColumns,
@@ -33,7 +34,7 @@ import type {
 export type { Task, Project }
 
 let seq = 1000
-const nid = (p: string) => `${p}-${++seq}`
+const nid = (p: string) => `${p}-${Date.now().toString(36)}-${++seq}`
 const nowIso = () => new Date().toISOString()
 
 export const priorityLabels: Record<TaskPriority, string> = {
@@ -380,6 +381,8 @@ export const useWork = create<WorkState>((set, get) => {
     logActivity: (taskId, text) => log(taskId, text),
   }
 })
+
+persistStore(useWork, 'work', ['projects', 'members', 'columns', 'tasks', 'labels', 'taskLabels', 'subtasks', 'comments', 'attachments', 'activity'])
 
 // ---------- Selectors ----------
 

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persistStore } from '../persist'
 import { navBadges } from '../../app/nav'
 import { auditSeed, clients as seedClients, computeTotals, contractorClaims, invoiceLines, invoicePayments, invoices as seedInvoices, round2, type AuditSeed } from '../db/billing'
 import { useSession } from '../session'
@@ -456,6 +457,8 @@ export const useBilling = create<BillingState>((set, get) => {
     },
   }
 })
+
+persistStore(useBilling, 'billing', ['clients', 'invoices', 'lines', 'payments', 'claims', 'audit'])
 
 /** Contractors see how many of their own claims are still drafts. */
 navBadges.set('my-claims', () => {

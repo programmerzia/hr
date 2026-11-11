@@ -100,6 +100,8 @@ export const users: User[] = seed.map((s, i) => ({
   id: `usr-${s.n}`,
   name: s.name,
   email: employees[i].email,
+  password: 'password',
+  must_change_password: false,
   role: s.role,
   employee_id: `emp-${s.n}`,
   last_seen_at: null,

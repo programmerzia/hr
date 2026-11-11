@@ -1,4 +1,5 @@
 // One place that wires cross-module providers. Imported once from main.tsx.
+import { resetAllPersisted } from './persist'
 import { dateKey, holidays } from './db/attendance'
 import { HEARTBEAT_KEY, readStoredHeartbeat, useSession } from './session'
 import { todayKey, useAttendance } from './stores/attendance'
@@ -63,3 +64,13 @@ window.addEventListener('online', () => {
   useSession.setState({ offlineSince: null })
   reconcileNow(since ? new Date(since).toISOString() : useSession.getState().lastHeartbeatAt)
 })
+
+// ---- demo reset -------------------------------------------------------------
+// Stores hydrate synchronously from localStorage when their modules load (see persist.ts), which happens through the
+// imports above, so everything in this file already runs against restored state.
+declare global {
+  interface Window {
+    __vivacomReset?: () => void
+  }
+}
+window.__vivacomReset = resetAllPersisted

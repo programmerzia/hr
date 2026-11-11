@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persistStore } from '../persist'
 import * as seed from '../db/people'
 import type {
   BankAccount,
@@ -158,6 +159,12 @@ interface PeopleState {
   addDocument: (employeeId: Id, doc: { kind: EmployeeDocumentKind; name: string }) => EmployeeDocument
   addAsset: (employeeId: Id, asset: { name: string; tag: string; assigned_on: ISODate }) => EmployeeAsset
 
+  /** Checks credentials the way the login endpoint will; null when they do not match. */
+  authenticate: (email: string, password: string) => User | null
+  changePassword: (userId: Id, current: string, next: string) => Result<User>
+  /** HR action: issues a new temporary password and forces a change at next sign-in. */
+  resetPassword: (employeeId: Id) => string
+
   employeeById: (id: Id) => Employee | undefined
   teamOf: (employeeId: Id) => Team | undefined
   leadOf: (employeeId: Id) => Employee | undefined
@@ -166,6 +173,9 @@ interface PeopleState {
   salaryHistory: (employeeId: Id) => SalaryStructure[]
   bankOf: (employeeId: Id) => BankAccount | undefined
 }
+
+export const TEMP_PASSWORD = 'welcome123'
+export const MIN_PASSWORD = 8
 
 const fail = <T>(error: string): Result<T> => ({ ok: false, error })
 
@@ -216,7 +226,8 @@ export const usePeopleStore = create<PeopleState>((set, get) => ({
       id: userId,
       name: employee.name,
       email: employee.email,
-      password: 'welcome123',
+      password: TEMP_PASSWORD,
+      must_change_password: true,
       role: p.role,
       employee_id: id,
       last_seen_at: null,
@@ -367,6 +378,34 @@ export const usePeopleStore = create<PeopleState>((set, get) => ({
     return row
   },
 
+  authenticate: (email, password) => {
+    const u = get().users.find((x) => x.email.toLowerCase() === email.trim().toLowerCase())
+    return u && password !== '' && u.password === password ? u : null
+  },
+
+  changePassword: (userId, current, next) => {
+    const s = get()
+    const u = s.users.find((x) => x.id === userId)
+    if (!u) return fail('Account not found')
+    if (u.password !== current) return fail('Current password is incorrect')
+    if (next.length < MIN_PASSWORD) return fail(`New password must be at least ${MIN_PASSWORD} characters`)
+    if (next === current) return fail('New password must differ from the current one')
+    const updated: User = { ...u, password: next, must_change_password: false }
+    const seedRow = seed.users.find((x) => x.id === userId)
+    if (seedRow) Object.assign(seedRow, { password: next, must_change_password: false })
+    set({ users: s.users.map((x) => (x.id === userId ? updated : x)) })
+    return { ok: true, value: updated }
+  },
+
+  resetPassword: (employeeId) => {
+    const s = get()
+    const temp = TEMP_PASSWORD
+    const seedRow = seed.users.find((x) => x.employee_id === employeeId)
+    if (seedRow) Object.assign(seedRow, { password: temp, must_change_password: true })
+    set({ users: s.users.map((x) => (x.employee_id === employeeId ? { ...x, password: temp, must_change_password: true } : x)) })
+    return temp
+  },
+
   employeeById: (id) => get().employees.find((e) => e.id === id),
   teamOf: (employeeId) => {
     const e = get().employees.find((x) => x.id === employeeId)
@@ -392,3 +431,5 @@ export const usePeopleStore = create<PeopleState>((set, get) => ({
   },
   bankOf: (employeeId) => get().bankAccounts.find((b) => b.employee_id === employeeId && b.is_primary),
 }))
+
+persistStore(usePeopleStore, 'people', ['employees', 'users', 'departments', 'teams', 'teamMembers', 'salaryStructures', 'bankAccounts', 'documents', 'assets', 'onboardingChecklists', 'employmentHistory'])

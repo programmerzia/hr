@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { employeeById, userByEmployeeId } from './db/people'
+import { usePeopleStore } from './stores/people'
 import { todayKey, useAttendance } from './stores/attendance'
 import type { BreakCategory, Employee, Role, User } from '../types'
 
@@ -57,8 +57,9 @@ interface SessionState {
 }
 
 function resolve(employeeId: string | null) {
-  const employee = employeeId ? employeeById(employeeId) : undefined
-  const user = employee ? userByEmployeeId(employee.id) : undefined
+  const { employees, users } = usePeopleStore.getState()
+  const employee = employeeId ? employees.find((e) => e.id === employeeId) : undefined
+  const user = employee ? users.find((u) => u.employee_id === employee.id) : undefined
   if (!employee || !user) return { user: null, employee: null, role: null }
   return { user, employee, role: user.role }
 }

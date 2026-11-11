@@ -5,7 +5,8 @@ import { PageHeader } from '../../components/shared/PageHeader'
 import { Button, Card, CardBody, CardFooter, Checkbox, Field, Input, NativeSelect } from '../../components/ui'
 import { cn } from '../../lib/cn'
 import { formatDate, formatMoney } from '../../lib/format'
-import { DEFAULT_CHECKLIST, todayIso, usePeopleStore } from '../../mock/stores/people'
+import { Credentials } from '../../components/shared/Credentials'
+import { DEFAULT_CHECKLIST, TEMP_PASSWORD, todayIso, usePeopleStore } from '../../mock/stores/people'
 import type { EmploymentType, Role } from '../../types'
 import { roleLabels, roleOptions, typeLabels, typeOptions } from './helpers'
 import { emptySalaryForm, SalaryFields, toSalaryInput, validateSalary, type SalaryErrors } from './SalaryFields'
@@ -50,6 +51,7 @@ export function OnboardPage() {
   const [checklist, setChecklist] = useState<string[]>(DEFAULT_CHECKLIST)
   const [errors, setErrors] = useState<Errors>({})
   const [submitError, setSubmitError] = useState<string | undefined>()
+  const [created, setCreated] = useState<{ id: string; name: string; email: string } | null>(null)
 
   const hourly = form.employment_type === 'contractor'
   const set = <K extends keyof Form>(k: K, v: Form[K]) => {
@@ -109,13 +111,30 @@ export function OnboardPage() {
       checklist,
     })
     if (!res.ok) return setSubmitError(res.error)
-    navigate(`/people/${res.value.id}`)
+    setCreated({ id: res.value.id, name: res.value.name, email: res.value.email })
   }
 
   const dept = people.departments.find((d) => d.id === form.department_id)?.name
   const team = people.teams.find((t) => t.id === form.team_id)
   const lead = team ? people.employeeById(team.lead_employee_id) : undefined
   const gross = salary.basic && !hourly ? ['basic', 'house_rent', 'medical', 'conveyance'].reduce((a, k) => a + (Number(salary[k as keyof typeof salary]) || 0), 0) : 0
+
+  if (created) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <PageHeader title={`${created.name} added`} breadcrumb={[{ label: 'People', to: '/people' }, { label: 'Add person' }]} />
+        <Card>
+          <CardBody className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold">Sign-in details</h2>
+            <Credentials email={created.email} password={TEMP_PASSWORD} />
+          </CardBody>
+          <CardFooter className="justify-end">
+            <Button variant="primary" onClick={() => navigate(`/people/${created.id}`)}>Open profile</Button>
+          </CardFooter>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -240,7 +259,7 @@ export function OnboardPage() {
           {step < steps.length - 1 ? (
             <Button variant="primary" onClick={next}>Continue</Button>
           ) : (
-            <Button variant="primary" onClick={create}>Create and send invite</Button>
+            <Button variant="primary" onClick={create}>Create person</Button>
           )}
         </CardFooter>
       </Card>

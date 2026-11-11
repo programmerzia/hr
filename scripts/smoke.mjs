@@ -8,7 +8,7 @@ import puppeteer from 'puppeteer-core'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const shots = path.join(root, 'scripts', 'screens')
-const PORT = 5199
+const PORT = Number(process.env.SMOKE_PORT) || 5199
 const BASE = `http://localhost:${PORT}`
 const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome'
 
@@ -244,7 +244,7 @@ async function attendanceLoop(browser) {
   await page.close()
 }
 
-// Offline tracking: persisted heartbeat 25 minutes old, then reload (attendance is rebuilt from the seed).
+// Offline tracking: persisted heartbeat 25 minutes old, then reload (attendance is restored from localStorage).
 async function offlineReload(browser) {
   const page = await browser.newPage()
   await page.setViewport({ width: 1366, height: 900 })
@@ -255,6 +255,13 @@ async function offlineReload(browser) {
     const stamped = await page.evaluate(() => {
       const t = new Date(Date.now() - 25 * 60_000).toISOString()
       localStorage.setItem('vivacom.last_heartbeat', t)
+      // Attendance is persisted, so pretend the open work segment began 30 minutes ago (tab died 25 minutes ago).
+      const snap = JSON.parse(localStorage.getItem('vivacom.v1.attendance') ?? 'null')
+      if (snap) {
+        const startIso = new Date(Date.now() - 30 * 60_000).toISOString()
+        for (const seg of snap.data.segments) if (seg.ended_at === null && seg.type === 'work') seg.started_at = startIso
+        localStorage.setItem('vivacom.v1.attendance', JSON.stringify(snap))
+      }
       return localStorage.getItem('vivacom.last_heartbeat') === t
     })
     if (!stamped) notes.push('could not stamp last heartbeat')

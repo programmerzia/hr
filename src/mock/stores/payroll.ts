@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persistStore } from '../persist'
 import type {
   Id,
   ISODate,
@@ -353,6 +354,8 @@ export const usePayroll = create<PayrollState>((set, get) => {
     },
   }
 })
+
+persistStore(usePayroll, 'payroll', ['runs', 'items', 'adjustments', 'events'])
 
 // The current-month draft is seeded with placeholder facts; sync it with real attendance and leave once.
 {

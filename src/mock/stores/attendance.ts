@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persistStore } from '../persist'
 import { onTick } from '../clock'
 import {
   attendanceDays,
@@ -162,7 +163,7 @@ const stalePeers = new Map<string, number>()
 
 let segCounter = 100000
 let entryCounter = 0
-const nextSegId = () => `seg-rt-${++segCounter}`
+const nextSegId = () => `seg-rt-${Date.now().toString(36)}-${++segCounter}`
 
 export const useAttendance = create<AttendanceState>((set, get) => {
   const iso = (ms: number) => new Date(ms).toISOString()
@@ -176,7 +177,7 @@ export const useAttendance = create<AttendanceState>((set, get) => {
     )
 
   const openEntry = (employeeId: string, segId: string, taskId: string, atMs: number): TaskTimeEntry => ({
-    id: `tte-rt-${++entryCounter}`,
+    id: `tte-rt-${Date.now().toString(36)}-${++entryCounter}`,
     time_segment_id: segId,
     task_id: taskId,
     employee_id: employeeId,
@@ -440,7 +441,7 @@ export const useAttendance = create<AttendanceState>((set, get) => {
       if (!day || day.late_minutes <= 0 || day.is_regularized || !reason.trim()) return null
       if (regularizations.some((r) => r.attendance_day_id === dayId && r.status === 'pending')) return null
       const req: RegularizationRequest = {
-        id: `reg-rt-${regularizations.length + 1}`,
+        id: `reg-rt-${Date.now().toString(36)}-${regularizations.length + 1}`,
         attendance_day_id: dayId,
         employee_id: day.employee_id,
         reason: reason.trim(),
@@ -490,6 +491,20 @@ export const useAttendance = create<AttendanceState>((set, get) => {
         )
     },
   }
+})
+
+persistStore(useAttendance, 'attendance', ['days', 'segments', 'taskTimeEntries', 'regularizations', 'heartbeats', 'currentTask'], {
+  // (c) a snapshot day for an employee+date supersedes the seed's day (and its segments) for that employee+date.
+  prepareSeed: (seed, snap) => {
+    const snapDays = snap.days ?? []
+    const taken = new Set(snapDays.map((d) => `${d.employee_id}|${d.date}`))
+    const snapIds = new Set(snapDays.map((d) => d.id))
+    const dropped = new Set(seed.days.filter((d) => taken.has(`${d.employee_id}|${d.date}`) && !snapIds.has(d.id)).map((d) => d.id))
+    return {
+      days: seed.days.filter((d) => !dropped.has(d.id)),
+      segments: seed.segments.filter((s) => !dropped.has(s.attendance_day_id)),
+    }
+  },
 })
 
 // ---- live tick + idle sweep (single subscription) ----

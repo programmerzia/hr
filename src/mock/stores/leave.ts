@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persistStore } from '../persist'
 import { navBadges } from '../../app/nav'
 import type {
   HalfDay,
@@ -276,6 +277,8 @@ export const useLeaveStore = create<LeaveState>((set, get) => {
     approvedOn: (date) => get().requests.filter((r) => r.status === 'approved' && r.starts_on <= date && r.ends_on >= date),
   }
 })
+
+persistStore(useLeaveStore, 'leave', ['leaveTypes', 'balances', 'requests', 'approvals'])
 
 navBadges.set('leave-approvals', () => {
   const employee = useSession((s) => s.employee)

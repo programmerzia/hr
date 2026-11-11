@@ -2,9 +2,9 @@ import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router'
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog'
 import { Avatar, Badge, Button, Field, Input } from '../../components/ui'
-import { employees, users } from '../../mock/db/people'
 import { useSession } from '../../mock/session'
 import { todayKey, useAttendance } from '../../mock/stores/attendance'
+import { usePeopleStore } from '../../mock/stores/people'
 import type { Role } from '../../types'
 
 const roleLabel: Record<Role, string> = {
@@ -20,12 +20,14 @@ const demo = [
   { employeeId: 'emp-102', caption: 'HR' },
   { employeeId: 'emp-101', caption: 'Management' },
   { employeeId: 'emp-114', caption: 'Contractor' },
-].map((d) => ({ ...d, employee: employees.find((e) => e.id === d.employeeId)! }))
+]
+const DEMO_PASSWORD = 'password'
 
 export function LoginPage() {
   const navigate = useNavigate()
   const login = useSession((s) => s.login)
   const signedIn = useSession((s) => s.employee !== null)
+  const people = usePeopleStore()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | undefined>()
@@ -47,8 +49,8 @@ export function LoginPage() {
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    const user = users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase())
-    if (!user || !password) {
+    const user = people.authenticate(email, password)
+    if (!user) {
       setError('Email or password is incorrect.')
       return
     }
@@ -83,11 +85,18 @@ export function LoginPage() {
           Demo accounts
         </h2>
         <ul className="mt-2 flex flex-col gap-1">
-          {demo.map(({ employeeId, caption, employee }) => (
+          {demo.map(({ employeeId, caption }) => {
+            const employee = people.employees.find((e) => e.id === employeeId)!
+            const user = people.users.find((u) => u.employee_id === employeeId)!
+            return (
             <li key={employeeId}>
               <button
                 type="button"
-                onClick={() => enter(employeeId)}
+                onClick={() => {
+                  const ok = people.authenticate(user.email, DEMO_PASSWORD)
+                  if (ok) enter(ok.employee_id)
+                  else setError('Email or password is incorrect.')
+                }}
                 className="flex h-9 w-full items-center justify-between gap-2 rounded px-2 text-left text-base transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 <span className="flex min-w-0 items-center gap-2">
@@ -95,12 +104,16 @@ export function LoginPage() {
                   <span className="truncate">{employee.name}</span>
                 </span>
                 <Badge>
-                  {caption === 'Contractor' ? caption : roleLabel[users.find((u) => u.employee_id === employeeId)!.role]}
+                  {caption === 'Contractor' ? caption : roleLabel[user.role]}
                 </Badge>
               </button>
             </li>
-          ))}
+            )
+          })}
         </ul>
+        <p className="mt-2 text-xs text-fg-muted">
+          Password for all demo accounts: <span className="font-mono">{DEMO_PASSWORD}</span>
+        </p>
       </section>
       <ConfirmDialog
         open={overtimeFor !== null}

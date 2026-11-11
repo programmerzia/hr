@@ -15,6 +15,8 @@ export interface User {
   name: string
   email: string
   password?: string
+  /** True until the person replaces the temporary password HR issued. */
+  must_change_password: boolean
   role: Role
   employee_id: Id
   last_seen_at: ISODateTime | null

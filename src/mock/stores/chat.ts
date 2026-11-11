@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persistStore } from '../persist'
 import { navBadges } from '../../app/nav'
 import type { Conversation, ConversationMember, Message, MessageAttachment } from '../../types'
 import { conversationMembers, conversations, messages } from '../db/chat'
@@ -42,7 +43,7 @@ export const useChat = create<ChatState>((set, get) => ({
     const s = get()
     if (!s.members.some((m) => m.conversation_id === conversationId && m.employee_id === authorId)) return null
     const message: Message = {
-      id: `msg-${++msgCounter}`,
+      id: `msg-${Date.now().toString(36)}-${++msgCounter}`,
       conversation_id: conversationId,
       author_id: authorId,
       body: text,
@@ -90,7 +91,7 @@ export const useChat = create<ChatState>((set, get) => ({
       return ids.length === 2 && ids.includes(aId) && ids.includes(bId)
     })
     if (existing) return existing
-    const conv: Conversation = { id: `cv-dm-rt-${++convCounter}`, type: 'dm', name: null, team_id: null, project_id: null }
+    const conv: Conversation = { id: `cv-dm-rt-${Date.now().toString(36)}-${++convCounter}`, type: 'dm', name: null, team_id: null, project_id: null }
     set({
       conversations: [...s.conversations, conv],
       members: [
@@ -104,7 +105,7 @@ export const useChat = create<ChatState>((set, get) => ({
   createGroup: (name, memberIds) => {
     const s = get()
     const conv: Conversation = {
-      id: `cv-grp-rt-${++convCounter}`,
+      id: `cv-grp-rt-${Date.now().toString(36)}-${++convCounter}`,
       type: 'group',
       name: name.trim() || 'New group',
       team_id: null,
@@ -165,6 +166,8 @@ export const useChat = create<ChatState>((set, get) => ({
       .members.filter((m) => m.conversation_id === conversationId)
       .map((m) => m.employee_id),
 }))
+
+persistStore(useChat, 'chat', ['conversations', 'members', 'messages'])
 
 /** Title for a conversation as seen by the viewer (DMs show the other person). */
 export function conversationTitle(

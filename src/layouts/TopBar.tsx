@@ -1,4 +1,4 @@
-import { Bell, LogOut, Menu, Moon, Search, Sun, UserRound } from 'lucide-react'
+import { Bell, LogOut, Menu, Moon, Search, Settings, Sun, UserRound } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { usePageTitle } from '../app/pageTitle'
 import { flatNav, isNavActive, type VisibleGroup } from '../app/nav'
@@ -106,6 +106,10 @@ export function TopBar({ groups, onOpenPalette, onOpenMenu, onSignOut }: TopBarP
                 </DropdownMenuItem>
               )}
               <DropdownMenuLabel className="sr-only">Account</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => navigate('/account')}>
+                <Settings />
+                Account
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={onSignOut}>
                 <LogOut />
                 Sign out

@@ -54,9 +54,10 @@ import {
   EditBankDialog,
   EditEmployeeDialog,
   NewStructureDialog,
+  ResetPasswordDialog,
 } from './ProfileDialogs'
 
-type DialogKind = 'status' | 'edit' | 'structure' | 'bank' | 'document' | 'asset' | null
+type DialogKind = 'reset' | 'status' | 'edit' | 'structure' | 'bank' | 'document' | 'asset' | null
 
 function Details({ rows }: { rows: [string, React.ReactNode][] }) {
   return (
@@ -118,6 +119,7 @@ export function ProfilePage() {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onSelect={() => setDialog('status')}>Change status</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setDialog('edit')}>Edit details</DropdownMenuItem>
+                {canSeePay && <DropdownMenuItem onSelect={() => setDialog('reset')}>Reset password</DropdownMenuItem>}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -163,6 +165,7 @@ export function ProfilePage() {
         <TabsContent value="leave"><LeaveTab employee={employee} /></TabsContent>
       </Tabs>
 
+      {dialog === 'reset' && <ResetPasswordDialog open onOpenChange={close} employee={employee} />}
       {dialog === 'status' && <ChangeStatusDialog open onOpenChange={close} employee={employee} />}
       {dialog === 'edit' && <EditEmployeeDialog open onOpenChange={close} employee={employee} />}
       {dialog === 'structure' && <NewStructureDialog open onOpenChange={close} employee={employee} />}
