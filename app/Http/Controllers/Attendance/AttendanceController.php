@@ -8,8 +8,10 @@ use App\Domain\Attendance\Actions\SetCurrentTask;
 use App\Domain\Attendance\Actions\StartBreak;
 use App\Domain\Attendance\Actions\StartWork;
 use App\Http\Controllers\Controller;
+use App\Models\Task;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 class AttendanceController extends Controller
@@ -57,7 +59,10 @@ class AttendanceController extends Controller
 
     public function currentTask(Request $request, SetCurrentTask $setCurrentTask): RedirectResponse
     {
-        $data = $request->validate(['task_id' => ['nullable', 'uuid']]);
+        $data = $request->validate(['task_id' => ['nullable', 'uuid', 'exists:tasks,id']]);
+        if (! empty($data['task_id'])) {
+            Gate::authorize('view', Task::findOrFail($data['task_id']));
+        }
         $setCurrentTask($request->user()->employee, $data['task_id'] ?? null);
 
         return back();

@@ -14,7 +14,7 @@ class OnboardEmployee
     public function __invoke(array $p): Employee
     {
         return DB::transaction(function () use ($p) {
-            $next = $this->nextNumber();
+            $next = self::nextNumber();
             $employee = Employee::create([
                 'code' => "VIV-{$next}",
                 'name' => trim($p['name']),
@@ -68,7 +68,8 @@ class OnboardEmployee
         ]);
     }
 
-    private function nextNumber(): int
+    /** Next free VIV-NNN number (never below 101). */
+    public static function nextNumber(): int
     {
         $max = Employee::pluck('code')
             ->map(fn ($c) => (int) preg_replace('/\D/', '', $c))

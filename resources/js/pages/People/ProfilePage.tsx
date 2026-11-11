@@ -368,7 +368,7 @@ function DocumentsTab({ onAdd }: { onAdd: () => void }) {
           <Thead><tr><Th>Name</Th><Th>Kind</Th><Th>Uploaded</Th></tr></Thead>
           <Tbody>
             {docs.map((d) => (
-              <Tr key={d.id}><Td>{d.name}</Td><Td>{docKindLabel(d.kind)}</Td><Td className="text-fg-muted">{formatDate(d.uploaded_at)}</Td></Tr>
+              <Tr key={d.id}><Td><a href={route('people.documents.download', [d.employee_id, d.id])} className="text-accent hover:underline">{d.name}</a></Td><Td>{docKindLabel(d.kind)}</Td><Td className="text-fg-muted">{formatDate(d.uploaded_at)}</Td></Tr>
             ))}
           </Tbody>
         </Table>

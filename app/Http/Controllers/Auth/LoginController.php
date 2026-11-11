@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -18,11 +19,14 @@ use Inertia\Response;
 
 class LoginController extends Controller
 {
+    private const ROLE_ORDER = ['management', 'hr', 'team_lead', 'employee'];
+
     public function create(): Response
     {
         $demo = app()->environment(['local', 'development', 'dev', 'testing'])
-            ? User::query()->where('must_change_password', false)->orderByRaw("FIELD(role, 'management', 'hr', 'team_lead', 'employee')")->orderBy('name')
-                ->get(['name', 'email', 'role'])->map->only(['name', 'email', 'role'])->values()
+            ? User::query()->where('must_change_password', false)->get(['name', 'email', 'role'])
+                ->sortBy([fn ($a, $b) => array_search($a->role, self::ROLE_ORDER) <=> array_search($b->role, self::ROLE_ORDER), fn ($a, $b) => strcmp($a->name, $b->name)])
+                ->map->only(['name', 'email', 'role'])->values()
             : [];
 
         return Inertia::render('Auth/LoginPage', ['demo_accounts' => $demo]);
@@ -36,10 +40,18 @@ class LoginController extends Controller
             'confirm_overtime' => ['sometimes', 'boolean'],
         ]);
 
+        // Failed attempts are limited to five a minute per email and IP; successful sign-ins do not count.
+        $throttleKey = 'login|'.strtolower(trim($data['email'])).'|'.$request->ip();
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            throw ValidationException::withMessages(['email' => 'Too many attempts. Try again in '.RateLimiter::availableIn($throttleKey).' seconds']);
+        }
+
         $user = User::with('employee')->whereRaw('LOWER(email) = ?', [strtolower(trim($data['email']))])->first();
         if (! $user || ! Hash::check($data['password'], $user->password)) {
+            RateLimiter::hit($throttleKey, 60);
             throw ValidationException::withMessages(['email' => 'Email or password is incorrect']);
         }
+        RateLimiter::clear($throttleKey);
         $employee = $user->employee;
         if (! $employee || ! in_array($employee->status, ['active', 'probation', 'on_leave'], true)) {
             throw ValidationException::withMessages(['email' => 'This account cannot sign in']);

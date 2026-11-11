@@ -7,7 +7,7 @@ export interface HistoryEntry {
   text: string
 }
 
-export function HistoryPanel({ entries, title = 'History' }: { entries: HistoryEntry[]; title?: string }) {
+export function HistoryPanel({ entries, title = 'History', now }: { entries: HistoryEntry[]; title?: string; now?: Date }) {
   return (
     <Card>
       <CardHeader title={title} />
@@ -22,7 +22,7 @@ export function HistoryPanel({ entries, title = 'History' }: { entries: HistoryE
                   <span className="font-medium">{e.actor}</span> <span className="text-fg-muted">{e.text}</span>
                 </p>
                 <p className="text-xs text-fg-subtle" title={`${formatDate(e.at)} ${formatTime(e.at)}`}>
-                  {relativeTime(e.at)}
+                  {relativeTime(e.at, now)}
                 </p>
               </li>
             ))}

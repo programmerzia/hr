@@ -26,10 +26,14 @@ class LeaveRequestPolicy
     /** Deciding at whichever stage the request is currently at. */
     public function decide(User $user, LeaveRequest $request): bool
     {
+        if ($user->employee_id !== null && $user->employee_id === $request->employee_id) {
+            return false;
+        }
+
         return match ($request->status) {
             'pending_lead' => $this->approveLead($user, $request),
             'pending_hr' => $this->approveHr($user, $request),
-            default => $user->role !== 'employee',
+            default => false,
         };
     }
 }

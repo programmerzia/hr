@@ -17,7 +17,7 @@ class UpdateProjectRequest extends FormRequest
         return [
             'name' => ['sometimes', 'required', 'string', 'max:120'],
             'status' => ['sometimes', Rule::in(['active', 'paused', 'done'])],
-            'lead_employee_id' => ['sometimes', 'exists:employees,id'],
+            'lead_employee_id' => ['sometimes', Rule::exists('employees', 'id')->whereIn('status', ['active', 'probation', 'on_leave'])],
             'client_id' => ['sometimes', 'nullable', 'exists:clients,id'],
         ];
     }

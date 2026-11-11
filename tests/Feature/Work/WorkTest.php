@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Attendance\Actions\StartWork;
 use App\Models\BoardColumn;
 use App\Models\Project;
 use App\Models\ProjectMember;
@@ -78,7 +79,8 @@ test('a comment with an upload shows in the drawer and is stored privately', fun
     ])->assertRedirect();
 
     $this->actingAs($member)->get(route('work.board', $task->project).'?task=PULSE-1')
-        ->assertInertia(fn ($page) => $page->has('task.comments', 1)->has('task.attachments', 1)->has('task.activity', 1));
+        ->assertInertia(fn ($page) => $page->has('task.comments', 1)->has('task.attachments', 1)->has('task.activity', 2)
+            ->where('task.activity', fn ($a) => collect($a)->contains(fn ($r) => $r['text'] === 'commented')));
 });
 
 test('projects list shows only visible projects and my tasks lists assigned work', function () {
@@ -97,4 +99,29 @@ test('team leads create projects with default columns', function () {
     expect(BoardColumn::where('project_id', $p->id)->count())->toBe(5);
     $this->actingAs($lead)->post(route('work.projects.store'), ['name' => 'Dup', 'key' => 'APX', 'billing_type' => 'internal'])
         ->assertSessionHasErrors(['key' => 'That key is already used.']);
+});
+
+test('new activity rows are stamped now, not an old date', function () {
+    ['member' => $member, 'project' => $project, 'todo' => $todo] = workFixture();
+    $this->travelTo(now()->addDays(3));
+
+    $this->actingAs($member)->post(route('work.tasks.store'), ['project_id' => $project->id, 'title' => 'Fresh task', 'column_id' => $todo->id])->assertRedirect();
+
+    $row = TaskActivity::latest('at')->first();
+    expect($row->at->diffInSeconds(now(), true))->toBeLessThan(5);
+});
+
+test('picking a task while working opens a time entry that my day exposes as open', function () {
+    ['member' => $member, 'task' => $task] = workFixture();
+    $this->travelTo(now()->setTime(10, 0));
+    app(StartWork::class)($member->employee);
+
+    $this->actingAs($member)->post(route('attendance.current-task'), ['task_id' => $task->id])->assertRedirect();
+    $this->travelTo(now()->addMinutes(7));
+
+    $this->actingAs($member)->get(route('attendance.my-day'))->assertInertia(fn ($page) => $page
+        ->where('current_task_id', $task->id)
+        ->has('task_entries', 1)
+        ->where('task_entries.0.ended_at', null)
+        ->where('task_entries.0.task_id', $task->id));
 });

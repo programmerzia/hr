@@ -9,7 +9,9 @@ class UpdateEmployeeRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('manage_people') ?? false;
+        $user = $this->user();
+
+        return $user && $user->can('manage_people') && $user->can('update', $this->route('employee'));
     }
 
     public function rules(): array

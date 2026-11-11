@@ -12,7 +12,7 @@ class StartBreak
     public function __invoke(Employee $employee, string $category, ?string $note = null): bool
     {
         return DB::transaction(function () use ($employee, $category, $note) {
-            $day = DayState::find($employee);
+            $day = DayState::findForUpdate($employee);
             if (! $day || $day->status !== 'working') {
                 return false;
             }

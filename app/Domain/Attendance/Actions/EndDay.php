@@ -11,7 +11,7 @@ class EndDay
     public function __invoke(Employee $employee): bool
     {
         return DB::transaction(function () use ($employee) {
-            $day = DayState::find($employee);
+            $day = DayState::findForUpdate($employee);
             if (! $day || ! in_array($day->status, ['working', 'on_break'], true)) {
                 return false;
             }

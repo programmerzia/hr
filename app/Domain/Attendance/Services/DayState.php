@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\TaskTimeEntry;
 use App\Models\TimeSegment;
 use Carbon\CarbonInterface;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 /** Shared segment bookkeeping used by the attendance actions (mirrors the mock store's private helpers). */
 final class DayState
@@ -19,13 +20,32 @@ final class DayState
             ->first();
     }
 
+    /** Today's row locked for update (call inside a transaction) so concurrent requests serialize. */
+    public static function findForUpdate(Employee $employee): ?AttendanceDay
+    {
+        return AttendanceDay::where('employee_id', $employee->id)
+            ->whereDate('date', now()->toDateString())
+            ->lockForUpdate()
+            ->first();
+    }
+
+    /** Finds or creates today's row, locked. A concurrent insert loses on the unique key and re-finds. */
     public static function ensureToday(Employee $employee): AttendanceDay
     {
-        return self::find($employee) ?? AttendanceDay::create([
-            'employee_id' => $employee->id,
-            'date' => now()->toDateString(),
-            'status' => 'not_started',
-        ]);
+        if ($day = self::findForUpdate($employee)) {
+            return $day;
+        }
+        try {
+            AttendanceDay::create([
+                'employee_id' => $employee->id,
+                'date' => now()->toDateString(),
+                'status' => 'not_started',
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            // another request created it first
+        }
+
+        return self::findForUpdate($employee);
     }
 
     public static function closeOpen(AttendanceDay $day, CarbonInterface $at): void

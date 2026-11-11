@@ -99,7 +99,7 @@ class TeamHistoryController extends Controller
         $cap = AttendancePolicy::current()->lunch_cap_minutes;
         $byId = $members->keyBy('id');
         $teams = Team::pluck('name', 'id');
-        $q = AttendanceDay::whereIn('employee_id', $byId->keys())->whereBetween('date', [$f['from'], $f['to']])
+        $q = AttendanceDay::whereIn('employee_id', $byId->keys())->whereDate('date', '>=', $f['from'])->whereDate('date', '<=', $f['to'])
             ->orderByDesc('date');
         $total = (clone $q)->count();
         $days = $q->when($limit, fn ($qq) => $qq->limit($limit))->get()

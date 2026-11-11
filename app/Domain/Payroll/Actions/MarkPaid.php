@@ -15,13 +15,13 @@ class MarkPaid
 
     public function __invoke(PayrollRun $run, string $paidOn, string $reference, Employee $by): PayrollRun
     {
-        return DB::transaction(function () use ($run, $paidOn, $reference, $by) {
+        return DB::transaction(function () use ($run, $reference, $by) {
             $run = PayrollRun::lockForUpdate()->findOrFail($run->id);
             if ($run->status !== 'approved') {
                 Fail::with('Only approved runs can be marked as paid.');
             }
             $reference = trim($reference);
-            $run->update(['status' => 'paid', 'paid_at' => "{$paidOn} 12:00:00", 'payment_reference' => $reference]);
+            $run->update(['status' => 'paid', 'paid_at' => now(), 'payment_reference' => $reference]);
             PayrollItem::with('employee')->where('run_id', $run->id)->get()->each(fn ($i) => $i->update([
                 'payslip_path' => sprintf('payslips/%s-%d-%02d.pdf', $i->employee?->code ?? $i->employee_id, $run->year, $run->month),
             ]));

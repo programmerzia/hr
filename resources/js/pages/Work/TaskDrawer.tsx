@@ -49,6 +49,7 @@ export function TaskDrawer() {
 
 function TaskDrawerBody({ task, onClose }: { task: DrawerTask; onClose: () => void }) {
   const personName = usePersonName()
+  const serverTime = useShared().attendance.server_time
   const { project, columns, labels: availableLabels, member_ids: memberIds, can_edit: canEdit } = task
   const update = (data: Record<string, unknown>) => router.patch(route('work.tasks.update', task.id), data as never, keep)
   const moveTask = (columnId: string) => router.post(route('work.tasks.move', task.id), { column_id: columnId }, keep)
@@ -63,6 +64,8 @@ function TaskDrawerBody({ task, onClose }: { task: DrawerTask; onClose: () => vo
   const subs = [...task.subtasks].sort((a, b) => a.position - b.position)
   const taskFiles = task.attachments.filter((a) => a.attachable_type === 'task')
   const comments = task.comments
+  // Relative times are measured against the server clock, not the browser's.
+  const serverNow = new Date(serverTime)
   const activity = task.activity.map((a) => ({ at: a.at, actor: personName(a.actor_id), text: a.text }))
 
   const tracked = task.tracked_seconds
@@ -313,7 +316,7 @@ function TaskDrawerBody({ task, onClose }: { task: DrawerTask; onClose: () => vo
               <li key={c.id} className="text-sm">
                 <p>
                   <span className="font-medium">{personName(c.author_id)}</span>{' '}
-                  <span className="text-xs text-fg-subtle">{relativeTime(c.created_at)}</span>
+                  <span className="text-xs text-fg-subtle">{relativeTime(c.created_at, serverNow)}</span>
                 </p>
                 {c.body && <Markdown source={c.body} className="text-base" />}
                 {commentFiles(c.id).length > 0 && (
@@ -370,7 +373,7 @@ function TaskDrawerBody({ task, onClose }: { task: DrawerTask; onClose: () => vo
           )}
         </section>
 
-        <HistoryPanel title="Activity" entries={activity} />
+        <HistoryPanel title="Activity" entries={activity} now={serverNow} />
       </div>
     </Sheet>
   )

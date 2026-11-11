@@ -44,6 +44,11 @@ class Employee extends Model
         return $this->hasMany(Team::class, 'lead_employee_id');
     }
 
+    public function documents(): HasMany
+    {
+        return $this->hasMany(EmployeeDocument::class);
+    }
+
     public function salaryStructures(): HasMany
     {
         return $this->hasMany(SalaryStructure::class)->orderBy('effective_from');

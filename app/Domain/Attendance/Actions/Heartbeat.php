@@ -22,6 +22,7 @@ class Heartbeat
         }
 
         return DB::transaction(function () use ($user, $employee) {
+            DayState::findForUpdate($employee);
             $now = now();
             $changed = $user->last_seen_at ? $this->reconcileOffline($user, $now) : false;
 

@@ -21,6 +21,9 @@ class Reject
             if (! in_array($r->status, ['pending_lead', 'pending_hr'], true)) {
                 Fail::with('This request is not at that stage');
             }
+            if ($r->employee_id === $decider->id) {
+                Fail::with('You cannot reject your own request');
+            }
             $note = trim((string) $note);
             if ($note === '') {
                 Fail::with('Add a reason for rejecting');

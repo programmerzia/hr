@@ -44,7 +44,7 @@ class SubmitLeave
             Fail::with('The selected dates are all weekends or holidays');
         }
 
-        return DB::transaction(function () use ($employee, $type, $startsOn, $endsOn, $half, $reason, $attachmentName, $days) {
+        return DB::transaction(function () use ($employee, $type, $startsOn, $endsOn, $half, $reason, $days) {
             $clash = LeaveRequest::where('employee_id', $employee->id)
                 ->whereIn('status', self::ACTIVE)
                 ->whereDate('starts_on', '<=', $endsOn)->whereDate('ends_on', '>=', $startsOn)
@@ -57,7 +57,6 @@ class SubmitLeave
                 $a = $bal['available'];
                 Fail::with('Only '.$this->num($a).' '.($a == 1 ? 'day' : 'days').' of '.mb_strtolower(preg_replace('/\s+leave$/i', '', $type->name)).' leave available');
             }
-            $name = trim((string) $attachmentName);
             $request = LeaveRequest::create([
                 'employee_id' => $employee->id,
                 'leave_type_id' => $type->id,
@@ -66,7 +65,7 @@ class SubmitLeave
                 'half_day' => $half,
                 'days' => $days,
                 'reason' => $reason,
-                'attachment_path' => $name !== '' ? "/uploads/{$name}" : null,
+                'attachment_path' => null, // no upload control yet; never store a made-up path
                 'status' => LeaveNotifier::leadOf($employee) ? 'pending_lead' : 'pending_hr',
             ]);
             $this->balances->adjust($request, pending: $days);

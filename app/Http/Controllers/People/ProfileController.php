@@ -42,6 +42,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -140,6 +141,14 @@ class ProfileController extends Controller
         return back()->with('success', 'Document added');
     }
 
+    public function downloadDocument(Employee $employee, EmployeeDocument $document)
+    {
+        Gate::authorize('viewPay', $employee); // same gate that shows the documents list
+        abort_unless(Storage::disk('local')->exists($document->path), 404);
+
+        return Storage::disk('local')->download($document->path, $document->name);
+    }
+
     public function asset(AssetRequest $request, Employee $employee, AddAsset $action): RedirectResponse
     {
         $action($employee, $request->validated());
@@ -149,6 +158,7 @@ class ProfileController extends Controller
 
     public function resetPassword(Employee $employee, ResetPassword $action): RedirectResponse
     {
+        Gate::authorize('resetPassword', $employee);
         $temp = $action($employee);
 
         return back()->with('credentials', ['email' => $employee->email, 'temporary_password' => $temp, 'context' => 'reset']);

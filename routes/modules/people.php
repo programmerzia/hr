@@ -17,6 +17,7 @@ Route::prefix('people')->name('people.')->group(function () {
     });
 
     Route::get('/{employee}', [ProfileController::class, 'show'])->name('profile');
+    Route::get('/{employee}/documents/{document}', [ProfileController::class, 'downloadDocument'])->scopeBindings()->name('documents.download');
 
     Route::middleware('can:manage_people')->group(function () {
         Route::patch('/{employee}', [ProfileController::class, 'update'])->name('update');

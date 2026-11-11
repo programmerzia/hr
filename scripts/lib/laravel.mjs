@@ -113,13 +113,11 @@ export async function loginDemo(base, page, name) {
   if (!h.asElement()) throw new Error(`no demo account "${name}"`)
   await h.asElement().click()
   // An ended day asks to confirm overtime before signing in.
-  await Promise.race([
-    page.waitForFunction(() => location.pathname !== '/login', { timeout: 10000 }),
-    page.waitForFunction(() => /Start overtime/.test(document.body.innerText), { timeout: 10000 }).then(async () => {
-      await clickText(page, 'Start overtime', 'button')
-      await page.waitForFunction(() => location.pathname !== '/login', { timeout: 10000 })
-    }),
-  ])
+  await page.waitForFunction(() => location.pathname !== '/login' || /Start overtime/.test(document.body.innerText), { timeout: 10000 })
+  if (await page.evaluate(() => location.pathname === '/login')) {
+    await clickText(page, 'Start overtime', 'button')
+    await page.waitForFunction(() => location.pathname !== '/login', { timeout: 10000 })
+  }
   await page.waitForSelector('[data-testid="topbar"]', { timeout: 10000 })
 }
 

@@ -31,6 +31,7 @@ class TaskExtras
     public function addComment(Task $task, ?string $body, array $files, string $actorId): TaskComment
     {
         $comment = TaskComment::create(['task_id' => $task->id, 'author_id' => $actorId, 'body' => trim((string) $body)]);
+        ($this->log)($task->id, $actorId, 'commented');
         foreach ($files as $file) {
             $this->store($file, 'task_comment', $comment->id);
             ($this->log)($task->id, $actorId, "attached {$file->getClientOriginalName()}");

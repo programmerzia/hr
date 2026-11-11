@@ -3,6 +3,7 @@
 namespace App\Domain\Work\Actions;
 
 use App\Models\BoardColumn;
+use App\Models\Employee;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskLabel;
@@ -35,6 +36,9 @@ class CreateTask
                 TaskLabel::create(['task_id' => $task->id, 'label_id' => $labelId]);
             }
             ($this->log)($task->id, $actorId, 'created the task');
+            if ($task->assignee_id) {
+                ($this->log)($task->id, $actorId, 'assigned the task to '.(Employee::find($task->assignee_id)?->name ?? $task->assignee_id));
+            }
 
             return $task->setRelation('project', $project);
         });

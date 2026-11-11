@@ -14,7 +14,7 @@ class SetCurrentTask
         DB::transaction(function () use ($employee, $taskId) {
             $now = now();
             $employee->update(['current_task_id' => $taskId]);
-            $day = DayState::find($employee);
+            $day = DayState::findForUpdate($employee);
             if (! $day || $day->status !== 'working') {
                 return;
             }

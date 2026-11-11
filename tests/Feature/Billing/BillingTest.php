@@ -8,10 +8,10 @@ use App\Models\ContractorClaim;
 use App\Models\Department;
 use App\Models\Invoice;
 use App\Models\SalaryStructure;
+use App\Models\Task;
 use App\Models\TaskTimeEntry;
 use App\Models\Team;
 use App\Models\TimeSegment;
-use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
@@ -129,7 +129,7 @@ function trackedEntries($t, int $minutes, string $date = '2026-10-15'): void
     $day = AttendanceDay::create(['employee_id' => $emp->id, 'date' => $date, 'status' => 'ended', 'work_seconds' => $minutes * 60]);
     $seg = TimeSegment::create(['attendance_day_id' => $day->id, 'type' => 'work', 'started_at' => "{$date} 09:00:00", 'ended_at' => "{$date} 17:00:00"]);
     TaskTimeEntry::create([
-        'time_segment_id' => $seg->id, 'task_id' => (string) Str::uuid(), 'employee_id' => $emp->id,
+        'time_segment_id' => $seg->id, 'task_id' => Task::factory()->create()->id, 'employee_id' => $emp->id,
         'started_at' => "{$date} 09:00:00", 'ended_at' => "{$date} 17:00:00", 'seconds' => $minutes * 60,
     ]);
     SalaryStructure::create([

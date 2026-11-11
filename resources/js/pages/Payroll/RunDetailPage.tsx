@@ -100,7 +100,11 @@ function ItemSheet({
 
   const add = () => {
     if (!item) return
-    form.post(route('payroll.adjustments.store', item.id), { preserveScroll: true, onSuccess: () => form.reset('label', 'amount', 'note') })
+    form.post(route('payroll.adjustments.store', item.id), { preserveScroll: true, onSuccess: () => {
+        form.reset('label', 'amount', 'note')
+        onClose()
+      },
+    })
   }
 
   const line = (name: string, value: number, sign: '' | '+' | '-' = '', strong = false) => (
@@ -181,6 +185,7 @@ function ItemSheet({
                           onClick={() =>
                             router.delete(route('payroll.adjustments.destroy', a.id), {
                               preserveScroll: true,
+                              onSuccess: onClose,
                               onError: (e) => toast.error(failureOf(e)),
                             })
                           }
