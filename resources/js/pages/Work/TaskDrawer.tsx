@@ -1,6 +1,6 @@
+import { Link, router } from '@inertiajs/react'
 import { Check, ImagePlus, Pencil, Plus } from 'lucide-react'
-import { useMemo, useState, type ClipboardEvent } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { useState, type ClipboardEvent } from 'react'
 import { HistoryPanel } from '../../components/shared/HistoryPanel'
 import {
   Button,
@@ -15,44 +15,26 @@ import {
   Textarea,
   type SelectOption,
 } from '../../components/ui'
+import { useShared } from '../../inertia/props'
 import { cn } from '../../lib/cn'
 import { formatDuration, relativeTime } from '../../lib/format'
-import { useSession } from '../../mock/session'
-import {
-  canManageProject,
-  priorityLabels,
-  priorityOrder,
-  trackedSecondsFor,
-  useWork,
-  type NewAttachment,
-} from '../../mock/stores/work'
 import type { TaskPriority } from '../../types'
-import { Markdown, personName, useLabelsFor, useProjectColumns } from './shared'
+import { Markdown, priorityLabels, priorityOrder, usePersonName, useTaskParam, type DrawerTask } from './shared'
 
 const priorityOptions: SelectOption[] = [...priorityOrder].reverse().map((p) => ({ value: p, label: priorityLabels[p] }))
 
-function readImage(file: File): Promise<NewAttachment> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () =>
-      resolve({ name: file.name || 'pasted-image.png', mime: file.type, size: file.size, path: String(reader.result) })
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
+const keep = { preserveScroll: true, preserveState: true } as const
+
+interface PendingFile {
+  file: File
+  url: string
 }
 
-/** Opens when `?task=KEY` is in the URL. Mount once inside any layout that has a router. */
+/** Opens when the server sent a `task` prop (`?task=KEY` in the URL). Mount once per Work page. */
 export function TaskDrawer() {
-  const [params, setParams] = useSearchParams()
-  const key = params.get('task')
-  const tasks = useWork((s) => s.tasks)
-  const task = key ? tasks.find((t) => t.key === key) : undefined
-
-  const close = () => {
-    const next = new URLSearchParams(params)
-    next.delete('task')
-    setParams(next, { replace: true })
-  }
+  const { task, task_key: key } = useShared<{ task: DrawerTask | null; task_key: string | null }>()
+  const setTaskParam = useTaskParam()
+  const close = () => setTaskParam(null)
 
   if (!key) return null
   if (!task) {
@@ -62,42 +44,30 @@ export function TaskDrawer() {
       </Sheet>
     )
   }
-  return <TaskDrawerBody key={task.id} taskId={task.id} onClose={close} />
+  return <TaskDrawerBody key={task.id} task={task} onClose={close} />
 }
 
-function TaskDrawerBody({ taskId, onClose }: { taskId: string; onClose: () => void }) {
-  const me = useSession((s) => s.employee)
-  const role = useSession((s) => s.role)
-  const s = useWork()
-  const task = s.tasks.find((t) => t.id === taskId)!
-  const project = s.projects.find((p) => p.id === task.project_id)!
-  const columns = useProjectColumns(project.id)
-  const labels = useLabelsFor(task.id)
-  const memberIds = useMemo(
-    () => s.members.filter((m) => m.project_id === project.id).map((m) => m.employee_id),
-    [s.members, project.id],
-  )
-  const canEdit = !!me && (memberIds.includes(me.id) || canManageProject(project, me.id, role))
+function TaskDrawerBody({ task, onClose }: { task: DrawerTask; onClose: () => void }) {
+  const personName = usePersonName()
+  const { project, columns, labels: availableLabels, member_ids: memberIds, can_edit: canEdit } = task
+  const update = (data: Record<string, unknown>) => router.patch(route('work.tasks.update', task.id), data as never, keep)
+  const moveTask = (columnId: string) => router.post(route('work.tasks.move', task.id), { column_id: columnId }, keep)
 
   const [editingBody, setEditingBody] = useState(false)
   const [body, setBody] = useState(task.body_md)
   const [title, setTitle] = useState(task.title)
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [comment, setComment] = useState('')
-  const [pending, setPending] = useState<NewAttachment[]>([])
+  const [pending, setPending] = useState<PendingFile[]>([])
 
-  const subs = s.subtasks.filter((x) => x.task_id === task.id).sort((a, b) => a.position - b.position)
-  const taskFiles = s.attachments.filter((a) => a.attachable_type === 'task' && a.attachable_id === task.id)
-  const comments = s.comments.filter((c) => c.task_id === task.id).sort((a, b) => a.created_at.localeCompare(b.created_at))
-  const activity = s.activity
-    .filter((a) => a.task_id === task.id)
-    .sort((a, b) => b.at.localeCompare(a.at))
-    .map((a) => ({ at: a.at, actor: personName(a.actor_id), text: a.text }))
+  const subs = [...task.subtasks].sort((a, b) => a.position - b.position)
+  const taskFiles = task.attachments.filter((a) => a.attachable_type === 'task')
+  const comments = task.comments
+  const activity = task.activity.map((a) => ({ at: a.at, actor: personName(a.actor_id), text: a.text }))
 
-  const tracked = trackedSecondsFor(task.id)
+  const tracked = task.tracked_seconds
   const estimateSeconds = (task.estimate_minutes ?? 0) * 60
-  const taskLabelIds = new Set(labels.map((l) => l.id))
-  const availableLabels = s.labels.filter((l) => l.project_id === null || l.project_id === project.id)
+  const taskLabelIds = new Set(task.label_ids)
 
   const assigneeOptions: SelectOption[] = [
     { value: 'none', label: 'Unassigned' },
@@ -106,22 +76,30 @@ function TaskDrawerBody({ taskId, onClose }: { taskId: string; onClose: () => vo
   if (task.assignee_id && !memberIds.includes(task.assignee_id))
     assigneeOptions.push({ value: task.assignee_id, label: personName(task.assignee_id) })
 
-  const onPaste = async (e: ClipboardEvent) => {
+  const onPaste = (e: ClipboardEvent) => {
     const files = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith('image/'))
     if (files.length === 0) return
     e.preventDefault()
-    const read = await Promise.all(files.map(readImage))
-    setPending((p) => [...p, ...read])
+    setPending((p) => [...p, ...files.map((file) => ({ file, url: URL.createObjectURL(file) }))])
   }
 
   const submitComment = () => {
-    s.addComment(task.id, comment, pending)
-    pending.forEach((a) => s.addAttachment(task.id, a))
-    setComment('')
-    setPending([])
+    router.post(
+      route('work.tasks.comments', task.id),
+      { body: comment, files: pending.map((p) => p.file) },
+      {
+        ...keep,
+        forceFormData: true,
+        onSuccess: () => {
+          pending.forEach((p) => URL.revokeObjectURL(p.url))
+          setComment('')
+          setPending([])
+        },
+      },
+    )
   }
 
-  const commentFiles = (id: string) => s.attachments.filter((a) => a.attachable_type === 'task_comment' && a.attachable_id === id)
+  const commentFiles = (id: string) => task.attachments.filter((a) => a.attachable_type === 'task_comment' && a.attachable_id === id)
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()} title={`${task.key} ${task.title}`} hideTitle className="max-w-xl">
@@ -130,7 +108,7 @@ function TaskDrawerBody({ taskId, onClose }: { taskId: string; onClose: () => vo
           <p className="flex items-center gap-2 text-sm text-fg-muted">
             <span className="font-mono text-fg">{task.key}</span>
             <span aria-hidden>/</span>
-            <Link to={`/projects/${project.key}`} className="hover:text-fg hover:underline">
+            <Link href={route('work.board', project.key)} className="hover:text-fg hover:underline">
               {project.name}
             </Link>
           </p>
@@ -139,7 +117,7 @@ function TaskDrawerBody({ taskId, onClose }: { taskId: string; onClose: () => vo
             value={title}
             disabled={!canEdit}
             onChange={(e) => setTitle(e.target.value)}
-            onBlur={() => (title.trim() ? s.updateTask(task.id, { title }) : setTitle(task.title))}
+            onBlur={() => (title.trim() ? title !== task.title && update({ title }) : setTitle(task.title))}
             className="h-9 border-transparent px-1 text-lg font-semibold hover:border-border-strong"
           />
         </header>
@@ -149,7 +127,7 @@ function TaskDrawerBody({ taskId, onClose }: { taskId: string; onClose: () => vo
             <Select
               value={task.column_id}
               disabled={!canEdit}
-              onValueChange={(v) => s.moveTask(task.id, v)}
+              onValueChange={(v) => moveTask(v)}
               options={columns.map((c) => ({ value: c.id, label: c.name }))}
             />
           </Field>
@@ -157,7 +135,7 @@ function TaskDrawerBody({ taskId, onClose }: { taskId: string; onClose: () => vo
             <Select
               value={task.priority}
               disabled={!canEdit}
-              onValueChange={(v) => s.updateTask(task.id, { priority: v as TaskPriority })}
+              onValueChange={(v) => update({ priority: v as TaskPriority })}
               options={priorityOptions}
             />
           </Field>
@@ -165,7 +143,7 @@ function TaskDrawerBody({ taskId, onClose }: { taskId: string; onClose: () => vo
             <Select
               value={task.assignee_id ?? 'none'}
               disabled={!canEdit}
-              onValueChange={(v) => s.updateTask(task.id, { assignee_id: v === 'none' ? null : v })}
+              onValueChange={(v) => update({ assignee_id: v === 'none' ? null : v })}
               options={assigneeOptions}
             />
           </Field>
@@ -174,7 +152,7 @@ function TaskDrawerBody({ taskId, onClose }: { taskId: string; onClose: () => vo
               type="date"
               value={task.due_on ?? ''}
               disabled={!canEdit}
-              onChange={(e) => s.updateTask(task.id, { due_on: e.target.value || null })}
+              onChange={(e) => update({ due_on: e.target.value || null })}
             />
           </Field>
           <Field label="Estimate (hours)">
@@ -185,7 +163,7 @@ function TaskDrawerBody({ taskId, onClose }: { taskId: string; onClose: () => vo
               disabled={!canEdit}
               defaultValue={task.estimate_minutes === null ? '' : task.estimate_minutes / 60}
               onBlur={(e) =>
-                s.updateTask(task.id, { estimate_minutes: e.target.value === '' ? null : Math.round(Number(e.target.value) * 60) })
+                update({ estimate_minutes: e.target.value === '' ? null : Math.round(Number(e.target.value) * 60) })
               }
             />
           </Field>
@@ -216,9 +194,7 @@ function TaskDrawerBody({ taskId, onClose }: { taskId: string; onClose: () => vo
                   disabled={!canEdit}
                   aria-pressed={on}
                   onClick={() =>
-                    s.updateTask(task.id, {
-                      label_ids: on ? [...taskLabelIds].filter((x) => x !== l.id) : [...taskLabelIds, l.id],
-                    })
+                    update({ label_ids: on ? [...taskLabelIds].filter((x) => x !== l.id) : [...taskLabelIds, l.id] })
                   }
                   className={cn(
                     'inline-flex h-6 items-center gap-1 rounded border px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60',
@@ -259,7 +235,7 @@ function TaskDrawerBody({ taskId, onClose }: { taskId: string; onClose: () => vo
                   variant="primary"
                   size="sm"
                   onClick={() => {
-                    s.updateTask(task.id, { body_md: body })
+                    update({ body_md: body })
                     setEditingBody(false)
                   }}
                 >
@@ -290,7 +266,7 @@ function TaskDrawerBody({ taskId, onClose }: { taskId: string; onClose: () => vo
                 <Checkbox
                   checked={x.done}
                   disabled={!canEdit}
-                  onCheckedChange={() => s.toggleSubtask(x.id)}
+                  onCheckedChange={() => router.post(route('work.subtasks.toggle', x.id), {}, keep)}
                   label={<span className={x.done ? 'text-fg-muted line-through' : ''}>{x.title}</span>}
                 />
               </li>
@@ -301,7 +277,7 @@ function TaskDrawerBody({ taskId, onClose }: { taskId: string; onClose: () => vo
               className="flex gap-2"
               onSubmit={(e) => {
                 e.preventDefault()
-                s.addSubtask(task.id, subtaskTitle)
+                router.post(route('work.tasks.subtasks.store', task.id), { title: subtaskTitle }, keep)
                 setSubtaskTitle('')
               }}
             >
@@ -364,11 +340,14 @@ function TaskDrawerBody({ taskId, onClose }: { taskId: string; onClose: () => vo
                 <div className="flex flex-wrap gap-2">
                   {pending.map((a, i) => (
                     <div key={i} className="relative">
-                      <img src={a.path} alt={a.name} className="h-16 rounded border border-border" />
+                      <img src={a.url} alt={a.file.name} className="h-16 rounded border border-border" />
                       <button
                         type="button"
-                        aria-label={`Remove ${a.name}`}
-                        onClick={() => setPending((p) => p.filter((_, j) => j !== i))}
+                        aria-label={`Remove ${a.file.name}`}
+                        onClick={() => {
+                          URL.revokeObjectURL(a.url)
+                          setPending((p) => p.filter((_, j) => j !== i))
+                        }}
                         className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-fg text-xs text-surface"
                       >
                         x

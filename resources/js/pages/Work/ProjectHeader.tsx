@@ -1,20 +1,15 @@
+import { router } from '@inertiajs/react'
 import { Plus, Settings2 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { Button, Tabs, TabsList, TabsTrigger } from '../../components/ui'
-import { useAuthed } from '../../mock/session'
-import { canManageProject } from '../../mock/stores/work'
-import type { Project } from '../../types'
+import { useShared } from '../../inertia/props'
 import { NewTaskDialog } from './NewTaskDialog'
 import { ProjectSettingsSheet } from './ProjectSettingsSheet'
-import { useWork } from '../../mock/stores/work'
+import type { ProjectScreenProps } from './shared'
 
-export function ProjectHeader({ project, view, extra }: { project: Project; view: 'board' | 'list'; extra?: ReactNode }) {
-  const { employee, role } = useAuthed()
-  const navigate = useNavigate()
-  const isMember = useWork((s) => s.members.some((m) => m.project_id === project.id && m.employee_id === employee.id))
-  const canAdd = isMember || canManageProject(project, employee.id, role)
+export function ProjectHeader({ view, extra }: { view: 'board' | 'list'; extra?: ReactNode }) {
+  const { project, can_write } = useShared<ProjectScreenProps>()
   const [adding, setAdding] = useState(false)
   const [settings, setSettings] = useState(false)
 
@@ -23,14 +18,14 @@ export function ProjectHeader({ project, view, extra }: { project: Project; view
       <PageHeader
         title={project.name}
         description={`${project.key}`}
-        breadcrumb={[{ label: 'Projects', to: '/projects' }, { label: project.key }]}
+        breadcrumb={[{ label: 'Projects', to: route('work.projects', undefined, false) }, { label: project.key }]}
         actions={
           <>
             {extra}
             <Button icon={<Settings2 size={16} />} onClick={() => setSettings(true)}>
               Project settings
             </Button>
-            {canAdd && (
+            {can_write && (
               <Button variant="primary" icon={<Plus size={16} />} onClick={() => setAdding(true)}>
                 Add task
               </Button>
@@ -38,7 +33,10 @@ export function ProjectHeader({ project, view, extra }: { project: Project; view
           </>
         }
         tabs={
-          <Tabs value={view} onValueChange={(v) => navigate(v === 'board' ? `/projects/${project.key}` : `/projects/${project.key}/list`)}>
+          <Tabs
+            value={view}
+            onValueChange={(v) => router.get(route(v === 'board' ? 'work.board' : 'work.list', project.key))}
+          >
             <TabsList>
               <TabsTrigger value="board">Board</TabsTrigger>
               <TabsTrigger value="list">List</TabsTrigger>
@@ -46,8 +44,8 @@ export function ProjectHeader({ project, view, extra }: { project: Project; view
           </Tabs>
         }
       />
-      {adding && <NewTaskDialog project={project} onClose={() => setAdding(false)} />}
-      <ProjectSettingsSheet project={project} open={settings} onOpenChange={setSettings} />
+      {adding && <NewTaskDialog onClose={() => setAdding(false)} />}
+      <ProjectSettingsSheet open={settings} onOpenChange={setSettings} />
     </>
   )
 }

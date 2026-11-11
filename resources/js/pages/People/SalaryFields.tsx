@@ -1,7 +1,18 @@
 import { Field, Input } from '../../components/ui'
 import { formatMoney } from '../../lib/format'
-import type { SalaryInput } from '../../mock/stores/people'
 import type { SalaryStructure } from '../../types'
+
+export interface SalaryInput {
+  effective_from: string
+  basic: number
+  house_rent: number
+  medical: number
+  conveyance: number
+  pf_percent: number
+  tax_monthly: number
+  /** Contractors are paid per hour; employees derive it from gross. */
+  hourly_rate?: number
+}
 
 export interface SalaryForm {
   effective_from: string

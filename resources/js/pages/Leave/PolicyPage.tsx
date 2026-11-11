@@ -1,12 +1,16 @@
+import { router } from '@inertiajs/react'
 import { Check, Pencil, X } from 'lucide-react'
 import { useState } from 'react'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { Badge, IconButton, Input, Switch, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
-import { isUnlimited, useLeaveStore } from '../../mock/stores/leave'
+import { useShared } from '../../inertia/props'
 import type { LeaveType } from '../../types'
+import { isUnlimited } from './helpers'
 
-export function PolicyPage() {
-  const leave = useLeaveStore()
+export default function PolicyPage() {
+  const { leave_types } = useShared<{ leave_types: LeaveType[] }>()
+  const updateLeaveType = (id: string, patch: Partial<Omit<LeaveType, 'id'>>) =>
+    router.patch(route('leave.types.update', id), patch, { preserveScroll: true })
   const [editing, setEditing] = useState<string | null>(null)
   const [quota, setQuota] = useState('')
 
@@ -16,7 +20,7 @@ export function PolicyPage() {
   }
   const save = (t: LeaveType) => {
     const n = Number(quota)
-    if (Number.isFinite(n) && n >= 0) leave.updateLeaveType(t.id, { annual_quota: n })
+    if (Number.isFinite(n) && n >= 0) updateLeaveType(t.id, { annual_quota: n })
     setEditing(null)
   }
   const invalid = !(Number.isFinite(Number(quota)) && Number(quota) >= 0 && quota.trim() !== '')
@@ -36,7 +40,7 @@ export function PolicyPage() {
           </tr>
         </Thead>
         <Tbody>
-          {leave.leaveTypes.map((t) => {
+          {leave_types.map((t) => {
             const isEditing = editing === t.id
             return (
               <Tr key={t.id}>
@@ -66,21 +70,21 @@ export function PolicyPage() {
                 <Td>
                   <Switch
                     checked={t.is_paid}
-                    onCheckedChange={(v) => leave.updateLeaveType(t.id, { is_paid: v })}
+                    onCheckedChange={(v) => updateLeaveType(t.id, { is_paid: v })}
                     aria-label={`${t.name} is paid`}
                   />
                 </Td>
                 <Td>
                   <Switch
                     checked={t.carry_forward}
-                    onCheckedChange={(v) => leave.updateLeaveType(t.id, { carry_forward: v })}
+                    onCheckedChange={(v) => updateLeaveType(t.id, { carry_forward: v })}
                     aria-label={`${t.name} carries forward`}
                   />
                 </Td>
                 <Td>
                   <Switch
                     checked={t.allows_half_day}
-                    onCheckedChange={(v) => leave.updateLeaveType(t.id, { allows_half_day: v })}
+                    onCheckedChange={(v) => updateLeaveType(t.id, { allows_half_day: v })}
                     aria-label={`${t.name} allows half days`}
                   />
                 </Td>

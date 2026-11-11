@@ -36,4 +36,10 @@ class EmployeePolicy
     {
         return in_array($user->role, ['hr', 'management'], true);
     }
+
+    /** Salary, bank and documents: HR and management, or the person themselves. */
+    public function viewPay(User $user, Employee $employee): bool
+    {
+        return in_array($user->role, ['hr', 'management'], true) || $user->employee_id === $employee->id;
+    }
 }

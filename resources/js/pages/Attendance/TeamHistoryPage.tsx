@@ -1,6 +1,6 @@
-import { format, subDays } from 'date-fns'
+import { router } from '@inertiajs/react'
 import { CalendarDays, Download } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { HeatStrip } from '../../components/charts/HeatStrip'
 import { DurationText } from '../../components/shared/DurationText'
 import { EmptyTable } from '../../components/shared/EmptyTable'
@@ -24,17 +24,33 @@ import {
   Tr,
   type DateRange,
 } from '../../components/ui'
+import { useAuth, useShared } from '../../inertia/props'
 import { formatDate, formatDuration, formatTime } from '../../lib/format'
-import { teams } from '../../mock/db/people'
-import { useSession } from '../../mock/session'
-import { scopeEmployees, useAttendance } from '../../mock/stores/attendance'
-import { downloadCsv, totalsOf, useSegmentsByDay } from './lib'
-import { useAttendanceHeat } from './useAttendanceSeries'
+import type { AttendanceDay, Employee, Team } from '../../types'
+import type { DayTotals } from './lib'
+import { heatCells, type HeatDay } from './useAttendanceSeries'
 
-const ROW_LIMIT = 500
+interface HistoryRow {
+  day: AttendanceDay
+  employee: { id: string; name: string; code: string }
+  team: string | null
+  totals: DayTotals
+  regularization: 'Approved' | 'Pending' | 'Rejected' | null
+}
 
-function MemberHeat({ employeeId, name }: { employeeId: string; name: string }) {
-  const cells = useAttendanceHeat(employeeId, 30)
+interface HistoryProps {
+  filters: { from: string; to: string; team: string; employee: string; q: string }
+  rows: HistoryRow[]
+  total: number
+  limit: number
+  members: Employee[]
+  teams: Team[]
+  heat: Record<string, HeatDay[]>
+  attendance: { policy: { standard_minutes: number } }
+}
+
+function MemberHeat({ name, days, target }: { name: string; days: HeatDay[]; target: number }) {
+  const cells = heatCells(days, target)
   const worked = cells.filter((c) => c.value !== null && c.value > 0).length
   return (
     <li className="flex items-center gap-3">
@@ -44,71 +60,35 @@ function MemberHeat({ employeeId, name }: { employeeId: string; name: string }) 
   )
 }
 
-export function TeamHistoryPage() {
-  const employee = useSession((s) => s.employee)
-  const role = useSession((s) => s.role)
-  const days = useAttendance((s) => s.days)
-  const regs = useAttendance((s) => s.regularizations)
-  const now = useAttendance((s) => s.now)
-  const segsByDay = useSegmentsByDay()
-  const [range, setRange] = useState<DateRange>(() => ({
-    from: format(subDays(new Date(), 6), 'yyyy-MM-dd'),
-    to: format(new Date(), 'yyyy-MM-dd'),
-  }))
-  const [team, setTeam] = useState('all')
-  const [search, setSearch] = useState('')
+export default function TeamHistoryPage() {
+  const role = useAuth().role
+  const { filters, rows, total, limit, members, teams, heat, attendance } = useShared<HistoryProps>()
+  const [search, setSearch] = useState(filters.q)
+  const target = attendance.policy.standard_minutes * 60
 
-  const scope = useMemo(() => (employee && role ? scopeEmployees(employee.id, role) : []), [employee, role])
-
-  const rows = useMemo(() => {
-    const byId = new Map(scope.map((e) => [e.id, e]))
-    const q = search.trim().toLowerCase()
-    return days
-      .filter((d) => d.date >= range.from && d.date <= range.to && byId.has(d.employee_id))
-      .map((d) => ({ d, e: byId.get(d.employee_id)! }))
-      .filter(({ e }) => (team === 'all' ? true : e.team_id === team))
-      .filter(({ e }) => !q || e.name.toLowerCase().includes(q))
-      .sort((a, b) => (a.d.date === b.d.date ? a.e.name.localeCompare(b.e.name) : a.d.date < b.d.date ? 1 : -1))
-  }, [days, scope, range, team, search])
-
-  const regState = (dayId: string, regularized: boolean) => {
-    if (regularized) return 'Approved'
-    const r = regs.filter((x) => x.attendance_day_id === dayId)
-    if (r.some((x) => x.status === 'pending')) return 'Pending'
-    if (r.some((x) => x.status === 'rejected')) return 'Rejected'
-    return ''
+  const visit = (patch: Partial<HistoryProps['filters']>) => {
+    const next = { ...filters, ...patch }
+    router.get(route('attendance.team.history'), { ...next, team: next.team === 'all' ? undefined : next.team, employee: next.employee === 'all' ? undefined : next.employee, q: next.q || undefined }, { preserveState: true, preserveScroll: true, replace: true, only: ['filters', 'rows', 'total', 'members', 'heat'] })
   }
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) {
+      first.current = false
+      return
+    }
+    const id = window.setTimeout(() => visit({ q: search.trim() }), 300)
+    return () => window.clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search])
 
-  const exportCsv = () => {
-    const header = ['Date', 'Employee', 'Code', 'Team', 'In', 'Out', 'Work (min)', 'Break (min)', 'Offline (min)', 'Late (min)', 'Status', 'Regularized']
-    const body = rows.map(({ d, e }) => {
-      const t = totalsOf(segsByDay.get(d.id), now)
-      return [
-        d.date,
-        e.name,
-        e.code,
-        teams.find((x) => x.id === e.team_id)?.name ?? '',
-        d.first_in_at ? formatTime(d.first_in_at) : '',
-        d.last_out_at ? formatTime(d.last_out_at) : '',
-        Math.round(t.workSeconds / 60),
-        Math.round(t.breakSeconds / 60),
-        Math.round(t.offlineSeconds / 60),
-        d.late_minutes,
-        d.status,
-        regState(d.id, d.is_regularized),
-      ]
-    })
-    downloadCsv(`attendance-${range.from}-to-${range.to}.csv`, [header, ...body])
-  }
-
-  const shown = rows.slice(0, ROW_LIMIT)
-  const members = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return scope
-      .filter((e) => (team === 'all' ? true : e.team_id === team))
-      .filter((e) => !q || e.name.toLowerCase().includes(q))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [scope, team, search])
+  const range: DateRange = { from: filters.from, to: filters.to }
+  const exportHref = route('attendance.team.history.csv', {
+    from: filters.from,
+    to: filters.to,
+    team: filters.team === 'all' ? undefined : filters.team,
+    employee: filters.employee === 'all' ? undefined : filters.employee,
+    q: filters.q || undefined,
+  })
 
   return (
     <>
@@ -116,19 +96,21 @@ export function TeamHistoryPage() {
         title="Team history"
         description="Attendance per person per day."
         actions={
-          <Button icon={<Download size={16} />} onClick={exportCsv} disabled={rows.length === 0}>
-            Export CSV
-          </Button>
+          <a href={exportHref} download aria-disabled={rows.length === 0}>
+            <Button icon={<Download size={16} />} disabled={rows.length === 0}>
+              Export CSV
+            </Button>
+          </a>
         }
       />
-      <DateRangePicker value={range} onChange={setRange} className="mb-3" />
+      <DateRangePicker value={range} onChange={(r) => visit({ from: r.from, to: r.to })} className="mb-3" />
       <TableToolbar
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search people"
         filters={
           role !== 'team_lead' ? (
-            <NativeSelect aria-label="Team" value={team} onChange={(e) => setTeam(e.target.value)} className="w-44">
+            <NativeSelect aria-label="Team" value={filters.team} onChange={(e) => visit({ team: e.target.value })} className="w-44">
               <option value="all">All teams</option>
               {teams.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -157,12 +139,12 @@ export function TeamHistoryPage() {
           />
           <ul className="grid gap-x-8 gap-y-2.5 p-4 lg:grid-cols-2" data-testid="heat-strips">
             {members.map((e) => (
-              <MemberHeat key={e.id} employeeId={e.id} name={e.name} />
+              <MemberHeat key={e.id} name={e.name} days={heat[e.id] ?? []} target={target} />
             ))}
           </ul>
         </Card>
       )}
-      {shown.length === 0 ? (
+      {rows.length === 0 ? (
         <EmptyTable icon={CalendarDays} title="No records" description="Nothing was recorded for this range and filter." />
       ) : (
         <Table>
@@ -181,20 +163,21 @@ export function TeamHistoryPage() {
             </Tr>
           </Thead>
           <Tbody>
-            {shown.map(({ d, e }) => {
-              const t = totalsOf(segsByDay.get(d.id), now)
-              const reg = regState(d.id, d.is_regularized)
+            {rows.map((r) => {
+              const d = r.day
+              const t = r.totals
+              const reg = r.regularization
               return (
                 <Tr key={d.id}>
                   <Td>{formatDate(d.date)}</Td>
                   <Td>
-                    <PersonCell name={e.name} />
+                    <PersonCell name={r.employee.name} />
                   </Td>
                   <Td numeric>{d.first_in_at ? formatTime(d.first_in_at) : '-'}</Td>
                   <Td numeric>{d.last_out_at ? formatTime(d.last_out_at) : '-'}</Td>
-                  <Td numeric>{d.first_in_at ? <DurationText seconds={t.workSeconds} /> : '-'}</Td>
-                  <Td numeric>{d.first_in_at ? formatDuration(t.breakSeconds) : '-'}</Td>
-                  <Td numeric>{d.first_in_at && t.offlineSeconds >= 60 ? formatDuration(t.offlineSeconds) : '-'}</Td>
+                  <Td numeric>{d.first_in_at ? <DurationText seconds={t.work_seconds} /> : '-'}</Td>
+                  <Td numeric>{d.first_in_at ? formatDuration(t.break_seconds) : '-'}</Td>
+                  <Td numeric>{d.first_in_at && t.offline_seconds >= 60 ? formatDuration(t.offline_seconds) : '-'}</Td>
                   <Td numeric>{d.late_minutes > 0 ? d.late_minutes : '-'}</Td>
                   <Td>
                     <StatusBadge status={d.status} />
@@ -216,8 +199,8 @@ export function TeamHistoryPage() {
           </Tbody>
         </Table>
       )}
-      <TableFooter count={rows.length} noun={rows.length === 1 ? 'record' : 'records'}>
-        {rows.length > ROW_LIMIT && <span>Showing the first {ROW_LIMIT}. The CSV has all rows.</span>}
+      <TableFooter count={total} noun={total === 1 ? 'record' : 'records'}>
+        {total > limit && <span>Showing the first {limit}. The CSV has all rows.</span>}
       </TableFooter>
     </>
   )

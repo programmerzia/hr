@@ -1,50 +1,63 @@
+import { useForm } from '@inertiajs/react'
 import { useMemo, useState } from 'react'
 import { Button, Dialog, Field, Input, NativeSelect, SegmentedControl, Textarea } from '../../components/ui'
-import { useLeaveStore } from '../../mock/stores/leave'
-import { todayIso } from '../../mock/stores/people'
-import type { HalfDay } from '../../types'
-import { formatDays, halfDayLabels } from './helpers'
+import type { HalfDay, ISODate, LeaveType } from '../../types'
+import { computeLeaveDays, formatDays, halfDayLabels, todayIso, type BalanceRow } from './helpers'
 
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
-  employeeId: string
+  leaveTypes: LeaveType[]
+  balances: BalanceRow[]
+  holidays: ISODate[]
+  weekend: number[]
 }
 
-export function RequestLeaveDialog({ open, onOpenChange, employeeId }: Props) {
-  const leave = useLeaveStore()
-  const [typeId, setTypeId] = useState('lt-casual')
-  const [from, setFrom] = useState(todayIso())
-  const [to, setTo] = useState(todayIso())
-  const [half, setHalf] = useState<HalfDay>('none')
-  const [reason, setReason] = useState('')
-  const [attachment, setAttachment] = useState('')
-  const [error, setError] = useState<string | undefined>()
+export function RequestLeaveDialog({ open, onOpenChange, leaveTypes, balances, holidays, weekend }: Props) {
+  const defaultType = (leaveTypes.find((t) => /casual/i.test(t.name)) ?? leaveTypes[0])?.id ?? ''
+  const form = useForm({
+    leave_type_id: defaultType,
+    starts_on: todayIso(),
+    ends_on: todayIso(),
+    half_day: 'none' as HalfDay,
+    reason: '',
+    attachment_name: '',
+  })
   const [touched, setTouched] = useState(false)
+  const { data } = form
 
-  const type = leave.leaveTypes.find((t) => t.id === typeId)
-  const singleDay = from === to
-  const effectiveHalf: HalfDay = type?.allows_half_day && singleDay ? half : 'none'
-  const days = useMemo(() => (from && to ? leave.daysFor(from, to, effectiveHalf) : 0), [leave, from, to, effectiveHalf])
-  const balance = leave.balancesFor(employeeId, Number(from.slice(0, 4) || new Date().getFullYear())).find((b) => b.leave_type_id === typeId)
+  const type = leaveTypes.find((t) => t.id === data.leave_type_id)
+  const singleDay = data.starts_on === data.ends_on
+  const effectiveHalf: HalfDay = type?.allows_half_day && singleDay ? data.half_day : 'none'
+  const days = useMemo(
+    () => (data.starts_on && data.ends_on ? computeLeaveDays(data.starts_on, data.ends_on, effectiveHalf, holidays, weekend) : 0),
+    [data.starts_on, data.ends_on, effectiveHalf, holidays, weekend],
+  )
+  const year = Number(data.starts_on.slice(0, 4) || new Date().getFullYear())
+  const balance = balances.find((b) => b.leave_type_id === data.leave_type_id && b.year === year)
 
-  const reasonError = touched && !reason.trim() ? 'Add a reason' : undefined
+  const reasonError = touched && !data.reason.trim() ? 'Add a reason' : undefined
+  const change = <K extends keyof typeof data>(key: K, value: (typeof data)[K]) => {
+    form.clearErrors()
+    form.setData((d) => ({ ...d, [key]: value }))
+  }
 
   const submit = () => {
     setTouched(true)
-    if (!reason.trim()) return
-    const res = leave.submitLeave(employeeId, typeId, from, to, effectiveHalf, reason, attachment)
-    if (!res.ok) {
-      setError(res.error)
-      return
-    }
-    setReason('')
-    setAttachment('')
-    setHalf('none')
-    setTouched(false)
-    setError(undefined)
-    onOpenChange(false)
+    if (!data.reason.trim()) return
+    form.transform((d) => ({ ...d, half_day: effectiveHalf }))
+    form.post(route('leave.store'), {
+      preserveScroll: true,
+      onSuccess: () => {
+        form.reset('reason', 'attachment_name', 'half_day')
+        setTouched(false)
+        onOpenChange(false)
+      },
+    })
   }
+
+  const errors = form.errors as Record<string, string>
+  const error = errors.leave ?? Object.values(errors)[0]
 
   return (
     <Dialog
@@ -57,7 +70,7 @@ export function RequestLeaveDialog({ open, onOpenChange, employeeId }: Props) {
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit} disabled={!reason.trim() || !from || !to}>
+          <Button variant="primary" onClick={submit} disabled={!data.reason.trim() || !data.starts_on || !data.ends_on || form.processing}>
             Submit request
           </Button>
         </>
@@ -65,14 +78,8 @@ export function RequestLeaveDialog({ open, onOpenChange, employeeId }: Props) {
     >
       <div className="flex flex-col gap-4 pb-2">
         <Field label="Leave type">
-          <NativeSelect
-            value={typeId}
-            onChange={(e) => {
-              setTypeId(e.target.value)
-              setError(undefined)
-            }}
-          >
-            {leave.leaveTypes.map((t) => (
+          <NativeSelect value={data.leave_type_id} onChange={(e) => change('leave_type_id', e.target.value)}>
+            {leaveTypes.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
@@ -83,24 +90,23 @@ export function RequestLeaveDialog({ open, onOpenChange, employeeId }: Props) {
           <Field label="From">
             <Input
               type="date"
-              value={from}
+              value={data.starts_on}
               onChange={(e) => {
-                setFrom(e.target.value)
-                if (e.target.value > to) setTo(e.target.value)
-                setError(undefined)
+                form.clearErrors()
+                form.setData((d) => ({ ...d, starts_on: e.target.value, ends_on: e.target.value > d.ends_on ? e.target.value : d.ends_on }))
               }}
             />
           </Field>
           <Field label="To">
-            <Input type="date" value={to} min={from} onChange={(e) => { setTo(e.target.value); setError(undefined) }} />
+            <Input type="date" value={data.ends_on} min={data.starts_on} onChange={(e) => change('ends_on', e.target.value)} />
           </Field>
         </div>
         {type?.allows_half_day && singleDay && (
           <Field label="Duration">
             <SegmentedControl
               aria-label="Duration"
-              value={half}
-              onValueChange={setHalf}
+              value={data.half_day}
+              onValueChange={(v) => change('half_day', v)}
               options={(['none', 'first_half', 'second_half'] as const).map((v) => ({ value: v, label: halfDayLabels[v] }))}
             />
           </Field>
@@ -110,10 +116,10 @@ export function RequestLeaveDialog({ open, onOpenChange, employeeId }: Props) {
           {balance && !balance.unlimited && ` ${balance.available} available in ${balance.year}.`}
         </p>
         <Field label="Reason" error={reasonError} required>
-          <Textarea value={reason} onChange={(e) => setReason(e.target.value)} />
+          <Textarea value={data.reason} onChange={(e) => change('reason', e.target.value)} />
         </Field>
         <Field label="Attachment" hint="File name of a sick note or other document. Optional.">
-          <Input value={attachment} onChange={(e) => setAttachment(e.target.value)} placeholder="medical-certificate.pdf" />
+          <Input value={data.attachment_name} onChange={(e) => change('attachment_name', e.target.value)} placeholder="medical-certificate.pdf" />
         </Field>
         {error && (
           <p role="alert" className="text-sm text-danger">

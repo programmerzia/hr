@@ -1,8 +1,9 @@
+import { router, useForm } from '@inertiajs/react'
 import { useState } from 'react'
 import { Credentials } from '../../components/shared/Credentials'
 import { Button, Dialog, Field, Input, NativeSelect } from '../../components/ui'
-import { todayIso, usePeopleStore } from '../../mock/stores/people'
-import type { Employee, EmployeeDocumentKind, EmployeeStatus } from '../../types'
+import { useShared } from '../../inertia/props'
+import type { BankAccount, Employee, EmployeeDocumentKind, EmployeeStatus, SalaryStructure, Team } from '../../types'
 import { statusOptions } from './helpers'
 import {
   SalaryFields,
@@ -11,6 +12,12 @@ import {
   validateSalary,
   type SalaryErrors,
 } from './SalaryFields'
+
+const todayIso = () => {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
 
 interface DialogProps {
   open: boolean
@@ -28,8 +35,10 @@ function Footer({ onCancel, onSubmit, label, disabled }: { onCancel: () => void;
 }
 
 export function ResetPasswordDialog({ open, onOpenChange, employee }: DialogProps) {
-  const reset = usePeopleStore((s) => s.resetPassword)
-  const [temp, setTemp] = useState<string | null>(null)
+  const { credentials } = useShared<{ credentials: { email: string; temporary_password: string; context: string } | null }>()
+  const temp = credentials?.context === 'reset' ? credentials.temporary_password : null
+  const [busy, setBusy] = useState(false)
+  const reset = () => router.post(route('people.reset-password', employee.id), {}, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => setBusy(false) })
   return (
     <Dialog
       open={open}
@@ -40,7 +49,7 @@ export function ResetPasswordDialog({ open, onOpenChange, employee }: DialogProp
         temp === null ? (
           <>
             <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button variant="primary" onClick={() => setTemp(reset(employee.id))}>Reset password</Button>
+            <Button variant="primary" onClick={reset} disabled={busy}>Reset password</Button>
           </>
         ) : (
           <Button variant="primary" onClick={() => onOpenChange(false)}>Done</Button>
@@ -59,33 +68,25 @@ export function ResetPasswordDialog({ open, onOpenChange, employee }: DialogProp
 }
 
 export function ChangeStatusDialog({ open, onOpenChange, employee }: DialogProps) {
-  const people = usePeopleStore()
-  const [status, setStatus] = useState<EmployeeStatus>(employee.status)
-  const [on, setOn] = useState(todayIso())
-  const [error, setError] = useState<string | undefined>()
-  const exiting = status === 'resigned' || status === 'terminated'
-  const submit = () => {
-    const res = people.changeStatus(employee.id, status, on)
-    if (!res.ok) return setError(res.error)
-    setError(undefined)
-    onOpenChange(false)
-  }
+  const form = useForm<{ status: EmployeeStatus; effective_on: string }>({ status: employee.status, effective_on: todayIso() })
+  const exiting = form.data.status === 'resigned' || form.data.status === 'terminated'
+  const submit = () => form.post(route('people.status', employee.id), { preserveScroll: true, onSuccess: () => onOpenChange(false) })
   return (
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
       title="Change status"
       description={employee.name}
-      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Save status" />}
+      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Save status" disabled={form.processing} />}
     >
       <div className="flex flex-col gap-4 pb-2">
-        <Field label="Status">
-          <NativeSelect value={status} onChange={(e) => { setStatus(e.target.value as EmployeeStatus); setError(undefined) }}>
+        <Field label="Status" error={form.errors.status}>
+          <NativeSelect value={form.data.status} onChange={(e) => { form.setData('status', e.target.value as EmployeeStatus); form.clearErrors() }}>
             {statusOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </NativeSelect>
         </Field>
-        <Field label="Effective on" hint={exiting ? 'Sets the exit date and disables sign-in.' : undefined} error={error}>
-          <Input type="date" value={on} onChange={(e) => setOn(e.target.value)} />
+        <Field label="Effective on" hint={exiting ? 'Sets the exit date and disables sign-in.' : undefined} error={form.errors.effective_on}>
+          <Input type="date" value={form.data.effective_on} onChange={(e) => form.setData('effective_on', e.target.value)} />
         </Field>
       </div>
     </Dialog>
@@ -93,45 +94,36 @@ export function ChangeStatusDialog({ open, onOpenChange, employee }: DialogProps
 }
 
 export function EditEmployeeDialog({ open, onOpenChange, employee }: DialogProps) {
-  const people = usePeopleStore()
-  const [name, setName] = useState(employee.name)
-  const [designation, setDesignation] = useState(employee.designation)
-  const [phone, setPhone] = useState(employee.phone)
-  const [email, setEmail] = useState(employee.email)
-  const [teamId, setTeamId] = useState(employee.team_id ?? 'none')
-  const [touched, setTouched] = useState(false)
-  const missing = (v: string) => (touched && !v.trim() ? 'Required' : undefined)
+  const { teams } = useShared<{ teams?: Team[] }>()
+  const form = useForm({
+    name: employee.name,
+    designation: employee.designation,
+    email: employee.email,
+    phone: employee.phone,
+    team_id: employee.team_id ?? 'none',
+  })
   const submit = () => {
-    setTouched(true)
-    if (!name.trim() || !designation.trim() || !email.trim()) return
-    const team = people.teams.find((t) => t.id === teamId)
-    people.updateEmployee(employee.id, {
-      name: name.trim(),
-      designation: designation.trim(),
-      phone: phone.trim(),
-      email: email.trim(),
-      team_id: team?.id ?? null,
-      department_id: team?.department_id ?? employee.department_id,
-    })
-    onOpenChange(false)
+    form.transform((d) => ({ ...d, team_id: d.team_id === 'none' ? null : d.team_id }))
+    form.patch(route('people.update', employee.id), { preserveScroll: true, onSuccess: () => onOpenChange(false) })
   }
+  const bind = (k: 'name' | 'designation' | 'email' | 'phone') => ({ value: form.data[k], onChange: (e: React.ChangeEvent<HTMLInputElement>) => form.setData(k, e.target.value) })
   return (
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
       title="Edit details"
       description={employee.code}
-      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Save changes" />}
+      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Save changes" disabled={form.processing} />}
     >
       <div className="flex flex-col gap-4 pb-2">
-        <Field label="Full name" error={missing(name)} required><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
-        <Field label="Designation" error={missing(designation)} required><Input value={designation} onChange={(e) => setDesignation(e.target.value)} /></Field>
-        <Field label="Email" error={missing(email)} required><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-        <Field label="Phone"><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
-        <Field label="Team">
-          <NativeSelect value={teamId} onChange={(e) => setTeamId(e.target.value)}>
+        <Field label="Full name" error={form.errors.name} required><Input {...bind('name')} /></Field>
+        <Field label="Designation" error={form.errors.designation} required><Input {...bind('designation')} /></Field>
+        <Field label="Email" error={form.errors.email} required><Input type="email" {...bind('email')} /></Field>
+        <Field label="Phone" error={form.errors.phone}><Input {...bind('phone')} /></Field>
+        <Field label="Team" error={form.errors.team_id}>
+          <NativeSelect value={form.data.team_id} onChange={(e) => form.setData('team_id', e.target.value)}>
             <option value="none">No team</option>
-            {people.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            {(teams ?? []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </NativeSelect>
         </Field>
       </div>
@@ -139,39 +131,35 @@ export function EditEmployeeDialog({ open, onOpenChange, employee }: DialogProps
   )
 }
 
-export function NewStructureDialog({ open, onOpenChange, employee }: DialogProps) {
-  const people = usePeopleStore()
+export function NewStructureDialog({ open, onOpenChange, employee, current }: DialogProps & { current: SalaryStructure | undefined }) {
   const hourly = employee.employment_type === 'contractor'
-  const [form, setForm] = useState(() => salaryFormFrom(people.currentSalary(employee.id), todayIso()))
+  const form = useForm(salaryFormFrom(current, todayIso()))
   const [errors, setErrors] = useState<SalaryErrors>({})
-  const [error, setError] = useState<string | undefined>()
   const submit = () => {
-    const errs = validateSalary(form, hourly)
+    const errs = validateSalary(form.data, hourly)
     setErrors(errs)
     if (Object.keys(errs).length) return
-    const res = people.addSalaryStructure(employee.id, toSalaryInput(form, hourly))
-    if (!res.ok) return setError(res.error)
-    onOpenChange(false)
+    form.transform((d) => ({ ...toSalaryInput(d, hourly) }))
+    form.post(route('people.salary', employee.id), { preserveScroll: true, onSuccess: () => onOpenChange(false) })
   }
+  const shown: SalaryErrors = { ...errors, ...(form.errors as SalaryErrors) }
   return (
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
       title="New salary structure"
       description="Structures are never edited. A new one takes over from its effective date."
-      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Add structure" />}
+      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Add structure" disabled={form.processing} />}
     >
       <div className="pb-2">
-        <SalaryFields value={form} onChange={(f) => { setForm(f); setError(undefined) }} errors={error ? { ...errors, effective_from: error } : errors} hourly={hourly} />
+        <SalaryFields value={form.data} onChange={(f) => { form.setData(f); form.clearErrors() }} errors={shown} hourly={hourly} />
       </div>
     </Dialog>
   )
 }
 
-export function EditBankDialog({ open, onOpenChange, employee }: DialogProps) {
-  const people = usePeopleStore()
-  const bank = people.bankOf(employee.id)
-  const [f, setF] = useState({
+export function EditBankDialog({ open, onOpenChange, employee, bank }: DialogProps & { bank: BankAccount | null }) {
+  const form = useForm({
     bank: bank?.bank ?? '',
     account_name: bank?.account_name ?? employee.name,
     account_no: bank?.account_no ?? '',
@@ -179,13 +167,12 @@ export function EditBankDialog({ open, onOpenChange, employee }: DialogProps) {
     branch: bank?.branch ?? '',
   })
   const [touched, setTouched] = useState(false)
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value })
-  const missing = (v: string) => (touched && !v.trim() ? 'Required' : undefined)
+  const set = (k: keyof typeof form.data) => (e: React.ChangeEvent<HTMLInputElement>) => form.setData(k, e.target.value)
+  const missing = (k: keyof typeof form.data) => form.errors[k] ?? (touched && !form.data[k].trim() ? 'Required' : undefined)
   const submit = () => {
     setTouched(true)
-    if (Object.values(f).some((v) => !v.trim())) return
-    people.updateBankAccount(employee.id, f)
-    onOpenChange(false)
+    if (Object.values(form.data).some((v) => !v.trim())) return
+    form.post(route('people.bank', employee.id), { preserveScroll: true, onSuccess: () => onOpenChange(false) })
   }
   return (
     <Dialog
@@ -193,14 +180,14 @@ export function EditBankDialog({ open, onOpenChange, employee }: DialogProps) {
       onOpenChange={onOpenChange}
       title="Edit bank account"
       description="Salary and claims are paid to this account."
-      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Save account" disabled={Object.values(f).some((v) => !v.trim())} />}
+      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Save account" disabled={form.processing || Object.values(form.data).some((v) => !v.trim())} />}
     >
       <div className="flex flex-col gap-4 pb-2">
-        <Field label="Bank" error={missing(f.bank)} required><Input value={f.bank} onChange={set('bank')} /></Field>
-        <Field label="Branch" error={missing(f.branch)} required><Input value={f.branch} onChange={set('branch')} /></Field>
-        <Field label="Account name" error={missing(f.account_name)} required><Input value={f.account_name} onChange={set('account_name')} /></Field>
-        <Field label="Account number" error={missing(f.account_no)} required><Input value={f.account_no} onChange={set('account_no')} className="font-mono" /></Field>
-        <Field label="Routing number" error={missing(f.routing_no)} required><Input value={f.routing_no} onChange={set('routing_no')} className="font-mono" /></Field>
+        <Field label="Bank" error={missing('bank')} required><Input value={form.data.bank} onChange={set('bank')} /></Field>
+        <Field label="Branch" error={missing('branch')} required><Input value={form.data.branch} onChange={set('branch')} /></Field>
+        <Field label="Account name" error={missing('account_name')} required><Input value={form.data.account_name} onChange={set('account_name')} /></Field>
+        <Field label="Account number" error={missing('account_no')} required><Input value={form.data.account_no} onChange={set('account_no')} className="font-mono" /></Field>
+        <Field label="Routing number" error={missing('routing_no')} required><Input value={form.data.routing_no} onChange={set('routing_no')} className="font-mono" /></Field>
       </div>
     </Dialog>
   )
@@ -216,34 +203,24 @@ const docKinds: { value: EmployeeDocumentKind; label: string }[] = [
 export const docKindLabel = (k: EmployeeDocumentKind) => docKinds.find((d) => d.value === k)?.label ?? k
 
 export function AddDocumentDialog({ open, onOpenChange, employee }: DialogProps) {
-  const people = usePeopleStore()
-  const [kind, setKind] = useState<EmployeeDocumentKind>('other')
-  const [name, setName] = useState('')
-  const [touched, setTouched] = useState(false)
-  const submit = () => {
-    setTouched(true)
-    if (!name.trim()) return
-    people.addDocument(employee.id, { kind, name: name.trim() })
-    setName('')
-    setTouched(false)
-    onOpenChange(false)
-  }
+  const form = useForm<{ kind: EmployeeDocumentKind; file: File | null }>({ kind: 'other', file: null })
+  const submit = () => form.post(route('people.documents', employee.id), { preserveScroll: true, forceFormData: true, onSuccess: () => onOpenChange(false) })
   return (
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
       title="Add document"
       description={employee.name}
-      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Add document" disabled={!name.trim()} />}
+      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Add document" disabled={form.processing || !form.data.file} />}
     >
       <div className="flex flex-col gap-4 pb-2">
-        <Field label="Kind">
-          <NativeSelect value={kind} onChange={(e) => setKind(e.target.value as EmployeeDocumentKind)}>
+        <Field label="Kind" error={form.errors.kind}>
+          <NativeSelect value={form.data.kind} onChange={(e) => form.setData('kind', e.target.value as EmployeeDocumentKind)}>
             {docKinds.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
           </NativeSelect>
         </Field>
-        <Field label="File name" error={touched && !name.trim() ? 'Enter a file name' : undefined} required>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Offer letter.pdf" />
+        <Field label="File" error={form.errors.file} required>
+          <Input type="file" onChange={(e) => form.setData('file', e.target.files?.[0] ?? null)} />
         </Field>
       </div>
     </Dialog>
@@ -251,32 +228,20 @@ export function AddDocumentDialog({ open, onOpenChange, employee }: DialogProps)
 }
 
 export function AddAssetDialog({ open, onOpenChange, employee }: DialogProps) {
-  const people = usePeopleStore()
-  const [name, setName] = useState('')
-  const [tag, setTag] = useState('')
-  const [on, setOn] = useState(todayIso())
-  const [touched, setTouched] = useState(false)
-  const submit = () => {
-    setTouched(true)
-    if (!name.trim() || !tag.trim()) return
-    people.addAsset(employee.id, { name: name.trim(), tag: tag.trim(), assigned_on: on })
-    setName('')
-    setTag('')
-    setTouched(false)
-    onOpenChange(false)
-  }
+  const form = useForm({ name: '', tag: '', assigned_on: todayIso() })
+  const submit = () => form.post(route('people.assets', employee.id), { preserveScroll: true, onSuccess: () => onOpenChange(false) })
   return (
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
       title="Assign asset"
       description={employee.name}
-      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Assign asset" disabled={!name.trim() || !tag.trim()} />}
+      footer={<Footer onCancel={() => onOpenChange(false)} onSubmit={submit} label="Assign asset" disabled={form.processing || !form.data.name.trim() || !form.data.tag.trim()} />}
     >
       <div className="flex flex-col gap-4 pb-2">
-        <Field label="Asset" error={touched && !name.trim() ? 'Required' : undefined} required><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Dell monitor 24 inch" /></Field>
-        <Field label="Asset tag" error={touched && !tag.trim() ? 'Required' : undefined} required><Input value={tag} onChange={(e) => setTag(e.target.value)} className="font-mono" placeholder="MN-0042" /></Field>
-        <Field label="Assigned on"><Input type="date" value={on} onChange={(e) => setOn(e.target.value)} /></Field>
+        <Field label="Asset" error={form.errors.name} required><Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder="Dell monitor 24 inch" /></Field>
+        <Field label="Asset tag" error={form.errors.tag} required><Input value={form.data.tag} onChange={(e) => form.setData('tag', e.target.value)} className="font-mono" placeholder="MN-0042" /></Field>
+        <Field label="Assigned on" error={form.errors.assigned_on}><Input type="date" value={form.data.assigned_on} onChange={(e) => form.setData('assigned_on', e.target.value)} /></Field>
       </div>
     </Dialog>
   )

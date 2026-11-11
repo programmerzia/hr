@@ -1,30 +1,23 @@
+import { router } from '@inertiajs/react'
 import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import { Button, IconButton, Input, NativeSelect, Sheet } from '../../components/ui'
 import { PersonCell } from '../../components/shared/PersonCell'
-import { employees } from '../../mock/db/people'
-import { useAuthed } from '../../mock/session'
-import { canManageProject, useWork } from '../../mock/stores/work'
-import type { Project } from '../../types'
-import { personName, useProjectColumns } from './shared'
+import { useShared } from '../../inertia/props'
+import { usePersonName, type ProjectScreenProps } from './shared'
+
+const keep = { preserveScroll: true, preserveState: true } as const
 
 export function ProjectSettingsSheet({
-  project,
   open,
   onOpenChange,
 }: {
-  project: Project
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const { employee, role } = useAuthed()
-  const s = useWork()
-  const columns = useProjectColumns(project.id)
-  const canManage = canManageProject(project, employee.id, role)
-  const memberIds = s.members.filter((m) => m.project_id === project.id).map((m) => m.employee_id)
-  const candidates = employees.filter(
-    (e) => !memberIds.includes(e.id) && (e.status === 'active' || e.status === 'probation' || e.status === 'on_leave'),
-  )
+  const { project, columns, members, candidates, can_manage: canManage } = useShared<ProjectScreenProps>()
+  const personName = usePersonName()
+  const memberIds = members.map((m) => m.employee_id)
   const [newMember, setNewMember] = useState('')
   const [newColumn, setNewColumn] = useState('')
 
@@ -32,7 +25,7 @@ export function ProjectSettingsSheet({
     const ids = columns.map((c) => c.id)
     const [item] = ids.splice(index, 1)
     ids.splice(index + delta, 0, item)
-    s.reorderColumns(project.id, ids)
+    router.post(route('work.projects.columns.reorder', project.key), { ids }, keep)
   }
 
   return (
@@ -48,7 +41,7 @@ export function ProjectSettingsSheet({
               <li key={id} className="flex h-9 items-center justify-between gap-2">
                 <PersonCell name={personName(id)} subtitle={id === project.lead_employee_id ? 'Lead' : undefined} />
                 {canManage && id !== project.lead_employee_id && (
-                  <IconButton label={`Remove ${personName(id)}`} size="sm" onClick={() => s.removeMember(project.id, id)}>
+                  <IconButton label={`Remove ${personName(id)}`} size="sm" onClick={() => router.delete(route('work.projects.members.remove', [project.key, id]), keep)}>
                     <X size={14} />
                   </IconButton>
                 )}
@@ -68,7 +61,7 @@ export function ProjectSettingsSheet({
               <Button
                 disabled={!newMember}
                 onClick={() => {
-                  s.addMember(project.id, newMember)
+                  router.post(route('work.projects.members.add', project.key), { employee_id: newMember }, keep)
                   setNewMember('')
                 }}
               >
@@ -88,7 +81,7 @@ export function ProjectSettingsSheet({
                   defaultValue={c.name}
                   disabled={!canManage}
                   onBlur={(e) => {
-                    if (e.target.value.trim() && e.target.value !== c.name) s.renameColumn(c.id, e.target.value)
+                    if (e.target.value.trim() && e.target.value !== c.name) router.patch(route('work.columns.update', c.id), { name: e.target.value }, keep)
                     else e.target.value = c.name
                   }}
                 />
@@ -110,7 +103,9 @@ export function ProjectSettingsSheet({
               className="flex gap-2"
               onSubmit={(e) => {
                 e.preventDefault()
-                if (s.addColumn(project.id, newColumn)) setNewColumn('')
+                if (!newColumn.trim()) return
+                router.post(route('work.projects.columns.add', project.key), { name: newColumn }, keep)
+                setNewColumn('')
               }}
             >
               <Input aria-label="New column name" placeholder="New column" value={newColumn} onChange={(e) => setNewColumn(e.target.value)} />

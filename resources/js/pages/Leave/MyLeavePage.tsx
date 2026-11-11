@@ -1,28 +1,34 @@
+import { Link, router } from '@inertiajs/react'
 import { CalendarDays, Plane, Plus } from 'lucide-react'
 import { useState } from 'react'
-import { Link } from 'react-router'
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { Button, buttonVariants, Stat, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
+import { useAuth, useShared } from '../../inertia/props'
 import { formatDate } from '../../lib/format'
-import { useAuthed } from '../../mock/session'
-import { useLeaveStore } from '../../mock/stores/leave'
-import { todayIso } from '../../mock/stores/people'
-import type { LeaveRequest } from '../../types'
-import { formatDays, formatRange, halfDayLabels } from './helpers'
+import type { AttendancePolicy, Holiday, LeaveRequest, LeaveType } from '../../types'
+import { formatDays, formatRange, halfDayLabels, shortTypeName, todayIso, type BalanceRow } from './helpers'
 import { RequestLeaveDialog } from './RequestLeaveDialog'
 
-export function MyLeavePage() {
-  const { employee, role } = useAuthed()
-  const leave = useLeaveStore()
+interface MyLeaveProps {
+  year: number
+  balances: BalanceRow[]
+  requests: LeaveRequest[]
+  leave_types: LeaveType[]
+  holidays: Holiday[]
+  policy: AttendancePolicy
+}
+
+export default function MyLeavePage() {
+  const { role } = useAuth()
+  const { year, balances: allBalances, requests, leave_types, holidays, policy } = useShared<MyLeaveProps>()
   const [open, setOpen] = useState(false)
   const [toCancel, setToCancel] = useState<LeaveRequest | null>(null)
-  const year = new Date().getFullYear()
-  const balances = leave.balancesFor(employee.id, year).filter((b) => b.unlimited || b.entitled > 0 || b.used > 0 || b.pending > 0)
-  const requests = leave.requestsFor(employee.id)
-  const typeName = (id: string) => leave.leaveTypes.find((t) => t.id === id)?.name ?? id
+  const typeById = (id: string) => leave_types.find((t) => t.id === id)
+  const balances = allBalances.filter((b) => b.year === year && (b.unlimited || b.entitled > 0 || b.used > 0 || b.pending > 0))
+  const typeName = (id: string) => typeById(id)?.name ?? id
   const canCancel = (r: LeaveRequest) =>
     r.status === 'pending_lead' || r.status === 'pending_hr' || (r.status === 'approved' && r.starts_on > todayIso())
 
@@ -34,7 +40,7 @@ export function MyLeavePage() {
         actions={
           <>
             {(role === 'hr' || role === 'management') && (
-              <Link to="/leave/policy" className={buttonVariants({ variant: 'secondary' })}>
+              <Link href="/leave/policy" className={buttonVariants({ variant: 'secondary' })}>
                 Leave policy
               </Link>
             )}
@@ -49,7 +55,7 @@ export function MyLeavePage() {
           <Stat
             key={b.id}
             icon={Plane}
-            label={`${b.type.name}${b.type.is_paid ? '' : ' (unpaid)'}`}
+            label={`${typeName(b.leave_type_id)}${typeById(b.leave_type_id)?.is_paid ? '' : ' (unpaid)'}`}
             value={b.unlimited ? 'Unlimited' : `${b.available} of ${b.entitled}`}
             delta={{ value: `${b.used} used, ${b.pending} pending`, tone: 'neutral' }}
           />
@@ -102,20 +108,27 @@ export function MyLeavePage() {
         </Table>
       )}
 
-      <RequestLeaveDialog open={open} onOpenChange={setOpen} employeeId={employee.id} />
+      <RequestLeaveDialog
+        open={open}
+        onOpenChange={setOpen}
+        leaveTypes={leave_types}
+        balances={allBalances}
+        holidays={holidays.map((h) => h.date)}
+        weekend={policy.weekend_days}
+      />
       <ConfirmDialog
         open={!!toCancel}
         onOpenChange={(o) => !o && setToCancel(null)}
         title="Cancel leave request"
         description={
           toCancel
-            ? `Cancel your ${typeName(toCancel.leave_type_id).toLowerCase()} leave for ${formatRange(toCancel.starts_on, toCancel.ends_on)} (${formatDays(toCancel.days)})? The days go back to your balance.`
+            ? `Cancel your ${shortTypeName(typeName(toCancel.leave_type_id)).toLowerCase()} leave for ${formatRange(toCancel.starts_on, toCancel.ends_on)} (${formatDays(toCancel.days)})? The days go back to your balance.`
             : ''
         }
         confirmLabel="Cancel request"
         destructive
         onConfirm={() => {
-          if (toCancel) leave.cancel(toCancel.id)
+          if (toCancel) router.post(route('leave.cancel', toCancel.id), {}, { preserveScroll: true })
           setToCancel(null)
         }}
       />

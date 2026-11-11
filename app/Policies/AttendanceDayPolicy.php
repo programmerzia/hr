@@ -21,4 +21,10 @@ class AttendanceDayPolicy
     {
         return $user->role !== 'employee' && $user->employee_id !== $day->employee_id && $this->view($user, $day);
     }
+
+    /** Requesting a regularization: only for your own day. */
+    public function request(User $user, AttendanceDay $day): bool
+    {
+        return $user->employee_id !== null && $user->employee_id === $day->employee_id;
+    }
 }

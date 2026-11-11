@@ -1,4 +1,5 @@
-import { Fragment, useMemo, useState } from 'react'
+import { router } from '@inertiajs/react'
+import { Fragment, useEffect, useState } from 'react'
 import { Users } from 'lucide-react'
 import { StackedBar, type StackSegment } from '../../components/charts/StackedBar'
 import { DurationText } from '../../components/shared/DurationText'
@@ -19,20 +20,16 @@ import {
   Thead,
   Tr,
 } from '../../components/ui'
+import { useAuth, useShared } from '../../inertia/props'
 import { formatTime } from '../../lib/format'
 import { breakCategoryLabels, presenceTone } from '../../lib/status'
-import { dateKey } from '../../mock/db/attendance'
-import { teams } from '../../mock/db/people'
-import { useSession } from '../../mock/session'
-import { scopeEmployees, useAttendance } from '../../mock/stores/attendance'
-import type { AttendanceDayStatus, Employee, Role } from '../../types'
-import { totalsOf, useSegmentsByDay } from './lib'
-import { useWorkTasks } from './useMyTasks'
+import type { AttendanceDay, Employee, Team, TimeSegment } from '../../types'
+import { liveTotals, useServerNow, type DayTotals } from './lib'
 
-/** Row state: the day status, except a working person whose heartbeat went quiet shows as offline. */
-type RowState = AttendanceDayStatus | 'offline'
-const statusOrder = ['working', 'offline', 'on_break', 'not_started', 'ended', 'on_leave'] as const
-const statusColors: Record<(typeof statusOrder)[number], StackSegment['color']> = {
+/** Row state: the day status, except a working person whose heartbeat went quiet shows as offline (computed server-side). */
+type RowState = 'working' | 'offline' | 'on_break' | 'not_started' | 'ended' | 'on_leave'
+const statusOrder: RowState[] = ['working', 'offline', 'on_break', 'not_started', 'ended', 'on_leave']
+const statusColors: Record<RowState, StackSegment['color']> = {
   working: 'success',
   offline: 'muted',
   on_break: 'warning',
@@ -50,45 +47,43 @@ const statusFilters: { value: string; label: string }[] = [
   { value: 'on_leave', label: 'On leave' },
 ]
 
-export function TeamPage() {
-  const employee = useSession((s) => s.employee)
-  const role = useSession((s) => s.role)
-  if (!employee || !role) return null
-  return <Team viewer={employee} role={role} />
+interface Member {
+  employee: Employee
+  day: AttendanceDay | null
+  open_segment: TimeSegment | null
+  presence: RowState
+  offline_since: string | null
+  totals: DayTotals
+  task: { id: string; key: string; title: string } | null
 }
 
-function Team({ viewer, role }: { viewer: Employee; role: Role }) {
-  const now = useAttendance((s) => s.now)
-  const days = useAttendance((s) => s.days)
-  const entries = useAttendance((s) => s.taskTimeEntries)
-  const presenceOf = useAttendance((s) => s.presenceOf)
-  const segsByDay = useSegmentsByDay()
-  const tasks = useWorkTasks()
+interface TeamProps {
+  server_time: string
+  members: Member[]
+  teams: Team[]
+}
+
+export default function TeamPage() {
+  const role = useAuth().role
+  const { members, teams, server_time } = useShared<TeamProps>()
+  const now = useServerNow(server_time)
   const [search, setSearch] = useState('')
   const [team, setTeam] = useState('all')
   const [status, setStatus] = useState('all')
 
-  const scope = useMemo(() => scopeEmployees(viewer.id, role), [viewer.id, role])
-  const today = dateKey(new Date(now))
+  useEffect(() => {
+    const id = window.setInterval(() => router.reload({ only: ['members', 'server_time'] }), 30_000)
+    return () => window.clearInterval(id)
+  }, [])
 
-  const rows = scope.map((e) => {
-    const day = days.find((d) => d.employee_id === e.id && d.date === today)
-    const base: AttendanceDayStatus =
-      day?.status === 'holiday' || day?.status === 'absent' || !day ? 'not_started' : day.status
-    const presence = presenceOf(e.id, now)
-    const st: RowState = presence.offline ? 'offline' : base
-    const segs = (day && segsByDay.get(day.id)) || []
-    const open = segs.find((s) => s.ended_at === null)
-    const totals = totalsOf(segs, now)
-    const entry = entries.find((x) => x.employee_id === e.id && x.ended_at === null)
-    const task = entry ? tasks.find((t) => t.id === entry.task_id) : undefined
+  const rows = members.map((m) => {
+    const st = m.presence
+    const open = m.open_segment
+    // Only a person who is genuinely working accrues time locally; offline/ended rows keep the server value.
+    const totals = st === 'working' ? liveTotals(m.totals, open, server_time, now) : m.totals
     const since =
-      st === 'ended'
-        ? day?.last_out_at
-        : st === 'working' || st === 'on_break' || st === 'offline'
-          ? open?.started_at
-          : undefined
-    return { e, day, st, open, totals, task, taskId: entry?.task_id, since, offlineSince: presence.since }
+      st === 'ended' ? m.day?.last_out_at : st === 'working' || st === 'on_break' || st === 'offline' ? open?.started_at : undefined
+    return { e: m.employee, day: m.day, st, open, totals, task: m.task, since, offlineSince: m.offline_since }
   })
 
   const counts = statusOrder.map((s) => ({ s, n: rows.filter((r) => r.st === s).length }))
@@ -96,15 +91,15 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
   const grouped = role === 'hr' || role === 'management'
   const teamName = (id: string | null) => teams.find((t) => t.id === id)?.name ?? 'No team'
   const visible = rows
-    .filter((r) => (team === 'all' ? true : r.e.team_id === team))
-    .filter((r) => (status === 'all' ? true : r.st === status))
-    .filter((r) => !q || r.e.name.toLowerCase().includes(q) || r.e.designation.toLowerCase().includes(q))
-    .sort(
-      (a, b) =>
-        (grouped ? teamName(a.e.team_id).localeCompare(teamName(b.e.team_id)) : 0) ||
-        statusOrder.indexOf(a.st) - statusOrder.indexOf(b.st) ||
-        a.e.name.localeCompare(b.e.name),
-    )
+        .filter((r) => (team === 'all' ? true : r.e.team_id === team))
+        .filter((r) => (status === 'all' ? true : r.st === status))
+        .filter((r) => !q || r.e.name.toLowerCase().includes(q) || r.e.designation.toLowerCase().includes(q))
+        .sort(
+          (a, b) =>
+            (grouped ? teamName(a.e.team_id).localeCompare(teamName(b.e.team_id)) : 0) ||
+            statusOrder.indexOf(a.st) - statusOrder.indexOf(b.st) ||
+            a.e.name.localeCompare(b.e.name),
+        )
 
   const showTeamFilter = role !== 'team_lead'
   const labels: Record<string, string> = {
@@ -118,7 +113,7 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
 
   return (
     <>
-      <PageHeader title="Team" description="Live status for today. Updates every second." />
+      <PageHeader title="Team" description="Live status for today. Refreshes every 30 seconds." />
       <Card className="mb-4">
         <CardBody>
           <StackedBar
@@ -210,7 +205,7 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
                 </Td>
                 <Td numeric>{r.since ? formatTime(r.since) : '-'}</Td>
                 <Td numeric>
-                  {r.day?.first_in_at ? <DurationText seconds={r.totals.workSeconds} /> : '-'}
+                  {r.day?.first_in_at ? <DurationText seconds={r.totals.work_seconds} /> : '-'}
                 </Td>
                 <Td className="max-w-64 truncate">
                   {r.task ? (
@@ -218,8 +213,6 @@ function Team({ viewer, role }: { viewer: Employee; role: Role }) {
                       <span className="font-mono text-sm">{r.task.key}</span>{' '}
                       <span className="text-fg-muted">{r.task.title}</span>
                     </span>
-                  ) : r.taskId ? (
-                    <span className="font-mono text-sm">{r.taskId}</span>
                   ) : (
                     <span className="text-fg-subtle">-</span>
                   )}

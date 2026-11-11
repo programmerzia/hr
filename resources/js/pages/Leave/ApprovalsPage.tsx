@@ -1,67 +1,77 @@
+import { router } from '@inertiajs/react'
 import { CalendarCheck, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { PersonCell } from '../../components/shared/PersonCell'
 import { StatusBadge } from '../../components/shared/StatusBadge'
-import { Button, Dialog, Field, Sheet, Table, Tbody, Td, Textarea, Th, Thead, Tr, toast } from '../../components/ui'
+import { Button, Dialog, Field, Sheet, Table, Tbody, Td, Textarea, Th, Thead, Tr } from '../../components/ui'
+import { useShared } from '../../inertia/props'
 import { formatDate } from '../../lib/format'
-import { useAuthed } from '../../mock/session'
-import { isUnlimited, useLeaveStore } from '../../mock/stores/leave'
-import { usePeopleStore } from '../../mock/stores/people'
-import type { LeaveRequest } from '../../types'
-import { formatDays, formatRange, halfDayLabels } from './helpers'
+import type { LeaveApproval, LeaveRequest, LeaveType } from '../../types'
+import { formatDays, formatRange, halfDayLabels, isUnlimited, type BalanceRow, type LeavePerson } from './helpers'
 
-export function ApprovalsPage() {
-  const { employee, role } = useAuthed()
-  const leave = useLeaveStore()
-  const people = usePeopleStore()
+interface QueueItem {
+  request: LeaveRequest
+  overlaps: LeaveRequest[]
+  balance: BalanceRow | null
+  /** Days left after approval; null for unlimited types. */
+  balance_after: number | null
+  history: LeaveApproval[]
+}
+
+interface ApprovalsProps {
+  items: QueueItem[]
+  people: LeavePerson[]
+  leave_types: LeaveType[]
+  scope: 'lead' | 'hr'
+}
+
+export default function ApprovalsPage() {
+  const { items, people, leave_types, scope: stageScope } = useShared<ApprovalsProps>()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [rejecting, setRejecting] = useState<LeaveRequest | null>(null)
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | undefined>()
 
-  const queue = leave.pendingFor({ employeeId: employee.id, role })
-  const selected = queue.find((r) => r.id === selectedId) ?? null
-  const typeOf = (id: string) => leave.leaveTypes.find((t) => t.id === id)
-  const nameOf = (id: string) => people.employeeById(id)?.name ?? id
-  const stageOf = (r: LeaveRequest) => (r.status === 'pending_lead' ? 'lead' : 'hr')
+  const selected = items.find((i) => i.request.id === selectedId) ?? null
+  const typeOf = (id: string) => leave_types.find((t) => t.id === id)
+  const personOf = (id: string) => people.find((p) => p.id === id)
+  const nameOf = (id: string) => personOf(id)?.name ?? id
 
-  const summary = (r: LeaveRequest) => `${typeOf(r.leave_type_id)?.name ?? 'Leave'}, ${formatDays(r.days)}`
+  const errorOf = (errors: Record<string, string>) => errors.leave ?? Object.values(errors)[0]
 
   const approve = (r: LeaveRequest) => {
-    const res = stageOf(r) === 'lead' ? leave.approveAsLead(r.id, employee.id) : leave.approveAsHr(r.id, employee.id)
-    if (res.ok) {
-      setSelectedId(null)
-      setError(undefined)
-      toast.success(`Approved · ${summary(r)}`)
-    } else {
-      setError(res.error)
-      toast.error(res.error)
-    }
+    router.post(route('leave.approve', r.id), {}, {
+      preserveScroll: true,
+      onSuccess: () => {
+        setSelectedId(null)
+        setError(undefined)
+      },
+      onError: (errors) => setError(errorOf(errors)),
+    })
   }
 
   const confirmReject = () => {
     if (!rejecting) return
-    const res = leave.reject(rejecting.id, stageOf(rejecting), employee.id, note)
-    if (!res.ok) {
-      setError(res.error)
-      toast.error(res.error)
-      return
-    }
-    toast.success(`Rejected · ${summary(rejecting)}`)
-    setRejecting(null)
-    setSelectedId(null)
-    setNote('')
-    setError(undefined)
+    router.post(route('leave.reject', rejecting.id), { note }, {
+      preserveScroll: true,
+      onSuccess: () => {
+        setRejecting(null)
+        setSelectedId(null)
+        setNote('')
+        setError(undefined)
+      },
+      onError: (errors) => setError(errorOf(errors)),
+    })
   }
 
-  const scope = role === 'team_lead' ? 'Requests from your team waiting for your decision' : 'Requests that your team leads have passed on to HR'
+  const scope = stageScope === 'lead' ? 'Requests from your team waiting for your decision' : 'Requests that your team leads have passed on to HR'
 
   return (
     <div className="mx-auto max-w-content">
       <PageHeader title="Leave approvals" description={scope} />
-      {queue.length === 0 ? (
+      {items.length === 0 ? (
         <EmptyTable icon={CalendarCheck} title="Nothing to approve" description="New leave requests will appear here as they come in." />
       ) : (
         <Table>
@@ -77,9 +87,9 @@ export function ApprovalsPage() {
             </tr>
           </Thead>
           <Tbody>
-            {queue.map((r) => {
-              const e = people.employeeById(r.employee_id)
-              const clashes = leave.overlapsFor(r).length
+            {items.map(({ request: r, overlaps }) => {
+              const e = personOf(r.employee_id)
+              const clashes = overlaps.length
               return (
                 <Tr key={r.id} className="cursor-pointer" onClick={() => setSelectedId(r.id)}>
                   <Td><PersonCell name={e?.name ?? r.employee_id} subtitle={e?.designation} /></Td>
@@ -109,17 +119,17 @@ export function ApprovalsPage() {
         open={!!selected}
         onOpenChange={(o) => !o && setSelectedId(null)}
         title="Leave request"
-        description={selected ? nameOf(selected.employee_id) : undefined}
+        description={selected ? nameOf(selected.request.employee_id) : undefined}
         footer={
           selected && (
             <>
-              <Button variant="ghost" onClick={() => { setError(undefined); setRejecting(selected) }}>Reject</Button>
-              <Button variant="primary" onClick={() => approve(selected)}>Approve</Button>
+              <Button variant="ghost" onClick={() => { setError(undefined); setRejecting(selected.request) }}>Reject</Button>
+              <Button variant="primary" onClick={() => approve(selected.request)}>Approve</Button>
             </>
           )
         }
       >
-        {selected && <RequestDetail request={selected} />}
+        {selected && <RequestDetail item={selected} people={people} types={leave_types} />}
       </Sheet>
 
       <Dialog
@@ -144,15 +154,11 @@ export function ApprovalsPage() {
   )
 }
 
-function RequestDetail({ request: r }: { request: LeaveRequest }) {
-  const leave = useLeaveStore()
-  const people = usePeopleStore()
-  const type = leave.leaveTypes.find((t) => t.id === r.leave_type_id)
-  const e = people.employeeById(r.employee_id)
-  const overlaps = leave.overlapsFor(r)
-  const after = leave.balanceAfter(r)
-  const bal = leave.balancesFor(r.employee_id, Number(r.starts_on.slice(0, 4))).find((b) => b.leave_type_id === r.leave_type_id)
-  const history = leave.approvalsFor(r.id)
+function RequestDetail({ item, people, types }: { item: QueueItem; people: LeavePerson[]; types: LeaveType[] }) {
+  const { request: r, overlaps, balance: bal, balance_after: after, history } = item
+  const type = types.find((t) => t.id === r.leave_type_id)
+  const personOf = (id: string) => people.find((p) => p.id === id)
+  const e = personOf(r.employee_id)
 
   const rows: [string, string][] = [
     ['Type', type?.name ?? ''],
@@ -199,7 +205,7 @@ function RequestDetail({ request: r }: { request: LeaveRequest }) {
             <ul className="flex flex-col gap-1.5">
               {overlaps.map((o) => (
                 <li key={o.id} className="flex items-center justify-between gap-2 text-sm">
-                  <PersonCell name={people.employeeById(o.employee_id)?.name ?? o.employee_id} />
+                  <PersonCell name={personOf(o.employee_id)?.name ?? o.employee_id} />
                   <span className="shrink-0 text-fg-muted">
                     {formatRange(o.starts_on, o.ends_on)} <StatusBadge status={o.status} className="ml-1" />
                   </span>
@@ -218,7 +224,7 @@ function RequestDetail({ request: r }: { request: LeaveRequest }) {
           <ul className="flex flex-col gap-1.5 text-sm">
             {history.map((a) => (
               <li key={a.id}>
-                <span className="font-medium">{people.employeeById(a.decided_by)?.name}</span>{' '}
+                <span className="font-medium">{personOf(a.decided_by)?.name}</span>{' '}
                 <span className="text-fg-muted">
                   {a.decision} as {a.stage === 'lead' ? 'team lead' : 'HR'} on {formatDate(a.decided_at)}
                   {a.note ? `: ${a.note}` : ''}

@@ -1,57 +1,87 @@
-import { CheckSquare, FolderKanban, MoreHorizontal, Plus } from 'lucide-react'
+import { router } from '@inertiajs/react'
+import { CheckSquare, MoreHorizontal, Plus } from 'lucide-react'
 import { useMemo, useState, type DragEvent } from 'react'
-import { useParams, useSearchParams } from 'react-router'
-import { EmptyTable } from '../../components/shared/EmptyTable'
 import { Avatar, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger, IconButton } from '../../components/ui'
 import { chartColor, seriesColor } from '../../components/charts/colors'
+import { useShared } from '../../inertia/props'
 import { cn } from '../../lib/cn'
 import { formatDate } from '../../lib/format'
-import { useAuthed } from '../../mock/session'
-import { canManageProject, useWork } from '../../mock/stores/work'
-import type { BoardColumn, Project, Task } from '../../types'
+import type { BoardColumn } from '../../types'
 import { NewTaskDialog } from './NewTaskDialog'
 import { ProjectHeader } from './ProjectHeader'
-import { isOverdue, LabelChips, personName, PriorityIcon, useLabelsFor, useProjectByKey, useProjectColumns } from './shared'
+import { TaskDrawer } from './TaskDrawer'
+import {
+  isOverdue,
+  LabelChips,
+  PriorityIcon,
+  useLabelsFor,
+  usePersonName,
+  useTaskParam,
+  type ProjectScreenProps,
+  type TaskRow,
+} from './shared'
 
 interface DropTarget {
   columnId: string
   index: number
 }
 
-export function BoardPage() {
-  const { key } = useParams()
-  const project = useProjectByKey(key)
-  if (!project) {
-    return (
-      <div className="mx-auto max-w-content">
-        <EmptyTable icon={FolderKanban} title="Project not found" description={`No project with key ${key ?? ''} exists.`} />
-      </div>
+/** Moves a card in the local list the way the server will, so the board answers instantly. */
+function placeTask(tasks: TaskRow[], taskId: string, columnId: string, position?: number): TaskRow[] {
+  const task = tasks.find((t) => t.id === taskId)
+  if (!task) return tasks
+  const from = task.column_id
+  const ids = tasks
+    .filter((t) => t.column_id === columnId && t.id !== taskId)
+    .sort((a, b) => a.position - b.position)
+    .map((t) => t.id)
+  const at = position === undefined ? ids.length : Math.max(0, Math.min(position, ids.length))
+  ids.splice(at, 0, taskId)
+  const renumber = (list: TaskRow[], col: string, order: string[]) =>
+    list.map((t) => (t.column_id === col ? { ...t, position: order.indexOf(t.id) } : t))
+  let next = tasks.map((t) => (t.id === taskId ? { ...t, column_id: columnId } : t))
+  next = renumber(next, columnId, ids)
+  if (from !== columnId) {
+    next = renumber(
+      next,
+      from,
+      next.filter((t) => t.column_id === from).sort((a, b) => a.position - b.position).map((t) => t.id),
     )
   }
-  return <Board project={project} />
+  return next
 }
 
-function Board({ project }: { project: Project }) {
-  const { employee, role } = useAuthed()
-  const columns = useProjectColumns(project.id)
-  const tasks = useWork((s) => s.tasks)
-  const members = useWork((s) => s.members)
-  const moveTask = useWork((s) => s.moveTask)
+export default function BoardPage() {
+  const { columns, tasks: serverTasks, can_write: canWrite } = useShared<ProjectScreenProps>()
+  // Local copy for optimistic moves; any new server list replaces it.
+  const [synced, setSynced] = useState(serverTasks)
+  const [tasks, setTasks] = useState(serverTasks)
+  if (synced !== serverTasks) {
+    setSynced(serverTasks)
+    setTasks(serverTasks)
+  }
   const [dragId, setDragId] = useState<string | null>(null)
   const [target, setTarget] = useState<DropTarget | null>(null)
   const [addIn, setAddIn] = useState<string | null>(null)
-  const canWrite =
-    canManageProject(project, employee.id, role) || members.some((m) => m.project_id === project.id && m.employee_id === employee.id)
+
+  const moveTask = (taskId: string, columnId: string, position?: number) => {
+    setTasks((t) => placeTask(t, taskId, columnId, position))
+    router.post(
+      route('work.tasks.move', taskId),
+      { column_id: columnId, position },
+      { preserveState: true, preserveScroll: true, only: ['tasks'] },
+    )
+  }
 
   const byColumn = useMemo(() => {
-    const map = new Map<string, Task[]>()
+    const map = new Map<string, TaskRow[]>()
     columns.forEach((c) => map.set(c.id, []))
     tasks
-      .filter((t) => t.project_id === project.id)
+      .slice()
       .sort((a, b) => a.position - b.position)
       .forEach((t) => map.get(t.column_id)?.push(t))
     return map
-  }, [tasks, columns, project.id])
+  }, [tasks, columns])
 
   const drop = (e: DragEvent) => {
     e.preventDefault()
@@ -81,7 +111,7 @@ function Board({ project }: { project: Project }) {
 
   return (
     <div className="mx-auto max-w-full">
-      <ProjectHeader project={project} view="board" />
+      <ProjectHeader view="board" />
       <div className="-mx-1 flex items-start gap-3 overflow-x-auto px-1 pb-4">
         {columns.map((c, ci) => {
           const list = byColumn.get(c.id) ?? []
@@ -121,6 +151,7 @@ function Board({ project }: { project: Project }) {
                       <TaskCard
                         task={t}
                         columns={columns}
+                        moveTask={moveTask}
                         draggable={canWrite}
                         dragging={t.id === dragId}
                         onDragStart={() => setDragId(t.id)}
@@ -139,7 +170,8 @@ function Board({ project }: { project: Project }) {
           )
         })}
       </div>
-      {addIn && <NewTaskDialog project={project} columnId={addIn} onClose={() => setAddIn(null)} />}
+      {addIn && <NewTaskDialog columnId={addIn} onClose={() => setAddIn(null)} />}
+      <TaskDrawer />
     </div>
   )
 }
@@ -151,31 +183,25 @@ function DropLine() {
 function TaskCard({
   task,
   columns,
+  moveTask,
   draggable,
   dragging,
   onDragStart,
   onDragEnd,
 }: {
-  task: Task
+  task: TaskRow
   columns: BoardColumn[]
+  moveTask: (taskId: string, columnId: string, position?: number) => void
   draggable: boolean
   dragging: boolean
   onDragStart: () => void
   onDragEnd: () => void
 }) {
-  const [params, setParams] = useSearchParams()
-  const labels = useLabelsFor(task.id)
-  const subs = useWork((s) => s.subtasks)
-  const moveTask = useWork((s) => s.moveTask)
-  const mine = subs.filter((x) => x.task_id === task.id)
-  const done = mine.filter((x) => x.done).length
+  const personName = usePersonName()
+  const setTaskParam = useTaskParam()
+  const labels = useLabelsFor(task)
   const column = columns.find((c) => c.id === task.column_id)
-
-  const open = () => {
-    const next = new URLSearchParams(params)
-    next.set('task', task.key)
-    setParams(next)
-  }
+  const open = () => setTaskParam(task.key)
 
   return (
     <article
@@ -241,10 +267,10 @@ function TaskCard({
               {formatDate(task.due_on)}
             </span>
           )}
-          {mine.length > 0 && (
+          {task.subtask_total > 0 && (
             <span className="inline-flex items-center gap-1">
               <CheckSquare size={14} aria-hidden />
-              {done}/{mine.length}
+              {task.subtask_done}/{task.subtask_total}
             </span>
           )}
         </div>

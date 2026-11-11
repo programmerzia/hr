@@ -1,19 +1,20 @@
+import { Link, router } from '@inertiajs/react'
 import { CheckSquare } from 'lucide-react'
 import { useMemo } from 'react'
-import { Link } from 'react-router'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { TaskKey } from '../../components/shared/TaskKey'
 import { Badge, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
+import { useShared } from '../../inertia/props'
 import { cn } from '../../lib/cn'
-import { useWork, useMyTasks } from '../../mock/stores/work'
-import { DueDate, isDueSoon, isOverdue, PriorityIcon } from './shared'
+import type { BoardColumn } from '../../types'
+import { TaskDrawer } from './TaskDrawer'
+import { DueDate, isDueSoon, isOverdue, PriorityIcon, type ProjectRow, type TaskRow } from './shared'
 
-export function MyTasksPage() {
-  const tasks = useMyTasks()
-  const projects = useWork((s) => s.projects)
-  const columns = useWork((s) => s.columns)
-  const moveTask = useWork((s) => s.moveTask)
+export default function MyTasksPage() {
+  const { tasks, projects, columns } = useShared<{ tasks: TaskRow[]; projects: ProjectRow[]; columns: BoardColumn[] }>()
+  const moveTask = (taskId: string, columnId: string) =>
+    router.post(route('work.tasks.move', taskId), { column_id: columnId }, { preserveScroll: true, preserveState: true })
 
   const groups = useMemo(
     () =>
@@ -44,7 +45,7 @@ export function MyTasksPage() {
             return (
               <section key={project.id} aria-label={project.name}>
                 <h2 className="mb-2 text-lg font-semibold">
-                  <Link to={`/projects/${project.key}`} className="hover:underline">
+                  <Link href={route('work.board', project.key)} className="hover:underline">
                     {project.name}
                   </Link>{' '}
                   <span className="font-mono text-sm font-normal text-fg-muted">{project.key}</span>
@@ -96,6 +97,7 @@ export function MyTasksPage() {
           })}
         </div>
       )}
+      <TaskDrawer />
     </div>
   )
 }

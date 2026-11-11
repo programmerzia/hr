@@ -1,40 +1,32 @@
+import { router } from '@inertiajs/react'
 import { ClipboardCheck } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { PersonCell } from '../../components/shared/PersonCell'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { Button, SegmentedControl, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
+import { useShared } from '../../inertia/props'
 import { formatDate, formatTime } from '../../lib/format'
-import { employeeById } from '../../mock/db/people'
-import { useSession } from '../../mock/session'
-import { scopeEmployees, useAttendance } from '../../mock/stores/attendance'
-import type { RegularizationRequest } from '../../types'
+import type { AttendanceDay, RegularizationRequest } from '../../types'
 import { ReasonDialog } from './RegularizeDialog'
 
 type Filter = 'pending' | 'all'
 
-export function RegularizationsPage() {
-  const employee = useSession((s) => s.employee)
-  const role = useSession((s) => s.role)
-  const regs = useAttendance((s) => s.regularizations)
-  const days = useAttendance((s) => s.days)
-  const decide = useAttendance((s) => s.decideRegularization)
+interface Row extends RegularizationRequest {
+  person: { id: string; name: string; designation: string }
+  day: AttendanceDay
+  decider_name: string | null
+}
+
+export default function RegularizationsPage() {
+  const { requests } = useShared<{ requests: Row[] }>()
   const [filter, setFilter] = useState<Filter>('pending')
-  const [target, setTarget] = useState<{ req: RegularizationRequest; decision: 'approved' | 'rejected' } | null>(null)
+  const [target, setTarget] = useState<{ req: Row; decision: 'approved' | 'rejected' } | null>(null)
+  const rows = requests.filter((r) => (filter === 'pending' ? r.status === 'pending' : true))
 
-  const rows = useMemo(() => {
-    if (!employee || !role) return []
-    const ids = new Set(scopeEmployees(employee.id, role).map((e) => e.id))
-    return regs
-      .filter((r) => ids.has(r.employee_id) && r.employee_id !== employee.id)
-      .filter((r) => (filter === 'pending' ? r.status === 'pending' : true))
-      .sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || (a.created_at < b.created_at ? 1 : -1))
-  }, [regs, employee, role, filter])
-
-  if (!employee) return null
-  const dlgDay = target ? days.find((d) => d.id === target.req.attendance_day_id) : undefined
-  const dlgPerson = target ? employeeById(target.req.employee_id) : undefined
+  const dlgDay = target?.req.day
+  const dlgPerson = target?.req.person
 
   return (
     <>
@@ -76,9 +68,8 @@ export function RegularizationsPage() {
           </Thead>
           <Tbody>
             {rows.map((r) => {
-              const e = employeeById(r.employee_id)
-              const d = days.find((x) => x.id === r.attendance_day_id)
-              const decider = r.decided_by ? employeeById(r.decided_by) : undefined
+              const e = r.person
+              const d = r.day
               return (
                 <Tr key={r.id}>
                   <Td>{e && <PersonCell name={e.name} subtitle={e.designation} />}</Td>
@@ -91,7 +82,7 @@ export function RegularizationsPage() {
                     </p>
                     {r.note && (
                       <p className="truncate text-xs text-fg-muted" title={r.note}>
-                        {decider?.name}: {r.note}
+                        {r.decider_name}: {r.note}
                       </p>
                     )}
                   </Td>
@@ -130,7 +121,7 @@ export function RegularizationsPage() {
         confirmLabel={target?.decision === 'approved' ? 'Approve' : 'Reject'}
         destructive={target?.decision === 'rejected'}
         onConfirm={(note) => {
-          if (target) decide(target.req.id, target.decision, note, employee.id)
+          if (target) router.post(route('attendance.regularizations.decide'), { id: target.req.id, decision: target.decision, note }, { preserveScroll: true })
         }}
       />
     </>

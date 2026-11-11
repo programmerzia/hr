@@ -1,21 +1,32 @@
-import { FolderKanban, ListChecks } from 'lucide-react'
+import { ListChecks } from 'lucide-react'
 import { Fragment, useMemo, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { PersonCell } from '../../components/shared/PersonCell'
 import { TaskKey } from '../../components/shared/TaskKey'
 import { Button, Select, SegmentedControl, Table, TableFooter, TableToolbar, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { formatDuration } from '../../lib/format'
-import { priorityLabels, priorityOrder, useWork } from '../../mock/stores/work'
-import type { Project, Task } from '../../types'
+import { useShared } from '../../inertia/props'
 import { ProjectHeader } from './ProjectHeader'
-import { DueDate, LabelChips, personName, PriorityIcon, useLabelsFor, useProjectByKey, useProjectColumns } from './shared'
+import { TaskDrawer } from './TaskDrawer'
+import {
+  DueDate,
+  LabelChips,
+  priorityLabels,
+  priorityOrder,
+  PriorityIcon,
+  useLabelsFor,
+  usePersonName,
+  useTaskParam,
+  type ProjectScreenProps,
+  type TaskRow,
+} from './shared'
 
+type Task = TaskRow
 type SortKey = 'key' | 'title' | 'status' | 'priority' | 'assignee' | 'due' | 'estimate'
 type GroupBy = 'none' | 'status' | 'assignee' | 'priority'
 
-function RowLabels({ taskId }: { taskId: string }) {
-  const labels = useLabelsFor(taskId)
+function RowLabels({ task }: { task: TaskRow }) {
+  const labels = useLabelsFor(task)
   return (
     <div className="flex gap-1">
       <LabelChips labels={labels} />
@@ -23,26 +34,10 @@ function RowLabels({ taskId }: { taskId: string }) {
   )
 }
 
-export function ListPage() {
-  const { key } = useParams()
-  const project = useProjectByKey(key)
-  if (!project) {
-    return (
-      <div className="mx-auto max-w-content">
-        <EmptyTable icon={FolderKanban} title="Project not found" description={`No project with key ${key ?? ''} exists.`} />
-      </div>
-    )
-  }
-  return <List project={project} />
-}
-
-function List({ project }: { project: Project }) {
-  const [, setParams] = useSearchParams()
-  const columns = useProjectColumns(project.id)
-  const tasks = useWork((s) => s.tasks)
-  const labels = useWork((s) => s.labels)
-  const taskLabels = useWork((s) => s.taskLabels)
-  const members = useWork((s) => s.members)
+export default function ListPage() {
+  const { columns, tasks, labels, members } = useShared<ProjectScreenProps>()
+  const personName = usePersonName()
+  const setTaskParam = useTaskParam()
   const [search, setSearch] = useState('')
   const [assignee, setAssignee] = useState('all')
   const [priority, setPriority] = useState('all')
@@ -52,19 +47,17 @@ function List({ project }: { project: Project }) {
   const [group, setGroup] = useState<GroupBy>('none')
 
   const colIndex = useMemo(() => new Map(columns.map((c, i) => [c.id, i])), [columns])
-  const memberIds = members.filter((m) => m.project_id === project.id).map((m) => m.employee_id)
+  const memberIds = members.map((m) => m.employee_id)
   const filtering = search || assignee !== 'all' || priority !== 'all' || label !== 'all' || status !== 'all'
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    const withLabel = label === 'all' ? null : new Set(taskLabels.filter((l) => l.label_id === label).map((l) => l.task_id))
     const list = tasks.filter((t) => {
-      if (t.project_id !== project.id) return false
       if (q && !`${t.key} ${t.title}`.toLowerCase().includes(q)) return false
       if (assignee === 'none' ? t.assignee_id !== null : assignee !== 'all' && t.assignee_id !== assignee) return false
       if (priority !== 'all' && t.priority !== priority) return false
       if (status !== 'all' && t.column_id !== status) return false
-      if (withLabel && !withLabel.has(t.id)) return false
+      if (label !== 'all' && !t.label_ids.includes(label)) return false
       return true
     })
     const val = (t: Task): string | number => {
@@ -84,7 +77,7 @@ function List({ project }: { project: Project }) {
       const y = val(b)
       return (x < y ? -1 : x > y ? 1 : 0) * dir
     })
-  }, [tasks, taskLabels, project.id, search, assignee, priority, status, label, sort, colIndex])
+  }, [tasks, search, assignee, priority, status, label, sort, colIndex, personName])
 
   const groups = useMemo(() => {
     if (group === 'none') return [{ id: 'all', title: '', items: rows }]
@@ -102,7 +95,7 @@ function List({ project }: { project: Project }) {
     const order = (g: { id: string }) =>
       group === 'status' ? (colIndex.get(g.id) ?? 99) : group === 'priority' ? priorityOrder.indexOf(g.id as Task['priority']) : 0
     return [...map.values()].sort((a, b) => order(a) - order(b) || a.title.localeCompare(b.title))
-  }, [rows, group, columns, colIndex])
+  }, [rows, group, columns, colIndex, personName])
 
   const th = (k: SortKey, text: string, numeric?: boolean) => (
     <Th
@@ -122,16 +115,11 @@ function List({ project }: { project: Project }) {
     setStatus('all')
   }
 
-  const open = (key: string) =>
-    setParams((p) => {
-      const next = new URLSearchParams(p)
-      next.set('task', key)
-      return next
-    })
+  const open = (key: string) => setTaskParam(key)
 
   return (
     <div className="mx-auto max-w-full">
-      <ProjectHeader project={project} view="list" />
+      <ProjectHeader view="list" />
       <TableToolbar
         search={search}
         onSearchChange={setSearch}
@@ -141,7 +129,7 @@ function List({ project }: { project: Project }) {
             <Select aria-label="Status" className="w-36" value={status} onValueChange={setStatus} options={[{ value: 'all', label: 'All statuses' }, ...columns.map((c) => ({ value: c.id, label: c.name }))]} />
             <Select aria-label="Assignee" className="w-40" value={assignee} onValueChange={setAssignee} options={[{ value: 'all', label: 'Any assignee' }, { value: 'none', label: 'Unassigned' }, ...memberIds.map((id) => ({ value: id, label: personName(id) }))]} />
             <Select aria-label="Priority" className="w-36" value={priority} onValueChange={setPriority} options={[{ value: 'all', label: 'Any priority' }, ...priorityOrder.map((p) => ({ value: p, label: priorityLabels[p] }))]} />
-            <Select aria-label="Label" className="w-36" value={label} onValueChange={setLabel} options={[{ value: 'all', label: 'Any label' }, ...labels.filter((l) => l.project_id === null || l.project_id === project.id).map((l) => ({ value: l.id, label: l.name }))]} />
+            <Select aria-label="Label" className="w-36" value={label} onValueChange={setLabel} options={[{ value: 'all', label: 'Any label' }, ...labels.map((l) => ({ value: l.id, label: l.name }))]} />
             {filtering && (
               <Button variant="ghost" size="sm" onClick={clear}>
                 Clear filters
@@ -213,7 +201,7 @@ function List({ project }: { project: Project }) {
                     </Td>
                     <Td numeric>{t.estimate_minutes === null ? '' : formatDuration(t.estimate_minutes * 60)}</Td>
                     <Td>
-                      <RowLabels taskId={t.id} />
+                      <RowLabels task={t} />
                     </Td>
                   </Tr>
                 ))}
@@ -223,6 +211,7 @@ function List({ project }: { project: Project }) {
         </Table>
       )}
       <TableFooter count={rows.length} noun={rows.length === 1 ? 'task' : 'tasks'} />
+      <TaskDrawer />
     </div>
   )
 }

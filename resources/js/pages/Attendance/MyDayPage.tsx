@@ -1,8 +1,9 @@
-import { addDays, format, startOfWeek } from 'date-fns'
+import { format, parseISO } from 'date-fns'
+import { router } from '@inertiajs/react'
 import { Bars } from '../../components/charts/Bars'
 import { Ring } from '../../components/charts/Ring'
 import { Coffee, LogOut, Play } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Clock } from '../../components/shared/Clock'
 import { BreakDialog } from '../../components/shared/BreakDialog'
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog'
@@ -17,7 +18,6 @@ import {
   Card,
   CardBody,
   Select,
-  toast,
   Table,
   Tbody,
   Td,
@@ -25,60 +25,78 @@ import {
   Thead,
   Tr,
 } from '../../components/ui'
+import { useShared } from '../../inertia/props'
 import { formatDate, formatDuration, formatTime } from '../../lib/format'
 import { breakCategoryLabels } from '../../lib/status'
-import { attendancePolicy, dateKey, isHoliday, isWeekend, shiftTime } from '../../mock/db/attendance'
-import { useSession } from '../../mock/session'
-import { useAttendance } from '../../mock/stores/attendance'
-import type { AttendanceDay, TimeSegment } from '../../types'
-import { totalsOf, useSegmentsByDay } from './lib'
+import type {
+  AttendanceDay,
+  AttendancePolicy,
+  RegularizationRequest,
+  TaskTimeEntry,
+  TimeSegment,
+} from '../../types'
+import { EMPTY_TOTALS, liveTotals, useServerNow, type DayTotals } from './lib'
 import { ReasonDialog } from './RegularizeDialog'
-import { formatHours, targetSeconds, useWeeklyHours } from './useAttendanceSeries'
-import { useMyTasks } from './useMyTasks'
+import { formatHours } from './useAttendanceSeries'
 
 const NO_TASK = 'none'
+const keep = { preserveScroll: true } as const
 
-export function MyDayPage() {
-  const employee = useSession((s) => s.employee)
-  if (!employee) return null
-  return <MyDay employeeId={employee.id} />
+interface WeekRow {
+  date: string
+  day: AttendanceDay | null
+  totals: DayTotals
+  off: 'Weekend' | 'Holiday' | null
+  regularization: 'pending' | 'rejected' | null
 }
 
-function MyDay({ employeeId }: { employeeId: string }) {
-  const now = useAttendance((s) => s.now)
-  const days = useAttendance((s) => s.days)
-  const regs = useAttendance((s) => s.regularizations)
-  const currentTask = useAttendance((s) => s.currentTask[employeeId] ?? null)
-  const startWork = useAttendance((s) => s.startWork)
-  const startBreak = useAttendance((s) => s.startBreak)
-  const endDay = useAttendance((s) => s.endDay)
-  const setCurrentTask = useAttendance((s) => s.setCurrentTask)
-  const requestRegularization = useAttendance((s) => s.requestRegularization)
-  const taskSecondsFor = useAttendance((s) => s.taskSecondsFor)
-  const segsByDay = useSegmentsByDay()
-  const myTasks = useMyTasks(employeeId)
+interface MyDayProps {
+  server_time: string
+  day: AttendanceDay | null
+  segments: TimeSegment[]
+  totals: DayTotals
+  task_entries: TaskTimeEntry[]
+  week: WeekRow[]
+  week_target_hours: number
+  shift: { start: string; end: string }
+  tasks: { id: string; key: string; title: string }[]
+  current_task_id: string | null
+  policy: AttendancePolicy
+  regularizations: RegularizationRequest[]
+}
 
+export default function MyDayPage() {
+  const p = useShared<MyDayProps>()
+  const now = useServerNow(p.server_time)
   const [breakOpen, setBreakOpen] = useState(false)
   const [endOpen, setEndOpen] = useState(false)
   const [overtimeOpen, setOvertimeOpen] = useState(false)
   const [regDay, setRegDay] = useState<AttendanceDay | null>(null)
 
-  const today = dateKey(new Date(now))
-  const day = days.find((d) => d.employee_id === employeeId && d.date === today)
+  const day = p.day
   const status = day?.status ?? 'not_started'
-  const segs = (day && segsByDay.get(day.id)) || []
-  const totals = totalsOf(segs, now)
+  const segs = p.segments
   const openSeg = segs.find((s) => s.ended_at === null)
+  const totals = liveTotals(p.totals ?? EMPTY_TOTALS, openSeg, p.server_time, now)
+  const policy = p.policy
+  const target = policy.standard_minutes * 60
+  const today = format(new Date(now), 'yyyy-MM-dd')
 
-  const shiftStart = shiftTime(new Date(now), attendancePolicy.shift_start)
+  const shiftStart = new Date(p.shift.start)
+  const shiftEnd = new Date(p.shift.end)
   const firstIn = day?.first_in_at ? new Date(day.first_in_at) : null
-  const shiftEnd = shiftTime(new Date(now), attendancePolicy.shift_end)
   const floorHour = (d: Date) => new Date(new Date(d).setMinutes(0, 0, 0))
   const rangeStart = floorHour(firstIn && firstIn < shiftStart ? firstIn : shiftStart)
   const rangeEnd = new Date(Math.max(shiftEnd.getTime(), floorHour(new Date(now)).getTime() + 3_600_000))
-  const weekly = useWeeklyHours(employeeId)
-  const target = targetSeconds()
-  const pct = Math.min(100, Math.round((totals.workSeconds / target) * 100))
+  const pct = Math.min(100, Math.round((totals.work_seconds / target) * 100))
+
+  const weeklyData = p.week.map((w) => {
+    const live = w.date === today && day?.id === w.day?.id ? liveTotals(w.totals, openSeg, p.server_time, now) : w.totals
+    return { label: format(parseISO(w.date), 'EEE'), values: [live.work_seconds / 3600], active: w.date === today ? (true as const) : undefined }
+  })
+  const weekSeconds = Math.round(weeklyData.reduce((a, d) => a + (d.values[0] ?? 0) * 3600, 0))
+  const workdays = p.week.filter((w) => !w.off).length
+  const workedDays = weeklyData.filter((d) => (d.values[0] ?? 0) > 0).length
 
   const sinceText =
     status === 'working' && openSeg
@@ -91,21 +109,27 @@ function MyDay({ employeeId }: { employeeId: string }) {
             ? 'You have not started yet today'
             : ''
 
-  const taskOptions = [
-    { value: NO_TASK, label: 'No task' },
-    ...myTasks.map((t) => ({ value: t.id, label: `${t.key}  ${t.title}` })),
-  ]
-  const selectedTask = currentTask && myTasks.some((t) => t.id === currentTask) ? currentTask : null
+  const taskOptions = [{ value: NO_TASK, label: 'No task' }, ...p.tasks.map((t) => ({ value: t.id, label: `${t.key}  ${t.title}` }))]
+  const selectedTask = p.current_task_id && p.tasks.some((t) => t.id === p.current_task_id) ? p.current_task_id : null
+  const taskSeconds = (taskId: string) =>
+    p.task_entries
+      .filter((e) => e.task_id === taskId)
+      .reduce(
+        (sum, e) => sum + (e.ended_at ? e.seconds : Math.max(0, (now - new Date(e.started_at).getTime()) / 1000)),
+        0,
+      )
 
-  const week = useMemo(() => {
-    const start = startOfWeek(new Date(now))
-    return Array.from({ length: 7 }, (_, i) => addDays(start, i))
-  }, [now])
-
-  const startOrResume = () => {
-    const r = startWork(employeeId)
-    if (r === 'needs_overtime_confirm') setOvertimeOpen(true)
+  const startOrResume = (confirm = false) => {
+    router.post(route('attendance.resume'), confirm ? { confirm_overtime: true } : {}, {
+      ...keep,
+      onError: (errors) => {
+        if (errors.needs_overtime_confirm) setOvertimeOpen(true)
+      },
+    })
   }
+
+  const regs = p.regularizations
+  const noRegs = (dayId: string) => regs.filter((r) => r.attendance_day_id === dayId)
 
   return (
     <>
@@ -123,20 +147,20 @@ function MyDay({ employeeId }: { employeeId: string }) {
                 {segs.some((s) => s.note === 'Overtime session') && <Badge variant="info">Overtime</Badge>}
               </div>
               <div className="mt-2">
-                <Clock seconds={totals.workSeconds} />
+                <Clock seconds={totals.work_seconds} />
               </div>
               <p className="mt-1 text-sm text-fg-muted">
                 {sinceText}
                 {sinceText && ' · '}
-                Break <DurationText seconds={totals.breakSeconds} />
-                {totals.offlineSeconds >= 60 && (
+                Break <DurationText seconds={totals.break_seconds} />
+                {totals.offline_seconds >= 60 && (
                   <>
-                    {' · '}Offline today <DurationText seconds={totals.offlineSeconds} />
+                    {' · '}Offline today <DurationText seconds={totals.offline_seconds} />
                   </>
                 )}
-                {totals.idleSeconds >= 60 && (
+                {totals.idle_seconds >= 60 && (
                   <>
-                    {' · '}Idle <DurationText seconds={totals.idleSeconds} />
+                    {' · '}Idle <DurationText seconds={totals.idle_seconds} />
                   </>
                 )}
               </p>
@@ -148,7 +172,7 @@ function MyDay({ employeeId }: { employeeId: string }) {
               <div>
                 <p className="text-sm font-medium">Daily target</p>
                 <p className="text-sm text-fg-muted">
-                  {formatDuration(totals.workSeconds)} of {formatDuration(target)}
+                  {formatDuration(totals.work_seconds)} of {formatDuration(target)}
                 </p>
               </div>
             </div>
@@ -159,17 +183,17 @@ function MyDay({ employeeId }: { employeeId: string }) {
                 </Button>
               )}
               {status === 'on_break' && (
-                <Button variant="primary" icon={<Play size={16} />} onClick={startOrResume}>
+                <Button variant="primary" icon={<Play size={16} />} onClick={() => startOrResume()}>
                   Resume
                 </Button>
               )}
               {(status === 'not_started' || status === 'on_leave' || status === 'absent' || status === 'holiday') && (
-                <Button variant="primary" icon={<Play size={16} />} onClick={startOrResume}>
+                <Button variant="primary" icon={<Play size={16} />} onClick={() => startOrResume()}>
                   Start work
                 </Button>
               )}
               {status === 'ended' && (
-                <Button icon={<Play size={16} />} onClick={startOrResume}>
+                <Button icon={<Play size={16} />} onClick={() => startOrResume()}>
                   Start overtime
                 </Button>
               )}
@@ -195,7 +219,7 @@ function MyDay({ employeeId }: { employeeId: string }) {
               aria-label="Current task"
               className="w-full sm:w-80"
               value={selectedTask ?? NO_TASK}
-              onValueChange={(v) => setCurrentTask(employeeId, v === NO_TASK ? null : v)}
+              onValueChange={(v) => router.post(route('attendance.current-task'), { task_id: v === NO_TASK ? null : v }, keep)}
               options={taskOptions}
               disabled={taskOptions.length === 1}
               placeholder="No task"
@@ -205,7 +229,7 @@ function MyDay({ employeeId }: { employeeId: string }) {
                 ? 'No tasks are assigned to you.'
                 : selectedTask
                   ? status === 'working'
-                    ? `Tracked today: ${formatDuration(taskSecondsFor(employeeId, selectedTask, now))}`
+                    ? `Tracked today: ${formatDuration(taskSeconds(selectedTask))}`
                     : 'Time is tracked while you are working.'
                   : 'Time without a task is unallocated.'}
             </span>
@@ -222,9 +246,9 @@ function MyDay({ employeeId }: { employeeId: string }) {
         ) : (
           <SegmentsTable segs={segs} now={now} />
         )}
-        {totals.lunchOverCapMinutes > 0 && (
+        {totals.lunch_over_cap_minutes > 0 && (
           <p className="mt-2 text-sm text-warning">
-            Lunch is {totals.lunchOverCapMinutes}m over the {attendancePolicy.lunch_cap_minutes}m cap.
+            Lunch is {totals.lunch_over_cap_minutes}m over the {policy.lunch_cap_minutes}m cap.
           </p>
         )}
       </section>
@@ -237,23 +261,23 @@ function MyDay({ employeeId }: { employeeId: string }) {
           <CardBody className="grid gap-6 md:grid-cols-[1fr_16rem] md:items-center">
             <Bars
               data-testid="week-bars"
-              data={weekly.data}
+              data={weeklyData}
               series={[{ name: 'Worked' }]}
-              target={{ value: weekly.targetHours, label: `${weekly.targetHours}h target` }}
+              target={{ value: p.week_target_hours, label: `${p.week_target_hours}h target` }}
               height={128}
               format={formatHours}
-              aria-label={`Hours worked each day this week, ${formatDuration(weekly.totalSeconds)} in total`}
+              aria-label={`Hours worked each day this week, ${formatDuration(weekSeconds)} in total`}
             />
             <dl className="grid grid-cols-2 gap-4 md:grid-cols-1">
               <div>
                 <dt className="text-sm text-fg-muted">Worked this week</dt>
-                <dd className="font-mono text-2xl font-semibold tabular-nums">{formatDuration(weekly.totalSeconds)}</dd>
-                <dd className="text-xs text-fg-subtle">of {formatDuration(weekly.workdays * target)} expected</dd>
+                <dd className="font-mono text-2xl font-semibold tabular-nums">{formatDuration(weekSeconds)}</dd>
+                <dd className="text-xs text-fg-subtle">of {formatDuration(workdays * target)} expected</dd>
               </div>
               <div>
                 <dt className="text-sm text-fg-muted">Average per worked day</dt>
                 <dd className="font-mono text-lg font-medium tabular-nums">
-                  {formatDuration(weekly.data.filter((d) => (d.values[0] ?? 0) > 0).length ? weekly.totalSeconds / weekly.data.filter((d) => (d.values[0] ?? 0) > 0).length : 0)}
+                  {formatDuration(workedDays ? weekSeconds / workedDays : 0)}
                 </dd>
               </div>
             </dl>
@@ -276,27 +300,26 @@ function MyDay({ employeeId }: { employeeId: string }) {
             </Tr>
           </Thead>
           <Tbody>
-            {week.map((d) => {
-              const key = dateKey(d)
-              const rec = days.find((x) => x.employee_id === employeeId && x.date === key)
-              const t = totalsOf(rec && segsByDay.get(rec.id), now)
-              const off = isWeekend(d) ? 'Weekend' : isHoliday(key) ? 'Holiday' : null
-              const pending = rec && regs.some((r) => r.attendance_day_id === rec.id && r.status === 'pending')
-              const rejected = rec && regs.some((r) => r.attendance_day_id === rec.id && r.status === 'rejected')
+            {p.week.map((w) => {
+              const rec = w.day
+              const t = rec && w.date === today ? liveTotals(w.totals, openSeg, p.server_time, now) : w.totals
+              const key = w.date
+              const pending = rec && noRegs(rec.id).some((r) => r.status === 'pending')
+              const rejected = rec && noRegs(rec.id).some((r) => r.status === 'rejected')
               return (
                 <Tr key={key} className={key === today ? 'bg-accent-soft/40' : undefined}>
-                  <Td className="whitespace-nowrap">{format(d, 'EEE d MMM')}</Td>
+                  <Td className="whitespace-nowrap">{format(parseISO(key), 'EEE d MMM')}</Td>
                   <Td numeric>{rec?.first_in_at ? formatTime(rec.first_in_at) : '-'}</Td>
                   <Td numeric>{rec?.last_out_at ? formatTime(rec.last_out_at) : '-'}</Td>
-                  <Td numeric>{rec && rec.first_in_at ? formatDuration(t.workSeconds) : '-'}</Td>
-                  <Td numeric>{rec && rec.first_in_at ? formatDuration(t.breakSeconds) : '-'}</Td>
-                  <Td numeric>{rec && rec.first_in_at && t.offlineSeconds >= 60 ? formatDuration(t.offlineSeconds) : '-'}</Td>
+                  <Td numeric>{rec && rec.first_in_at ? formatDuration(t.work_seconds) : '-'}</Td>
+                  <Td numeric>{rec && rec.first_in_at ? formatDuration(t.break_seconds) : '-'}</Td>
+                  <Td numeric>{rec && rec.first_in_at && t.offline_seconds >= 60 ? formatDuration(t.offline_seconds) : '-'}</Td>
                   <Td numeric>{rec && rec.late_minutes > 0 ? `${rec.late_minutes}m` : '-'}</Td>
                   <Td>
                     {rec ? (
                       <StatusBadge status={rec.status} />
-                    ) : off ? (
-                      <StatusBadge status="holiday" label={off} />
+                    ) : w.off ? (
+                      <StatusBadge status="holiday" label={w.off} />
                     ) : (
                       <span className="text-fg-subtle">-</span>
                     )}
@@ -329,16 +352,16 @@ function MyDay({ employeeId }: { employeeId: string }) {
       <BreakDialog
         open={breakOpen}
         onOpenChange={setBreakOpen}
-        onConfirm={(category, note) => startBreak(employeeId, category, note)}
+        onConfirm={(category, note) => router.post(route('attendance.break'), { category, note: note || null }, keep)}
       />
       <ConfirmDialog
         open={endOpen}
         onOpenChange={setEndOpen}
         title="End your day?"
-        description={`You worked ${formatDuration(totals.workSeconds)} today. Signing in again later counts as overtime.`}
+        description={`You worked ${formatDuration(totals.work_seconds)} today. Signing in again later counts as overtime.`}
         confirmLabel="End my day"
         onConfirm={() => {
-          endDay(employeeId)
+          router.post(route('attendance.end-day'), {}, keep)
           setEndOpen(false)
         }}
       />
@@ -349,7 +372,7 @@ function MyDay({ employeeId }: { employeeId: string }) {
         description="You already ended your day. This session is flagged as overtime."
         confirmLabel="Start overtime"
         onConfirm={() => {
-          startWork(employeeId, true)
+          startOrResume(true)
           setOvertimeOpen(false)
         }}
       />
@@ -361,7 +384,7 @@ function MyDay({ employeeId }: { employeeId: string }) {
         label="Reason"
         confirmLabel="Send request"
         onConfirm={(reason) => {
-          if (regDay && !requestRegularization(regDay.id, reason)) toast.error('Could not send the request.')
+          if (regDay) router.post(route('attendance.regularizations.store'), { attendance_day_id: regDay.id, reason }, keep)
         }}
       />
     </>
