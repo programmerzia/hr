@@ -10,3 +10,5 @@ Artisan::command('attendance:sweep', function (SweepIdle $sweep) {
 })->purpose('Open idle breaks for working days without a recent heartbeat');
 
 Schedule::command('attendance:sweep')->everyMinute()->withoutOverlapping();
+
+Schedule::command('billing:sweep-overdue')->daily();

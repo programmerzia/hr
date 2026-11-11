@@ -1,52 +1,52 @@
+import { router } from '@inertiajs/react'
 import { Receipt } from 'lucide-react'
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { MoneyCell } from '../../components/shared/MoneyCell'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { PersonCell } from '../../components/shared/PersonCell'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { Button, SegmentedControl, Table, Tbody, Td, Th, Thead, Tr, toast } from '../../components/ui'
-import { useAuthed } from '../../mock/session'
-import { useBilling } from '../../mock/stores/billing'
-import { usePeopleStore } from '../../mock/stores/people'
-import { ClaimActions, claimMode } from './ClaimActions'
-import { hoursText, monthLabel } from './helpers'
+import { useAuth, useShared } from '../../inertia/props'
+import type { ContractorClaim } from '../../types'
+import { ClaimActions, type ClaimAction, type ClaimMode } from './ClaimActions'
+import { errorText, hoursText, monthLabel } from './helpers'
 
 type Scope = 'action' | 'all'
 
-export function ClaimsPage() {
-  const { employee, role } = useAuthed()
-  const mode = claimMode(role)
-  const b = useBilling()
-  const employees = usePeopleStore((s) => s.employees)
-  const navigate = useNavigate()
+interface ClaimsProps {
+  claims: ContractorClaim[]
+  people: { id: string; name: string }[]
+  actions: Record<string, ClaimAction>
+  awaiting: string[]
+  mode: ClaimMode
+  period: { year: number; month: number }
+  can_generate: boolean
+}
+
+export default function ClaimsPage() {
+  const { claims: all, people, actions, awaiting: awaitingIds, mode, period, can_generate } = useShared<ClaimsProps>()
+  const { employee } = useAuth()
   const [scope, setScope] = useState<Scope>('action')
 
-  const viewer = { employeeId: employee.id, role }
-  const all = b.claimsVisibleTo(viewer)
-  const awaiting = new Set(b.claimsAwaiting(viewer).map((c) => c.id))
+  const awaiting = new Set(awaitingIds)
   const showScope = mode !== 'contractor'
-  const claims = showScope && scope === 'action' ? all.filter((c) => awaiting.has(c.id) || (mode === 'management' && c.status === 'approved')) : all
+  const claims = showScope && scope === 'action' ? all.filter((c) => awaiting.has(c.id) || actions[c.id]) : all
 
-  const nameOf = (id: string) => employees.find((e) => e.id === id)?.name ?? id
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth() + 1
+  const nameOf = (id: string) => people.find((p) => p.id === id)?.name ?? id
+  const { year, month } = period
   const hasThisMonth = all.some((c) => c.employee_id === employee.id && c.year === year && c.month === month)
 
-  const generate = () => {
-    const res = b.generateClaim(employee.id, year, month)
-    if (!res.ok) toast.error(res.error)
-    else navigate(`/claims/${res.value.id}`)
-  }
+  const generate = () => router.post(route('billing.claims.generate'), { year, month }, { onError: (e) => toast.error(errorText(e)) })
 
   const description =
     mode === 'contractor'
       ? 'Monthly claims from your tracked hours.'
       : mode === 'lead'
         ? 'Check each contractor’s claimed hours against tracked time.'
-        : 'Verified claims wait for your approval, then payment.'
+        : mode === 'hr'
+          ? 'Approved claims wait for payment.'
+          : 'Verified claims wait for your approval, then payment.'
 
   return (
     <div className="mx-auto max-w-content">
@@ -54,7 +54,7 @@ export function ClaimsPage() {
         title="Claims"
         description={description}
         actions={
-          mode === 'contractor' && !hasThisMonth ? (
+          can_generate && !hasThisMonth ? (
             <Button variant="primary" onClick={generate}>
               Generate claim for {monthLabel(year, month)}
             </Button>
@@ -67,7 +67,10 @@ export function ClaimsPage() {
               value={scope}
               onValueChange={setScope}
               options={[
-                { value: 'action', label: `Needs action (${awaiting.size})` },
+                {
+                  value: 'action',
+                  label: `Needs action (${awaiting.size})`,
+                },
                 { value: 'all', label: 'All claims' },
               ]}
             />
@@ -105,7 +108,7 @@ export function ClaimsPage() {
             {claims.map((c) => {
               const diff = c.claimed_minutes - c.tracked_minutes
               return (
-                <Tr key={c.id} className="cursor-pointer" onClick={() => navigate(`/claims/${c.id}`)}>
+                <Tr key={c.id} className="cursor-pointer" onClick={() => router.visit(route('billing.claims.show', c.id))}>
                   {mode !== 'contractor' && (
                     <Td>
                       <PersonCell name={nameOf(c.employee_id)} />
@@ -126,7 +129,7 @@ export function ClaimsPage() {
                     <StatusBadge status={c.status} />
                   </Td>
                   <Td className="text-right">
-                    <ClaimActions claim={c} />
+                    <ClaimActions claim={c} action={actions[c.id]} />
                   </Td>
                 </Tr>
               )

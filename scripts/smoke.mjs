@@ -21,6 +21,9 @@ const roles = [
 // Routes served by Laravel so far. Everything else found in the nav is reported as skipped until its module is ported.
 const PORTED = new Set(['/', '/account/password', '/my-day', '/team', '/team/history', '/team/regularizations', '/leave', '/leave/approvals', '/leave/calendar', '/leave/policy', '/projects', '/tasks'])
 for (const r of ['/people']) PORTED.add(r) // people module
+for (const r of ['/payroll', '/payslips']) PORTED.add(r) // payroll module
+for (const r of ['/inbox', '/chat', '/settings']) PORTED.add(r) // platform module
+for (const r of ['/clients', '/invoices', '/claims']) PORTED.add(r) // billing module
 const mobileRoutes = ['/']
 
 const results = [] // { area, item, status: ok|FAIL|skip, notes }

@@ -1,6 +1,6 @@
-import { Check, FileText, RefreshCw, Send, Trash2, Users, Wallet } from 'lucide-react'
+import { Check, FileText, RefreshCw, Send, Trash2, Users } from 'lucide-react'
+import { Link, router, useForm } from '@inertiajs/react'
 import { useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router'
 import { StackedBar } from '../../components/charts/StackedBar'
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog'
 import { EmptyTable } from '../../components/shared/EmptyTable'
@@ -15,7 +15,6 @@ import {
   Card,
   CardBody,
   Dialog,
-  EmptyState,
   Field,
   Input,
   NativeSelect,
@@ -30,26 +29,28 @@ import {
   Tr,
 } from '../../components/ui'
 import { formatDate, formatDuration, formatMoney } from '../../lib/format'
-import { useAuthed } from '../../mock/session'
-import { monthLabel, netAdjustment, usePayroll } from '../../mock/stores/payroll'
-import { useDeductionMix } from './usePayrollSeries'
-import { todayIso, usePeopleStore } from '../../mock/stores/people'
-import type { PayrollAdjustmentKind } from '../../types'
+import { useAuth, useShared } from '../../inertia/props'
+import type { PayrollAdjustment, PayrollAdjustmentKind, PayrollItem, PayrollRun } from '../../types'
+import { deductionMix } from './charts'
+import { act, failureOf, monthLabel, netAdjustment, todayIso, type HistoryEvent, type PersonRef, type RunTotals } from './helpers'
+
+interface RunDetailProps {
+  run: PayrollRun
+  items: PayrollItem[]
+  adjustments: PayrollAdjustment[]
+  totals: RunTotals
+  mix: { label: string; value: number; color: string }[]
+  events: HistoryEvent[]
+  people: PersonRef[]
+}
 
 const hours = (minutes: number) => formatDuration(minutes * 60)
 
 function MarkPaidDialog({ open, onOpenChange, runId, label }: { open: boolean; onOpenChange: (o: boolean) => void; runId: string; label: string }) {
-  const { employee } = useAuthed()
-  const markPaid = usePayroll((s) => s.markPaid)
-  const [paidOn, setPaidOn] = useState(todayIso())
-  const [reference, setReference] = useState('')
-  const [error, setError] = useState('')
+  const form = useForm({ paid_on: todayIso(), reference: '' })
+  const errors = form.errors as Record<string, string>
 
-  const submit = () => {
-    const res = markPaid(runId, paidOn, reference, employee.id)
-    if (res.ok) onOpenChange(false)
-    else setError(res.error)
-  }
+  const submit = () => form.post(route('payroll.runs.pay', runId), { preserveScroll: true, onSuccess: () => onOpenChange(false) })
 
   return (
     <Dialog
@@ -62,50 +63,44 @@ function MarkPaidDialog({ open, onOpenChange, runId, label }: { open: boolean; o
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit} disabled={!paidOn}>
+          <Button variant="primary" onClick={submit} disabled={!form.data.paid_on || form.processing}>
             Mark as paid
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-3">
-        <Field label="Disbursement date" required>
-          <Input type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
+        <Field label="Disbursement date" required error={errors.paid_on}>
+          <Input type="date" value={form.data.paid_on} onChange={(e) => form.setData('paid_on', e.target.value)} />
         </Field>
-        <Field label="Bank reference" required error={error || undefined} hint="Batch or transfer reference from the bank.">
-          <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="BEFTN-202611-001" />
+        <Field label="Bank reference" required error={errors.reference ?? errors.payroll ?? undefined} hint="Batch or transfer reference from the bank.">
+          <Input value={form.data.reference} onChange={(e) => form.setData('reference', e.target.value)} placeholder="BEFTN-202611-001" />
         </Field>
       </div>
     </Dialog>
   )
 }
 
-function ItemSheet({ itemId, onClose }: { itemId: string | null; onClose: () => void }) {
-  const { employee } = useAuthed()
-  const item = usePayroll((s) => s.items.find((i) => i.id === itemId))
-  const run = usePayroll((s) => s.runs.find((r) => r.id === item?.run_id))
-  const allAdjustments = usePayroll((s) => s.adjustments)
-  const addAdjustment = usePayroll((s) => s.addAdjustment)
-  const removeAdjustment = usePayroll((s) => s.removeAdjustment)
-  const emp = usePeopleStore((s) => (item ? s.employeeById(item.employee_id) : undefined))
-  const [kind, setKind] = useState<PayrollAdjustmentKind>('bonus')
-  const [label, setLabel] = useState('')
-  const [amount, setAmount] = useState('')
-  const [note, setNote] = useState('')
-  const [error, setError] = useState('')
-
-  const adjustments = allAdjustments.filter((a) => a.item_id === itemId)
-  const locked = !run || (run.status !== 'draft' && run.status !== 'review')
+function ItemSheet({
+  item,
+  run,
+  adjustments,
+  name,
+  onClose,
+}: {
+  item: PayrollItem | null
+  run: PayrollRun
+  adjustments: PayrollAdjustment[]
+  name?: string
+  onClose: () => void
+}) {
+  const form = useForm<{ kind: PayrollAdjustmentKind; label: string; amount: string; note: string }>({ kind: 'bonus', label: '', amount: '', note: '' })
+  const error = (form.errors as Record<string, string>).payroll
+  const locked = run.status !== 'draft' && run.status !== 'review'
 
   const add = () => {
     if (!item) return
-    const res = addAdjustment(item.id, kind, label, Number(amount), note, employee.id)
-    if (res.ok) {
-      setLabel('')
-      setAmount('')
-      setNote('')
-      setError('')
-    } else setError(res.error)
+    form.post(route('payroll.adjustments.store', item.id), { preserveScroll: true, onSuccess: () => form.reset('label', 'amount', 'note') })
   }
 
   const line = (name: string, value: number, sign: '' | '+' | '-' = '', strong = false) => (
@@ -120,19 +115,19 @@ function ItemSheet({ itemId, onClose }: { itemId: string | null; onClose: () => 
 
   return (
     <Sheet
-      open={Boolean(itemId && item && run)}
+      open={Boolean(item)}
       onOpenChange={(o) => !o && onClose()}
-      title={emp?.name ?? 'Payroll item'}
-      description={run ? `${monthLabel(run.year, run.month)} breakdown` : undefined}
+      title={name ?? 'Payroll item'}
+      description={`${monthLabel(run.year, run.month)} breakdown`}
       footer={
-        item && run ? (
-          <Link to={`/payroll/${run.id}/payslip/${item.id}`} className={buttonVariants({ variant: 'secondary' })}>
+        item ? (
+          <Link href={route('payroll.payslip', item.id)} className={buttonVariants({ variant: 'secondary' })}>
             <FileText size={16} aria-hidden /> View payslip
           </Link>
         ) : undefined
       }
     >
-      {item && run && (
+      {item && (
         <div className="flex flex-col gap-5 p-4">
           <section>
             <h3 className="mb-1 text-sm font-semibold">Attendance</h3>
@@ -183,10 +178,12 @@ function ItemSheet({ itemId, onClose }: { itemId: string | null; onClose: () => 
                           variant="ghost"
                           aria-label={`Remove ${a.label}`}
                           icon={<Trash2 size={14} />}
-                          onClick={() => {
-                            const res = removeAdjustment(a.id, employee.id)
-                            if (!res.ok) toast.error(res.error)
-                          }}
+                          onClick={() =>
+                            router.delete(route('payroll.adjustments.destroy', a.id), {
+                              preserveScroll: true,
+                              onError: (e) => toast.error(failureOf(e)),
+                            })
+                          }
                         />
                       )}
                     </div>
@@ -200,23 +197,23 @@ function ItemSheet({ itemId, onClose }: { itemId: string | null; onClose: () => 
               <div className="mt-3 flex flex-col gap-3 rounded-md border border-border p-3">
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Type">
-                    <NativeSelect value={kind} onChange={(e) => setKind(e.target.value as PayrollAdjustmentKind)}>
+                    <NativeSelect value={form.data.kind} onChange={(e) => form.setData('kind', e.target.value as PayrollAdjustmentKind)}>
                       <option value="bonus">Bonus</option>
                       <option value="deduction">Deduction</option>
                     </NativeSelect>
                   </Field>
                   <Field label="Amount (BDT)">
-                    <Input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} />
+                    <Input type="number" min={0} value={form.data.amount} onChange={(e) => form.setData('amount', e.target.value)} />
                   </Field>
                 </div>
                 <Field label="Label">
-                  <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Project delivery bonus" />
+                  <Input value={form.data.label} onChange={(e) => form.setData('label', e.target.value)} placeholder="Project delivery bonus" />
                 </Field>
                 <Field label="Note" error={error || undefined}>
-                  <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+                  <Textarea rows={2} value={form.data.note} onChange={(e) => form.setData('note', e.target.value)} />
                 </Field>
                 <div className="flex justify-end">
-                  <Button variant="primary" onClick={add} disabled={!label.trim() || !(Number(amount) > 0)}>
+                  <Button variant="primary" onClick={add} disabled={!form.data.label.trim() || !(Number(form.data.amount) > 0) || form.processing}>
                     Add adjustment
                   </Button>
                 </div>
@@ -229,78 +226,38 @@ function ItemSheet({ itemId, onClose }: { itemId: string | null; onClose: () => 
   )
 }
 
-export function RunDetailPage() {
-  const { runId = '' } = useParams()
-  const { employee, role } = useAuthed()
-  const run = usePayroll((s) => s.runs.find((r) => r.id === runId))
-  const allItems = usePayroll((s) => s.items)
-  const adjustments = usePayroll((s) => s.adjustments)
-  const events = usePayroll((s) => s.events)
-  const recompute = usePayroll((s) => s.recompute)
-  const submitForReview = usePayroll((s) => s.submitForReview)
-  const approveRun = usePayroll((s) => s.approveRun)
-  const totalsFor = usePayroll((s) => s.totalsFor)
-  const people = usePeopleStore()
-  const mix = useDeductionMix(runId)
+export default function RunDetailPage() {
+  const { role } = useAuth()
+  const { run, items: rawItems, adjustments, totals, mix: rawMix, events, people } = useShared<RunDetailProps>()
+  const mix = useMemo(() => deductionMix(rawMix), [rawMix])
+  const person = (id: string) => people.find((p) => p.id === id)
 
   const [selected, setSelected] = useState<string | null>(null)
   const [payOpen, setPayOpen] = useState(false)
   const [approveOpen, setApproveOpen] = useState(false)
 
-  const items = useMemo(
-    () =>
-      allItems
-        .filter((i) => i.run_id === runId)
-        .sort((a, b) => (people.employeeById(a.employee_id)?.name ?? '').localeCompare(people.employeeById(b.employee_id)?.name ?? '')),
-    [allItems, runId, people],
-  )
+  const items = rawItems
   const history = useMemo(
-    () =>
-      events
-        .filter((e) => e.run_id === runId)
-        .sort((a, b) => b.at.localeCompare(a.at))
-        .map((e) => ({ at: e.at, actor: people.employeeById(e.actor_id)?.name ?? 'Someone', text: e.text })),
-    [events, runId, people],
+    () => events.map((e) => ({ at: e.created_at, actor: (e.actor_id && person(e.actor_id)?.name) || 'Someone', text: e.description })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [events, people],
   )
-
-  if (!run) {
-    return (
-      <EmptyState
-        icon={Wallet}
-        title="Payroll run not found"
-        description="It may have been removed, or the link is wrong."
-        action={
-          <Link to="/payroll" className={buttonVariants({ variant: 'secondary' })}>
-            Back to payroll
-          </Link>
-        }
-      />
-    )
-  }
+  const selectedItem = items.find((i) => i.id === selected) ?? null
 
   const label = monthLabel(run.year, run.month)
-  const totals = totalsFor(run.id)
   const open = run.status === 'draft' || run.status === 'review'
-  const act = (res: { ok: boolean } & { error?: string }) => {
-    if (!res.ok && res.error) toast.error(res.error)
-  }
-
   const actions = (
     <>
       {open && (
         <Button
           icon={<RefreshCw size={16} />}
-          onClick={() => {
-            const res = recompute(run.id, employee.id)
-            if (res.ok) toast.success('Recomputed from attendance and leave')
-            else act(res)
-          }}
+          onClick={() => act(route('payroll.runs.recompute', run.id))}
         >
           Recompute
         </Button>
       )}
       {run.status === 'draft' && (
-        <Button variant="primary" icon={<Send size={16} />} onClick={() => act(submitForReview(run.id, employee.id))}>
+        <Button variant="primary" icon={<Send size={16} />} onClick={() => act(route('payroll.runs.submit', run.id))}>
           Send for review
         </Button>
       )}
@@ -385,7 +342,7 @@ export function RunDetailPage() {
               </Thead>
               <Tbody>
                 {items.map((i) => {
-                  const emp = people.employeeById(i.employee_id)
+                  const emp = person(i.employee_id)
                   const adj = adjFor(i.id)
                   return (
                     <Tr
@@ -425,7 +382,13 @@ export function RunDetailPage() {
         <HistoryPanel entries={history} title="Run history" />
       </div>
 
-      <ItemSheet itemId={selected} onClose={() => setSelected(null)} />
+      <ItemSheet
+        item={selectedItem}
+        run={run}
+        adjustments={adjustments.filter((a) => a.item_id === selected)}
+        name={selectedItem ? person(selectedItem.employee_id)?.name : undefined}
+        onClose={() => setSelected(null)}
+      />
       <MarkPaidDialog key={String(payOpen)} open={payOpen} onOpenChange={setPayOpen} runId={run.id} label={label} />
       <ConfirmDialog
         open={approveOpen}
@@ -434,9 +397,8 @@ export function RunDetailPage() {
         description={`Approving locks the run. ${totals.employees} employees, net payable ${formatMoney(totals.net)}.`}
         confirmLabel="Approve and lock"
         onConfirm={() => {
-          const res = approveRun(run.id, employee.id)
           setApproveOpen(false)
-          act(res)
+          act(route('payroll.runs.approve', run.id))
         }}
       />
     </div>

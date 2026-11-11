@@ -1,50 +1,46 @@
+import { Link } from '@inertiajs/react'
 import { CheckCheck, ChevronRight, Users } from 'lucide-react'
-import { useMemo, type ReactNode } from 'react'
-import { Link } from 'react-router'
-import { Bars } from '../../components/charts/Bars'
-import { StackedBar } from '../../components/charts/StackedBar'
+import type { ReactNode } from 'react'
+import { Bars, type BarDatum } from '../../components/charts/Bars'
+import { StackedBar, type StackSegment } from '../../components/charts/StackedBar'
 import { PersonCell } from '../../components/shared/PersonCell'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { Badge, Card, CardBody, CardHeader, EmptyState, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
+import { useShared } from '../../inertia/props'
 import { formatDuration, formatMoney, formatTime } from '../../lib/format'
 import { presenceTone } from '../../lib/status'
-import { useInboxItems } from '../../mock/stores/inbox'
-import { useBilling } from '../../mock/stores/billing'
-import { usePayroll } from '../../mock/stores/payroll'
-import { computeTotals, scopeEmployees, todayKey, useAttendance } from '../../mock/stores/attendance'
-import { usePeopleStore } from '../../mock/stores/people'
-import { useInvoiceAging } from '../Billing/useInvoiceAging'
-import { usePayrollSeries } from '../Payroll/usePayrollSeries'
-import type { Role } from '../../types'
-import { useHiresSeries, usePresenceScope, usePresenceSegments } from './useHomeData'
+import type { Currency } from '../../types'
 
 const ROWS = 8
-const order = ['working', 'on_break', 'ended', 'not_started', 'on_leave', 'absent']
 
 function ViewAll({ to, children }: { to: string; children: ReactNode }) {
   return (
-    <Link to={to} className="text-sm text-accent hover:underline">
+    <Link href={to} className="text-sm text-accent hover:underline">
       {children}
     </Link>
   )
 }
 
-/** One wide presence card: a composition bar plus a few inline facts. Replaces the row of stat boxes. */
-export function OverviewCard({ employeeId, role }: { employeeId: string; role: Role }) {
-  const { people, title } = usePresenceScope(employeeId, role)
-  const ids = useMemo(() => people.map((p) => p.id), [people])
-  const { segments, total } = usePresenceSegments(ids)
-  const allPeople = usePeopleStore((s) => s.employees)
-  const facts = useMemo(() => {
-    if (role !== 'hr' && role !== 'management') return []
-    const current = allPeople.filter((p) => p.exited_on === null)
-    const month = todayKey().slice(0, 7)
-    return [
-      { label: 'Headcount', value: current.length, warn: false },
-      { label: 'On probation', value: current.filter((p) => p.status === 'probation').length, warn: false },
-      { label: 'Joining this month', value: allPeople.filter((p) => p.joined_on.startsWith(month)).length, warn: false },
-    ].filter((f) => f.value > 0)
-  }, [allPeople, role])
+interface Overview {
+  title: string
+  total: number
+  counts: { working: number; break: number; offline: number; leave: number; ended: number; not_started: number; absent: number }
+  facts: { label: string; value: number }[]
+}
+
+/** One wide presence card: a composition bar plus a few inline facts. */
+export function OverviewCard() {
+  const { overview } = useShared<{ overview: Overview }>()
+  const { title, total, counts: n, facts } = overview
+  const segments: StackSegment[] = [
+    { label: 'Working', value: n.working, color: 'success' },
+    { label: 'On break', value: n.break, color: 'warning' },
+    { label: 'Offline', value: n.offline, color: 'muted' },
+    { label: 'On leave', value: n.leave, color: 'info' },
+    { label: 'Day ended', value: n.ended, color: 'chart-7' },
+    { label: 'Not started', value: n.not_started, color: 'chart-3' },
+    { label: 'Absent', value: n.absent, color: 'danger' },
+  ]
 
   return (
     <Card>
@@ -78,26 +74,16 @@ export function OverviewCard({ employeeId, role }: { employeeId: string; role: R
   )
 }
 
-export function TeamNowCard({ employeeId, role }: { employeeId: string; role: Role }) {
-  const now = useAttendance((s) => s.now)
-  const days = useAttendance((s) => s.days)
-  const segments = useAttendance((s) => s.segments)
-  const people = usePeopleStore((s) => s.employees)
-  const today = todayKey()
+interface TeamRow {
+  id: string
+  name: string
+  status: string
+  first_in_at: string | null
+  work_seconds: number
+}
 
-  const rows = useMemo(() => {
-    const team = scopeEmployees(employeeId, role).filter((e) => e.id !== employeeId)
-    return team
-      .map((e) => {
-        const day = days.find((d) => d.employee_id === e.id && d.date === today)
-        const segs = day ? segments.filter((s) => s.attendance_day_id === day.id) : []
-        return { e, day, status: day?.status ?? 'not_started', work: computeTotals(segs, now).workSeconds }
-      })
-      .sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status) || a.e.name.localeCompare(b.e.name))
-    // people feeds scopeEmployees(), which reads the store directly
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employeeId, role, days, segments, now, today, people])
-
+export function TeamNowCard() {
+  const { team_now: rows } = useShared<{ team_now: TeamRow[] }>()
   const shown = rows.slice(0, ROWS)
 
   return (
@@ -117,18 +103,18 @@ export function TeamNowCard({ employeeId, role }: { employeeId: string; role: Ro
               </Tr>
             </Thead>
             <Tbody>
-              {shown.map(({ e, day, status, work }) => (
-                <Tr key={e.id}>
+              {shown.map((m) => (
+                <Tr key={m.id}>
                   <Td className="h-10">
-                    <PersonCell name={e.name} presence={presenceTone(status)} />
+                    <PersonCell name={m.name} presence={presenceTone(m.status)} />
                   </Td>
                   <Td>
-                    <StatusBadge status={status} />
+                    <StatusBadge status={m.status} />
                   </Td>
                   <Td numeric className="hidden text-fg-muted sm:table-cell">
-                    {day?.first_in_at ? formatTime(day.first_in_at) : '-'}
+                    {m.first_in_at ? formatTime(m.first_in_at) : '-'}
                   </Td>
-                  <Td numeric>{day?.first_in_at ? formatDuration(work) : '-'}</Td>
+                  <Td numeric>{m.first_in_at ? formatDuration(m.work_seconds) : '-'}</Td>
                 </Tr>
               ))}
             </Tbody>
@@ -146,19 +132,8 @@ interface AttentionRow {
   warn?: boolean
 }
 
-export function AttentionCard({ role }: { role: Role }) {
-  const items = useInboxItems()
-  const invoices = useBilling((s) => s.invoices)
-  const count = (kind: string) => items.filter((i) => i.kind === kind).length
-  const overdue = (invoices ?? []).filter((i) => i.status === 'overdue').length
-  const rows: AttentionRow[] = [
-    { label: 'Leave requests to review', count: count('leave'), to: '/leave/approvals' },
-    { label: 'Regularizations to review', count: count('regularization'), to: '/team/regularizations' },
-    { label: 'Claims to review', count: count('claim'), to: '/claims' },
-    { label: 'Payroll to review', count: count('payroll'), to: '/payroll' },
-    ...(role === 'management' ? [{ label: 'Overdue invoices', count: overdue, to: '/invoices', warn: true }] : []),
-  ].filter((r) => r.count > 0)
-
+export function AttentionCard() {
+  const { attention: rows } = useShared<{ attention: AttentionRow[] }>()
   return (
     <Card>
       <CardHeader title="Needs your attention" actions={<ViewAll to="/inbox">Open inbox</ViewAll>} />
@@ -169,7 +144,7 @@ export function AttentionCard({ role }: { role: Role }) {
           {rows.map((r) => (
             <li key={r.label} className="border-b border-border last:border-b-0">
               <Link
-                to={r.to}
+                href={r.to}
                 className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
               >
                 <span className="flex-1">{r.label}</span>
@@ -186,17 +161,29 @@ export function AttentionCard({ role }: { role: Role }) {
   )
 }
 
+interface PayrollSummary {
+  series: { label: string; value: number }[]
+  latest: { id: string; year: number; month: number; status: string }
+  latest_gross: number
+  previous_gross: number
+}
+
 export function PayrollCard() {
-  const { data, latest, previous, latestGross, previousGross } = usePayrollSeries(6)
-  const runs = usePayroll((s) => s.runs)
-  const label = latest
-    ? new Date(latest.year, latest.month - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
-    : ''
-  const delta = previous && previousGross > 0 ? ((latestGross - previousGross) / previousGross) * 100 : null
+  const { payroll } = useShared<{ payroll: PayrollSummary | null }>()
+  const latest = payroll?.latest
+  const latestGross = payroll?.latest_gross ?? 0
+  const previousGross = payroll?.previous_gross ?? 0
+  const data: BarDatum[] = (payroll?.series ?? []).map((p, i, all) => ({
+    label: p.label,
+    values: [p.value],
+    active: i === all.length - 1 ? true : undefined,
+  }))
+  const label = latest ? new Date(latest.year, latest.month - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' }) : ''
+  const delta = previousGross > 0 ? ((latestGross - previousGross) / previousGross) * 100 : null
   return (
     <Card>
       <CardHeader title="Payroll" actions={<ViewAll to={latest ? `/payroll/${latest.id}` : '/payroll'}>Open payroll</ViewAll>} />
-      {latest && runs.length > 0 ? (
+      {latest ? (
         <CardBody className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -226,10 +213,31 @@ export function PayrollCard() {
   )
 }
 
+interface BillingSummary {
+  aging: { currency: Currency; total: number; buckets: number[] }[]
+  claims_waiting: number
+}
+
+const agingLabels: [string, StackSegment['color']][] = [
+  ['Current', 'chart-6'],
+  ['1-30 days late', 'chart-4'],
+  ['31-60 days late', 'chart-8'],
+  ['Over 60 days late', 'chart-5'],
+]
+
 export function BillingCard() {
-  const aging = useInvoiceAging()
-  const claims = useBilling((s) => s.claims)
-  const waiting = (claims ?? []).filter((c) => c.status === 'submitted' || c.status === 'verified').length
+  const { billing } = useShared<{ billing: BillingSummary | null }>()
+  const waiting = billing?.claims_waiting ?? 0
+  const aging = (billing?.aging ?? []).map((row) => ({
+    currency: row.currency,
+    total: row.total,
+    segments: agingLabels.map(([label, color], i) => ({
+      label,
+      color,
+      value: row.buckets[i] ?? 0,
+      display: formatMoney(row.buckets[i] ?? 0, row.currency),
+    })),
+  }))
   return (
     <Card>
       <CardHeader title="Invoices" actions={<ViewAll to="/invoices">Open invoices</ViewAll>} />
@@ -252,7 +260,7 @@ export function BillingCard() {
             </div>
           ))}
           {waiting > 0 && (
-            <Link to="/claims" className="flex items-center justify-between border-t border-border pt-3 text-sm hover:text-accent">
+            <Link href="/claims" className="flex items-center justify-between border-t border-border pt-3 text-sm hover:text-accent">
               <span>Contractor claims awaiting approval</span>
               <span className="flex items-center gap-1">
                 <span className="stat-value font-mono font-medium">{waiting}</span>
@@ -267,7 +275,13 @@ export function BillingCard() {
 }
 
 export function HiringCard() {
-  const { data, total } = useHiresSeries(6)
+  const { hiring } = useShared<{ hiring: { data: { label: string; value: number }[]; total: number } | null }>()
+  const total = hiring?.total ?? 0
+  const data: BarDatum[] = (hiring?.data ?? []).map((d, i, all) => ({
+    label: d.label,
+    values: [d.value],
+    active: i === all.length - 1 ? true : undefined,
+  }))
   if (total === 0) return null
   return (
     <Card>

@@ -1,33 +1,42 @@
-import { useState } from 'react'
+import { useForm } from '@inertiajs/react'
 import { Button, Dialog, Field, Input, NativeSelect, Textarea } from '../../components/ui'
-import { useBilling, type ClientInput } from '../../mock/stores/billing'
 import type { Client, Currency } from '../../types'
 import { currencyOptions } from './helpers'
 
 export function ClientDialog({ client, open, onOpenChange }: { client: Client | null; open: boolean; onOpenChange: (o: boolean) => void }) {
-  const createClient = useBilling((s) => s.createClient)
-  const updateClient = useBilling((s) => s.updateClient)
-  const [form, setForm] = useState<{ name: string; email: string; address: string; currency: Currency; rate: string }>({
+  const form = useForm<{
+    name: string
+    email: string
+    address: string
+    currency: Currency
+    default_rate: string
+  }>({
     name: client?.name ?? '',
     email: client?.email ?? '',
     address: client?.address ?? '',
     currency: client?.currency ?? 'USD',
-    rate: String(client?.default_rate ?? ''),
+    default_rate: String(client?.default_rate ?? ''),
   })
-  const [error, setError] = useState<string | undefined>()
+  const { data, errors } = form
+  const set = <K extends keyof typeof data>(key: K, value: (typeof data)[K]) => {
+    form.clearErrors()
+    form.setData((d) => ({ ...d, [key]: value }))
+  }
 
   const save = () => {
-    const input: ClientInput = {
-      name: form.name,
-      email: form.email,
-      address: form.address,
-      currency: form.currency,
-      default_rate: Number(form.rate) || 0,
+    form.transform((d) => ({
+      ...d,
+      default_rate: Number(d.default_rate) || 0,
+    }))
+    const opts = {
+      preserveScroll: true,
+      onSuccess: () => onOpenChange(false),
     }
-    const res = client ? updateClient(client.id, input) : createClient(input)
-    if (!res.ok) return setError(res.error)
-    onOpenChange(false)
+    if (client) form.patch(route('billing.clients.update', client.id), opts)
+    else form.post(route('billing.clients.store'), opts)
   }
+
+  const err = errors as Record<string, string>
 
   return (
     <Dialog
@@ -39,25 +48,25 @@ export function ClientDialog({ client, open, onOpenChange }: { client: Client | 
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={save} disabled={!form.name.trim()}>
+          <Button variant="primary" onClick={save} disabled={!data.name.trim() || form.processing}>
             {client ? 'Save changes' : 'Create client'}
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-3 pb-2">
-        <Field label="Name" required error={error}>
-          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <Field label="Name" required error={err.name ?? err.billing}>
+          <Input value={data.name} onChange={(e) => set('name', e.target.value)} />
         </Field>
-        <Field label="Billing email" required>
-          <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+        <Field label="Billing email" required error={err.email}>
+          <Input type="email" value={data.email} onChange={(e) => set('email', e.target.value)} />
         </Field>
         <Field label="Address">
-          <Textarea value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+          <Textarea value={data.address} onChange={(e) => set('address', e.target.value)} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Currency">
-            <NativeSelect value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value as Currency })}>
+            <NativeSelect value={data.currency} onChange={(e) => set('currency', e.target.value as Currency)}>
               {currencyOptions.map((c) => (
                 <option key={c.value} value={c.value}>
                   {c.label}
@@ -66,7 +75,7 @@ export function ClientDialog({ client, open, onOpenChange }: { client: Client | 
             </NativeSelect>
           </Field>
           <Field label="Default hourly rate">
-            <Input type="number" min={0} value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} />
+            <Input type="number" min={0} value={data.default_rate} onChange={(e) => set('default_rate', e.target.value)} />
           </Field>
         </div>
       </div>

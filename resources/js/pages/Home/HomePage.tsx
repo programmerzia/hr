@@ -5,9 +5,8 @@ import { PageHeader } from '../../components/shared/PageHeader'
 import { useWorkSeconds } from '../../inertia/clock'
 import { useAuth, useShared } from '../../inertia/props'
 import { formatDuration } from '../../lib/format'
-
-// The module wave adds Home props (team presence, tasks, leave balances, payroll, billing…) and ports
-// EmployeeCards / ManagerCards to read them. Until then only the header and today's ring render.
+import { ChatCard, LeaveBalancesCard, MyTasksCard } from './EmployeeCards'
+import { AttentionCard, BillingCard, HiringCard, OverviewCard, PayrollCard, TeamNowCard } from './ManagerCards'
 
 function greeting(hour: number): string {
   return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
@@ -35,9 +34,11 @@ function TodayRing() {
 }
 
 export default function HomePage() {
-  const { employee } = useAuth()
+  const { employee, role } = useAuth()
   const now = new Date()
   const first = employee.name.split(' ')[0]
+  const isManager = role === 'team_lead' || role === 'hr' || role === 'management'
+  const isHr = role === 'hr' || role === 'management'
 
   return (
     <div className="mx-auto max-w-content space-y-6">
@@ -47,6 +48,23 @@ export default function HomePage() {
         className="mb-0"
         actions={<TodayRing />}
       />
+
+      <OverviewCard />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          {isManager && <TeamNowCard />}
+          <MyTasksCard />
+          {isHr && <PayrollCard />}
+        </div>
+        <div className="space-y-6">
+          {isManager && <AttentionCard />}
+          {role === 'management' && <BillingCard />}
+          <LeaveBalancesCard />
+          {isHr && <HiringCard />}
+          <ChatCard />
+        </div>
+      </div>
     </div>
   )
 }

@@ -1,13 +1,10 @@
-import { Printer, ShieldOff } from 'lucide-react'
-import { useMemo } from 'react'
-import { Link, useParams } from 'react-router'
+import { Printer } from 'lucide-react'
 import { PageHeader } from '../../components/shared/PageHeader'
-import { Button, buttonVariants, EmptyState } from '../../components/ui'
+import { Button } from '../../components/ui'
+import { useShared } from '../../inertia/props'
 import { formatDate, formatDuration, formatMoney } from '../../lib/format'
-import { useAuthed } from '../../mock/session'
-import { monthEnd, monthLabel, monthStart } from '../../mock/db/payroll'
-import { usePayroll } from '../../mock/stores/payroll'
-import { usePeopleStore } from '../../mock/stores/people'
+import type { BankAccount, PayrollAdjustment, PayrollItem, PayrollRun, SalaryStructure } from '../../types'
+import { monthEnd, monthLabel, monthStart, type PersonRef } from './helpers'
 import { cn } from '../../lib/cn'
 
 /** The route is bare (no app shell), so printing only needs an A4 page. */
@@ -25,37 +22,19 @@ function Row({ label, value, strong, muted }: { label: string; value: string; st
   )
 }
 
-export function PayslipPage() {
-  const { runId = '', itemId = '' } = useParams()
-  const { employee: viewer, role } = useAuthed()
-  const run = usePayroll((s) => s.runs.find((r) => r.id === runId))
-  const item = usePayroll((s) => s.items.find((i) => i.id === itemId && i.run_id === runId))
-  const allAdjustments = usePayroll((s) => s.adjustments)
-  const adjustments = useMemo(() => allAdjustments.filter((a) => a.item_id === itemId), [allAdjustments, itemId])
-  const people = usePeopleStore()
+interface PayslipProps {
+  run: PayrollRun
+  item: PayrollItem
+  adjustments: PayrollAdjustment[]
+  employee: PersonRef
+  department: string | null
+  salary: SalaryStructure | null
+  bank: BankAccount | null
+  staff: boolean
+}
 
-  const staff = role === 'hr' || role === 'management'
-  const allowed = item && run && (staff || (item.employee_id === viewer.id && run.status === 'paid'))
-
-  if (!run || !item || !allowed) {
-    return (
-      <EmptyState
-        icon={ShieldOff}
-        title={item && run ? "You don't have access to this payslip" : 'Payslip not found'}
-        description={item && run ? 'Payslips are visible to their owner, HR and management.' : 'It may have been removed, or the link is wrong.'}
-        action={
-          <Link to={staff ? '/payroll' : '/payslips'} className={buttonVariants({ variant: 'secondary' })}>
-            Back to payslips
-          </Link>
-        }
-      />
-    )
-  }
-
-  const emp = people.employeeById(item.employee_id)
-  const salary = people.salaryStructures.find((s) => s.id === item.salary_structure_id)
-  const bank = people.bankAccounts.find((b) => b.id === item.bank_account_id)
-  const dept = people.departments.find((d) => d.id === emp?.department_id)
+export default function PayslipPage() {
+  const { run, item, adjustments, employee: emp, department, salary, bank, staff } = useShared<PayslipProps>()
   const bonuses = adjustments.filter((a) => a.kind === 'bonus')
   const deductionAdj = adjustments.filter((a) => a.kind === 'deduction')
   const totalEarnings = item.gross + item.overtime_pay + bonuses.reduce((t, a) => t + a.amount, 0)
@@ -95,11 +74,11 @@ export function PayslipPage() {
         </header>
 
         <section className="grid grid-cols-2 gap-x-6 gap-y-1 border-b border-border py-4 text-sm">
-          <p><span className="text-fg-muted">Employee </span><span className="font-medium">{emp?.name}</span></p>
-          <p><span className="text-fg-muted">Employee ID </span><span className="font-mono">{emp?.code}</span></p>
-          <p><span className="text-fg-muted">Designation </span>{emp?.designation}</p>
-          <p><span className="text-fg-muted">Department </span>{dept?.name ?? '-'}</p>
-          <p><span className="text-fg-muted">Joined </span>{emp ? formatDate(emp.joined_on) : '-'}</p>
+          <p><span className="text-fg-muted">Employee </span><span className="font-medium">{emp.name}</span></p>
+          <p><span className="text-fg-muted">Employee ID </span><span className="font-mono">{emp.code}</span></p>
+          <p><span className="text-fg-muted">Designation </span>{emp.designation}</p>
+          <p><span className="text-fg-muted">Department </span>{department ?? '-'}</p>
+          <p><span className="text-fg-muted">Joined </span>{emp.joined_on ? formatDate(emp.joined_on) : '-'}</p>
           <p>
             <span className="text-fg-muted">Attendance </span>
             {formatDuration(item.worked_minutes * 60)} of {formatDuration(item.standard_minutes * 60)}
@@ -165,3 +144,6 @@ export function PayslipPage() {
     </div>
   )
 }
+
+// The route is bare (no app shell): the sheet prints on its own.
+PayslipPage.layout = null

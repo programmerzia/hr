@@ -1,6 +1,6 @@
+import { router } from '@inertiajs/react'
 import { FileText, Plus, Search } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useMemo, useState } from 'react'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { MoneyCell } from '../../components/shared/MoneyCell'
 import { PageHeader } from '../../components/shared/PageHeader'
@@ -8,11 +8,10 @@ import { StatusBadge } from '../../components/shared/StatusBadge'
 import { StackedBar } from '../../components/charts/StackedBar'
 import { Button, Card, CardBody, Input, NativeSelect, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { formatDate } from '../../lib/format'
-import { useBilling } from '../../mock/stores/billing'
-import { useWork } from '../../mock/stores/work'
-import type { InvoiceStatus } from '../../types'
-import { balanceOf, isoToday, sumByCurrency } from './helpers'
-import { useInvoiceAging } from './useInvoiceAging'
+import { useShared } from '../../inertia/props'
+import type { Client, Currency, Invoice, InvoiceStatus } from '../../types'
+import { balanceOf, invoiceLabel, sumByCurrency, type ProjectRef } from './helpers'
+import { useInvoiceAging, type AgingProp } from './useInvoiceAging'
 
 const statusOptions: { value: 'all' | InvoiceStatus; label: string }[] = [
   { value: 'all', label: 'All statuses' },
@@ -23,35 +22,34 @@ const statusOptions: { value: 'all' | InvoiceStatus; label: string }[] = [
   { value: 'void', label: 'Void' },
 ]
 
-export function InvoicesPage() {
-  const navigate = useNavigate()
-  const { invoices, clients, payments, sweepOverdue } = useBilling()
-  const projects = useWork((s) => s.projects)
+interface InvoicesProps {
+  invoices: Invoice[]
+  clients: Client[]
+  projects: ProjectRef[]
+  aging: AgingProp[]
+  paid_this_month: { currency: Currency; amount: number }[]
+}
+
+export default function InvoicesPage() {
+  const { invoices, clients, projects, aging: agingProp, paid_this_month } = useShared<InvoicesProps>()
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<'all' | InvoiceStatus>('all')
   const [clientId, setClientId] = useState('all')
-
-  useEffect(() => {
-    sweepOverdue()
-  }, [sweepOverdue])
 
   const clientName = (id: string) => clients.find((c) => c.id === id)?.name ?? id
   const projectName = (id: string | null) => (id ? (projects.find((p) => p.id === id)?.name ?? id) : null)
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return [...invoices]
+    return invoices
       .filter((i) => status === 'all' || i.status === status)
       .filter((i) => clientId === 'all' || i.client_id === clientId)
       .filter((i) => !q || i.number.toLowerCase().includes(q) || clientName(i.client_id).toLowerCase().includes(q))
-      .sort((a, b) => b.number.localeCompare(a.number))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoices, clients, query, status, clientId])
 
-  const aging = useInvoiceAging()
-  const monthPrefix = isoToday().slice(0, 7)
+  const aging = useInvoiceAging(agingProp)
   const open = invoices.filter((i) => i.status === 'sent' || i.status === 'overdue')
-  const currencyOf = (invoiceId: string) => invoices.find((i) => i.id === invoiceId)?.currency ?? 'BDT'
 
   return (
     <div className="mx-auto max-w-content">
@@ -59,7 +57,7 @@ export function InvoicesPage() {
         title="Invoices"
         description="Client invoices and retainers."
         actions={
-          <Button variant="primary" icon={<Plus size={16} />} onClick={() => navigate('/invoices/new')}>
+          <Button variant="primary" icon={<Plus size={16} />} onClick={() => router.get(route('billing.invoices.create'))}>
             New invoice
           </Button>
         }
@@ -71,26 +69,30 @@ export function InvoicesPage() {
             <div>
               <dt className="text-sm text-fg-muted">Outstanding</dt>
               <dd className="mt-1 font-mono text-xl font-medium tabular-nums">
-                {sumByCurrency(open.map((i) => ({ currency: i.currency, amount: balanceOf(i) })))}
+                {sumByCurrency(
+                  open.map((i) => ({
+                    currency: i.currency,
+                    amount: balanceOf(i),
+                  })),
+                )}
               </dd>
             </div>
             <div>
               <dt className="text-sm text-fg-muted">Overdue</dt>
               <dd className="mt-1 font-mono text-xl font-medium tabular-nums text-danger" data-warning>
                 {sumByCurrency(
-                  invoices.filter((i) => i.status === 'overdue').map((i) => ({ currency: i.currency, amount: balanceOf(i) })),
+                  invoices
+                    .filter((i) => i.status === 'overdue')
+                    .map((i) => ({
+                      currency: i.currency,
+                      amount: balanceOf(i),
+                    })),
                 )}
               </dd>
             </div>
             <div>
               <dt className="text-sm text-fg-muted">Paid this month</dt>
-              <dd className="mt-1 font-mono text-xl font-medium tabular-nums">
-                {sumByCurrency(
-                  payments
-                    .filter((p) => p.paid_on.startsWith(monthPrefix))
-                    .map((p) => ({ currency: currencyOf(p.invoice_id), amount: p.amount })),
-                )}
-              </dd>
+              <dd className="mt-1 font-mono text-xl font-medium tabular-nums">{sumByCurrency(paid_this_month)}</dd>
             </div>
           </dl>
           {aging.length > 0 && (
@@ -160,8 +162,8 @@ export function InvoicesPage() {
           </Thead>
           <Tbody>
             {rows.map((i) => (
-              <Tr key={i.id} className="cursor-pointer" onClick={() => navigate(`/invoices/${i.id}`)}>
-                <Td className="font-mono">{i.number}</Td>
+              <Tr key={i.id} className="cursor-pointer" onClick={() => router.visit(route('billing.invoices.show', i.id))}>
+                <Td className="font-mono">{invoiceLabel(i)}</Td>
                 <Td>{clientName(i.client_id)}</Td>
                 <Td className="text-fg-muted">{projectName(i.project_id) ?? 'Retainer'}</Td>
                 <Td className="text-fg-muted">{formatDate(i.issued_on)}</Td>

@@ -1,0 +1,101 @@
+<?php
+
+namespace App\Http\Controllers\Payroll;
+
+use App\Domain\Payroll\Actions\ApproveRun;
+use App\Domain\Payroll\Actions\DraftRun;
+use App\Domain\Payroll\Actions\MarkPaid;
+use App\Domain\Payroll\Actions\Recompute;
+use App\Domain\Payroll\Actions\SubmitForReview;
+use App\Domain\Payroll\Support\Shape;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Payroll\MarkPaidRequest;
+use App\Http\Requests\Payroll\StoreRunRequest;
+use App\Http\Resources\PayrollRunResource;
+use App\Models\PayrollAdjustment;
+use App\Models\PayrollItem;
+use App\Models\PayrollRun;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class RunController extends Controller
+{
+    public function index(Request $request): Response
+    {
+        Gate::authorize('viewAny', PayrollRun::class);
+        $runs = PayrollRun::orderByDesc('year')->orderByDesc('month')->get();
+        $items = PayrollItem::whereIn('run_id', $runs->pluck('id'))->get()->groupBy('run_id');
+        $adjustments = PayrollAdjustment::whereIn('item_id', $items->flatten()->pluck('id'))->get();
+
+        $rows = $runs->map(fn (PayrollRun $r) => [
+            ...PayrollRunResource::make($r)->resolve(),
+            'totals' => Shape::totals($items[$r->id] ?? collect(), $adjustments->whereIn('item_id', ($items[$r->id] ?? collect())->pluck('id'))),
+        ])->values();
+
+        return Inertia::render('Payroll/RunsPage', [
+            'runs' => $rows,
+            'people' => Shape::people($runs->pluck('approved_by')),
+        ]);
+    }
+
+    public function store(StoreRunRequest $form, DraftRun $draft): RedirectResponse
+    {
+        Gate::authorize('manage_payroll');
+        $run = $draft($form->integer('year'), $form->integer('month'), $form->user()->employee);
+
+        return to_route('payroll.runs.show', $run)->with('success', 'Payroll run started');
+    }
+
+    public function show(Request $request, PayrollRun $run): Response
+    {
+        Gate::authorize('view', $run);
+        $items = PayrollItem::with('employee')->where('run_id', $run->id)->get()->sortBy(fn ($i) => $i->employee?->name)->values();
+        $adjustments = PayrollAdjustment::whereIn('item_id', $items->pluck('id'))->orderBy('created_at')->get();
+        $events = Shape::events($run->id);
+
+        return Inertia::render('Payroll/RunDetailPage', [
+            'run' => PayrollRunResource::make($run)->resolve(),
+            'items' => $items->map(fn (PayrollItem $i) => Shape::item($i))->all(),
+            'adjustments' => Shape::adjustments($adjustments),
+            'totals' => Shape::totals($items, $adjustments),
+            'mix' => Shape::mix($items, $adjustments),
+            'events' => $events,
+            'people' => Shape::people($items->pluck('employee_id')->merge(collect($events)->pluck('actor_id'))),
+        ]);
+    }
+
+    public function recompute(Request $request, PayrollRun $run, Recompute $action): RedirectResponse
+    {
+        Gate::authorize('manage', $run);
+        $action($run, $request->user()->employee);
+
+        return back()->with('success', 'Recomputed from attendance and leave');
+    }
+
+    public function submit(Request $request, PayrollRun $run, SubmitForReview $action): RedirectResponse
+    {
+        Gate::authorize('manage', $run);
+        $action($run, $request->user()->employee);
+
+        return back()->with('success', 'Sent for review');
+    }
+
+    public function approve(Request $request, PayrollRun $run, ApproveRun $action): RedirectResponse
+    {
+        Gate::authorize('approve', $run);
+        $action($run, $request->user()->employee);
+
+        return back()->with('success', 'Run approved and locked');
+    }
+
+    public function pay(MarkPaidRequest $form, PayrollRun $run, MarkPaid $action): RedirectResponse
+    {
+        Gate::authorize('manage', $run);
+        $action($run, $form->validated('paid_on'), $form->validated('reference'), $form->user()->employee);
+
+        return back()->with('success', 'Run marked as paid');
+    }
+}

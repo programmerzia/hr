@@ -1,31 +1,32 @@
+import { format } from 'date-fns'
 import { CheckCircle2, ChevronRight, MessageSquare } from 'lucide-react'
-import { useMemo } from 'react'
-import { Link } from 'react-router'
+import { Link } from '@inertiajs/react'
 import { TaskKey } from '../../components/shared/TaskKey'
 import { Badge, Card, CardBody, CardHeader, EmptyState, Progress } from '../../components/ui'
 import { formatDate } from '../../lib/format'
-import { todayKey } from '../../mock/stores/attendance'
-import { useChat } from '../../mock/stores/chat'
-import { useLeaveStore } from '../../mock/stores/leave'
-import { useMyTasks } from '../../mock/stores/work'
+import { useShared } from '../../inertia/props'
+import type { TaskPriority } from '../../types'
 import { PriorityIcon } from '../Work/shared'
 
+interface HomeTask {
+  id: string
+  key: string
+  title: string
+  priority: TaskPriority
+  due_on: string | null
+}
+
 export function MyTasksCard() {
-  const tasks = useMyTasks()
-  const top = useMemo(
-    () =>
-      [...tasks]
-        .sort((a, b) => (a.due_on ?? '9999').localeCompare(b.due_on ?? '9999') || a.number - b.number)
-        .slice(0, 6),
-    [tasks],
-  )
-  const today = todayKey()
+  const { my_tasks } = useShared<{ my_tasks: { total: number; items: HomeTask[] } }>()
+  const top = my_tasks.items
+  const tasks = { length: my_tasks.total }
+  const today = format(new Date(), 'yyyy-MM-dd')
   return (
     <Card>
       <CardHeader
         title="My tasks"
         actions={
-          <Link to="/tasks" className="text-sm text-accent hover:underline">
+          <Link href="/tasks" className="text-sm text-accent hover:underline">
             View all{tasks.length > top.length ? ` ${tasks.length}` : ''}
           </Link>
         }
@@ -56,16 +57,21 @@ export function MyTasksCard() {
   )
 }
 
-export function LeaveBalancesCard({ employeeId }: { employeeId: string }) {
-  useLeaveStore((s) => s.balances)
-  const balances = useLeaveStore.getState().balancesFor(employeeId, new Date().getFullYear())
-  const shown = balances.filter((b) => !b.unlimited && b.entitled > 0)
+interface HomeBalance {
+  id: string
+  entitled: number
+  available: number
+  type: { name: string }
+}
+
+export function LeaveBalancesCard() {
+  const { leave_balances: shown } = useShared<{ leave_balances: HomeBalance[] }>()
   return (
     <Card>
       <CardHeader
         title="Leave balance"
         actions={
-          <Link to="/leave" className="text-sm text-accent hover:underline">
+          <Link href="/leave" className="text-sm text-accent hover:underline">
             Request leave
           </Link>
         }
@@ -98,11 +104,11 @@ export function LeaveBalancesCard({ employeeId }: { employeeId: string }) {
 }
 
 /** Shown only when there is something unread. */
-export function ChatCard({ employeeId }: { employeeId: string }) {
-  const unread = useChat((s) => s.totalUnread(employeeId))
+export function ChatCard() {
+  const { chat_unread: unread } = useShared<{ chat_unread: number }>()
   if (unread === 0) return null
   return (
-    <Link to="/chat" className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+    <Link href="/chat" className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
       <Card interactive>
         <CardBody className="flex items-center gap-3">
           <span className="flex size-8 items-center justify-center rounded-full bg-accent-soft text-accent" aria-hidden>

@@ -11,6 +11,7 @@ use App\Http\Resources\TimeSegmentResource;
 use App\Http\Resources\UserResource;
 use App\Models\AttendancePolicy;
 use App\Support\Abilities;
+use App\Support\Badges;
 use App\Support\Nav;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -52,7 +53,7 @@ class HandleInertiaRequests extends Middleware
     /** Nav badge counts keyed by nav item id. Module agents fill these in. */
     public static function badges($user): array
     {
-        return \App\Support\Badges::for($user);
+        return Badges::for($user);
     }
 
     public static function attendance(Request $request): array

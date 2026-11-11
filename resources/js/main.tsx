@@ -5,8 +5,6 @@ import { Providers } from './app/providers'
 import { AppLayout } from './layouts/AppLayout'
 import { AuthLayout } from './layouts/AuthLayout'
 import './index.css'
-// Mock stores still back the module pages that are not ported yet. Removed in B3 with resources/js/mock.
-import './mock/bootstrap'
 
 type Layout = (page: ReactNode) => ReactNode
 type PageComponent = ComponentType & { layout?: Layout | null }

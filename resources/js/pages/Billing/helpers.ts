@@ -35,3 +35,31 @@ export const hoursText = (minutes: number) => {
 }
 
 export const isoToday = () => format(new Date(), 'yyyy-MM-dd')
+
+export const round2 = (n: number) => Math.round(n * 100) / 100
+
+/** Mirrors App\Domain\Billing\Services\InvoiceTotals: whole units, tax rounded once on the subtotal. */
+export function computeTotals(lines: { qty: number; unit_price: number }[], taxPercent: number, discount: number) {
+  const subtotal = lines.reduce((s, l) => s + Math.round(l.qty * l.unit_price), 0)
+  const tax = Math.round((subtotal * taxPercent) / 100)
+  return { subtotal, tax, total: subtotal + tax - discount }
+}
+
+/** Drafts have a placeholder number until they are sent. */
+export const invoiceLabel = (i: { number: string }) => (i.number.startsWith('DRAFT-') ? 'Draft' : i.number)
+
+/** First message of a failed Inertia request: the domain error (`billing`) or the first validation error. */
+export const errorText = (errors: Record<string, string>) => errors.billing ?? Object.values(errors)[0]
+
+export interface ProjectRef {
+  id: string
+  name: string
+  client_id: string | null
+}
+export interface AuditRow {
+  id: string
+  at: string
+  actor_id: string | null
+  actor: string
+  text: string
+}

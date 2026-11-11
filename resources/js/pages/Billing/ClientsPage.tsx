@@ -1,26 +1,26 @@
+import { router } from '@inertiajs/react'
 import { Building2, Plus } from 'lucide-react'
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { MoneyCell } from '../../components/shared/MoneyCell'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { Button, Sheet, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { formatDate, formatMoney } from '../../lib/format'
-import { useBilling } from '../../mock/stores/billing'
-import { useWork } from '../../mock/stores/work'
-import type { Client } from '../../types'
+import { useShared } from '../../inertia/props'
+import type { Client, Invoice } from '../../types'
 import { ClientDialog } from './ClientDialog'
-import { balanceOf, sumByCurrency } from './helpers'
+import { balanceOf, invoiceLabel, sumByCurrency, type ProjectRef } from './helpers'
 
-export function ClientsPage() {
-  const clients = useBilling((s) => s.clients)
-  const invoices = useBilling((s) => s.invoices)
-  const projects = useWork((s) => s.projects)
+export default function ClientsPage() {
+  const { clients, invoices, projects } = useShared<{
+    clients: Client[]
+    invoices: Invoice[]
+    projects: ProjectRef[]
+  }>()
   const [editing, setEditing] = useState<Client | null>(null)
   const [creating, setCreating] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
-  const navigate = useNavigate()
 
   const open = clients.find((c) => c.id === openId) ?? null
   const outstandingOf = (id: string) =>
@@ -112,7 +112,10 @@ export function ClientsPage() {
               </div>
               <div>
                 <dt className="text-fg-muted">Default rate</dt>
-                <dd className="font-mono tabular-nums">{formatMoney(open.default_rate, open.currency)}/h</dd>
+                <dd className="font-mono tabular-nums">
+                  {formatMoney(open.default_rate, open.currency)}
+                  /h
+                </dd>
               </div>
               <div className="col-span-2">
                 <dt className="text-fg-muted">Address</dt>
@@ -120,13 +123,18 @@ export function ClientsPage() {
               </div>
               <div className="col-span-2">
                 <dt className="text-fg-muted">Projects</dt>
-                <dd>{projects.filter((p) => p.client_id === open.id).map((p) => p.name).join(', ') || 'None'}</dd>
+                <dd>
+                  {projects
+                    .filter((p) => p.client_id === open.id)
+                    .map((p) => p.name)
+                    .join(', ') || 'None'}
+                </dd>
               </div>
             </dl>
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-base font-semibold">Invoices</h3>
-                <Button size="sm" onClick={() => navigate(`/invoices/new?client=${open.id}`)}>
+                <Button size="sm" onClick={() => router.get(route('billing.invoices.create'), { client: open.id })}>
                   New invoice
                 </Button>
               </div>
@@ -147,8 +155,8 @@ export function ClientsPage() {
                       .filter((i) => i.client_id === open.id)
                       .sort((a, b) => b.issued_on.localeCompare(a.issued_on))
                       .map((i) => (
-                        <Tr key={i.id} className="cursor-pointer" onClick={() => navigate(`/invoices/${i.id}`)}>
-                          <Td className="font-mono">{i.number}</Td>
+                        <Tr key={i.id} className="cursor-pointer" onClick={() => router.visit(route('billing.invoices.show', i.id))}>
+                          <Td className="font-mono">{invoiceLabel(i)}</Td>
                           <Td className="text-fg-muted">{formatDate(i.issued_on)}</Td>
                           <Td>
                             <MoneyCell amount={i.total} currency={i.currency} />

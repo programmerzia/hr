@@ -112,7 +112,14 @@ export async function loginDemo(base, page, name) {
   const h = await page.evaluateHandle((n) => [...document.querySelectorAll('#demo-accounts ~ ul button')].find((b) => b.textContent.includes(n)), name)
   if (!h.asElement()) throw new Error(`no demo account "${name}"`)
   await h.asElement().click()
-  await page.waitForFunction(() => location.pathname !== '/login', { timeout: 10000 })
+  // An ended day asks to confirm overtime before signing in.
+  await Promise.race([
+    page.waitForFunction(() => location.pathname !== '/login', { timeout: 10000 }),
+    page.waitForFunction(() => /Start overtime/.test(document.body.innerText), { timeout: 10000 }).then(async () => {
+      await clickText(page, 'Start overtime', 'button')
+      await page.waitForFunction(() => location.pathname !== '/login', { timeout: 10000 })
+    }),
+  ])
   await page.waitForSelector('[data-testid="topbar"]', { timeout: 10000 })
 }
 
@@ -126,6 +133,11 @@ export async function loginEmail(base, page, email, password) {
 
 /** Opens the account menu → Sign out → picks the mode and confirms. */
 export async function signOut(page, mode) {
+  // Make sure the desktop top bar is rendered (a mobile viewport hides the account menu).
+  await page.waitForSelector('[aria-label="Account menu"]', { timeout: 10000 }).catch(async () => {
+    await page.reload({ waitUntil: 'networkidle0' })
+    await page.waitForSelector('[aria-label="Account menu"]', { timeout: 10000 })
+  })
   await page.click('[aria-label="Account menu"]')
   await wait(200)
   await clickText(page, 'Sign out', '[role="menuitem"]')

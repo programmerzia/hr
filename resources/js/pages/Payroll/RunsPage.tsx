@@ -1,26 +1,22 @@
 import { Plus, Wallet } from 'lucide-react'
+import { router } from '@inertiajs/react'
 import { useMemo } from 'react'
-import { useNavigate } from 'react-router'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { MoneyCell } from '../../components/shared/MoneyCell'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { Bars } from '../../components/charts/Bars'
-import { Button, Card, CardBody, CardHeader, Table, Tbody, Td, Th, Thead, Tr, toast } from '../../components/ui'
+import { Button, Card, CardBody, CardHeader, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
+import { useShared } from '../../inertia/props'
 import { formatDate, formatMoney } from '../../lib/format'
-import { useAuthed } from '../../mock/session'
-import { monthLabel, usePayroll } from '../../mock/stores/payroll'
-import { usePeopleStore } from '../../mock/stores/people'
-import { usePayrollSeries } from './usePayrollSeries'
+import type { PayrollRun } from '../../types'
+import { payrollSeries } from './charts'
+import { act, monthLabel, type PersonRef, type RunTotals } from './helpers'
 
-export function RunsPage() {
-  const { employee } = useAuthed()
-  const navigate = useNavigate()
-  const runs = usePayroll((s) => s.runs)
-  const items = usePayroll((s) => s.items)
-  const series = usePayrollSeries(12)
-  const draftRun = usePayroll((s) => s.draftRun)
-  const employeeById = usePeopleStore((s) => s.employeeById)
+export default function RunsPage() {
+  const { runs, people } = useShared<{ runs: (PayrollRun & { totals: RunTotals })[]; people: PersonRef[] }>()
+  const series = useMemo(() => payrollSeries(runs, 12), [runs])
+  const nameOf = (id: string) => people.find((p) => p.id === id)?.name
 
   const sorted = useMemo(() => [...runs].sort((a, b) => b.year * 100 + b.month - (a.year * 100 + a.month)), [runs])
   const next = useMemo(() => {
@@ -32,11 +28,8 @@ export function RunsPage() {
     return last.month === 12 ? { year: last.year + 1, month: 1 } : { year: last.year, month: last.month + 1 }
   }, [sorted])
 
-  const start = () => {
-    const res = draftRun(next.year, next.month, employee.id)
-    if (res.ok) navigate(`/payroll/${res.value.id}`)
-    else toast.error(res.error)
-  }
+  const open = (id: string) => router.get(route('payroll.runs.show', id))
+  const start = () => act(route('payroll.runs.store'), next)
 
   return (
     <div className="mx-auto max-w-content">
@@ -83,27 +76,26 @@ export function RunsPage() {
           </Thead>
           <Tbody>
             {sorted.map((r) => {
-              const rows = items.filter((i) => i.run_id === r.id)
               return (
                 <Tr
                   key={r.id}
                   className="cursor-pointer"
                   tabIndex={0}
-                  onClick={() => navigate(`/payroll/${r.id}`)}
-                  onKeyDown={(e) => e.key === 'Enter' && navigate(`/payroll/${r.id}`)}
+                  onClick={() => open(r.id)}
+                  onKeyDown={(e) => e.key === 'Enter' && open(r.id)}
                 >
                   <Td className="font-medium">{monthLabel(r.year, r.month)}</Td>
-                  <Td numeric>{rows.length}</Td>
+                  <Td numeric>{r.totals.employees}</Td>
                   <Td>
-                    <MoneyCell amount={rows.reduce((t, i) => t + i.gross, 0)} />
+                    <MoneyCell amount={r.totals.gross} />
                   </Td>
                   <Td>
-                    <MoneyCell amount={rows.reduce((t, i) => t + i.net, 0)} />
+                    <MoneyCell amount={r.totals.net} />
                   </Td>
                   <Td>
                     <StatusBadge status={r.status} />
                   </Td>
-                  <Td className="text-fg-muted">{r.approved_by ? (employeeById(r.approved_by)?.name ?? '-') : '-'}</Td>
+                  <Td className="text-fg-muted">{r.approved_by ? (nameOf(r.approved_by) ?? '-') : '-'}</Td>
                   <Td className="text-fg-muted">{r.paid_at ? formatDate(r.paid_at) : '-'}</Td>
                 </Tr>
               )

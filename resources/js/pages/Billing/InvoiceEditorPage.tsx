@@ -1,15 +1,37 @@
 import { addDays, format } from 'date-fns'
 import { Plus, Trash2 } from 'lucide-react'
+import { router } from '@inertiajs/react'
 import { useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { MoneyCell } from '../../components/shared/MoneyCell'
 import { PageHeader } from '../../components/shared/PageHeader'
-import { Button, Card, CardBody, CardHeader, Field, IconButton, Input, NativeSelect, Table, Tbody, Td, Textarea, Th, Thead, Tr } from '../../components/ui'
-import { computeTotals } from '../../mock/db/billing'
-import { useBilling } from '../../mock/stores/billing'
-import { useWork } from '../../mock/stores/work'
-import type { Currency } from '../../types'
-import { currencyOptions, isoToday } from './helpers'
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Field,
+  IconButton,
+  Input,
+  NativeSelect,
+  Table,
+  Tbody,
+  Td,
+  Textarea,
+  Th,
+  Thead,
+  Tr,
+} from '../../components/ui'
+import { useShared } from '../../inertia/props'
+import type { Client, Currency, Invoice, InvoiceLine } from '../../types'
+import { computeTotals, currencyOptions, errorText, invoiceLabel, isoToday, type ProjectRef } from './helpers'
+
+interface EditorProps {
+  invoice: Invoice | null
+  lines: InvoiceLine[]
+  clients: Client[]
+  projects: ProjectRef[]
+  preset_client_id: string | null
+}
 
 interface Row {
   key: number
@@ -19,18 +41,16 @@ interface Row {
 }
 
 let rowKey = 0
-const blankRow = (): Row => ({ key: ++rowKey, description: '', qty: '1', price: '' })
+const blankRow = (): Row => ({
+  key: ++rowKey,
+  description: '',
+  qty: '1',
+  price: '',
+})
 
-export function InvoiceEditorPage() {
-  const { id } = useParams()
-  const [params] = useSearchParams()
-  const navigate = useNavigate()
-  const { clients, invoiceById, linesFor, createInvoice, updateInvoice } = useBilling()
-  const projects = useWork((s) => s.projects)
-
-  const existing = id ? invoiceById(id) : undefined
-  const existingLines = existing ? linesFor(existing.id) : []
-  const preset = clients.find((c) => c.id === params.get('client')) ?? clients[0]
+export default function InvoiceEditorPage() {
+  const { invoice: existing, lines: existingLines, clients, projects, preset_client_id } = useShared<EditorProps>()
+  const preset = clients.find((c) => c.id === preset_client_id) ?? clients[0]
 
   const [clientId, setClientId] = useState(existing?.client_id ?? preset?.id ?? '')
   const [projectId, setProjectId] = useState(existing?.project_id ?? '')
@@ -39,23 +59,27 @@ export function InvoiceEditorPage() {
   const [currency, setCurrency] = useState<Currency>(existing?.currency ?? preset?.currency ?? 'USD')
   const [rows, setRows] = useState<Row[]>(
     existing
-      ? existingLines.map((l) => ({ key: ++rowKey, description: l.description, qty: String(l.qty), price: String(l.unit_price) }))
+      ? existingLines.map((l) => ({
+          key: ++rowKey,
+          description: l.description,
+          qty: String(l.qty),
+          price: String(l.unit_price),
+        }))
       : [blankRow()],
   )
   const [tax, setTax] = useState(String(existing?.tax_percent ?? 0))
   const [discount, setDiscount] = useState(String(existing?.discount ?? 0))
   const [notes, setNotes] = useState(existing?.notes ?? '')
-  const [error, setError] = useState<string | undefined>()
-
-  if (id && !existing) {
-    return <p className="p-6 text-sm text-fg-muted">This invoice does not exist.</p>
-  }
-  if (existing && existing.status !== 'draft') {
-    return <p className="p-6 text-sm text-fg-muted">Only draft invoices can be edited.</p>
-  }
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [processing, setProcessing] = useState(false)
+  const error = Object.keys(errors).length ? errorText(errors) : undefined
 
   const clientProjects = projects.filter((p) => p.client_id === clientId)
-  const parsed = rows.map((r) => ({ description: r.description, qty: Number(r.qty) || 0, unit_price: Number(r.price) || 0 }))
+  const parsed = rows.map((r) => ({
+    description: r.description,
+    qty: Number(r.qty) || 0,
+    unit_price: Number(r.price) || 0,
+  }))
   const totals = computeTotals(parsed, Number(tax) || 0, Number(discount) || 0)
 
   const pickClient = (next: string) => {
@@ -68,33 +92,41 @@ export function InvoiceEditorPage() {
   const patchRow = (key: number, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)))
 
   const save = () => {
-    const input = {
-      clientId,
-      projectId: projectId || null,
-      issuedOn,
-      dueOn,
+    const payload = {
+      client_id: clientId,
+      project_id: projectId || null,
+      issued_on: issuedOn,
+      due_on: dueOn,
       currency,
       lines: parsed,
-      taxPercent: Number(tax) || 0,
+      tax_percent: Number(tax) || 0,
       discount: Number(discount) || 0,
       notes: notes || null,
     }
-    const res = existing ? updateInvoice(existing.id, input) : createInvoice(input)
-    if (!res.ok) return setError(res.error)
-    navigate(`/invoices/${res.value.id}`)
+    const opts = { onStart: () => setProcessing(true), onFinish: () => setProcessing(false), onError: setErrors }
+    if (existing) router.patch(route('billing.invoices.update', existing.id), payload, opts)
+    else router.post(route('billing.invoices.store'), payload, opts)
   }
 
   return (
     <div className="mx-auto max-w-content">
       <PageHeader
-        title={existing ? `Edit ${existing.number}` : 'New invoice'}
-        breadcrumb={[{ label: 'Invoices', to: '/invoices' }, { label: existing ? existing.number : 'New invoice' }]}
+        title={existing ? `Edit ${invoiceLabel(existing)}` : 'New invoice'}
+        breadcrumb={[
+          { label: 'Invoices', to: '/invoices' },
+          {
+            label: existing ? invoiceLabel(existing) : 'New invoice',
+          },
+        ]}
         actions={
           <>
-            <Button variant="ghost" onClick={() => navigate(existing ? `/invoices/${existing.id}` : '/invoices')}>
+            <Button
+              variant="ghost"
+              onClick={() => router.get(existing ? route('billing.invoices.show', existing.id) : route('billing.invoices'))}
+            >
               Cancel
             </Button>
-            <Button variant="primary" onClick={save}>
+            <Button variant="primary" onClick={save} disabled={processing}>
               Save draft
             </Button>
           </>
@@ -173,13 +205,45 @@ export function InvoiceEditorPage() {
                   {rows.map((r, i) => (
                     <Tr key={r.key}>
                       <Td>
-                        <Input aria-label={`Line ${i + 1} description`} value={r.description} onChange={(e) => patchRow(r.key, { description: e.target.value })} />
+                        <Input
+                          aria-label={`Line ${i + 1} description`}
+                          value={r.description}
+                          onChange={(e) =>
+                            patchRow(r.key, {
+                              description: e.target.value,
+                            })
+                          }
+                        />
                       </Td>
                       <Td>
-                        <Input aria-label={`Line ${i + 1} quantity`} type="number" min={0} step="any" className="text-right font-mono" value={r.qty} onChange={(e) => patchRow(r.key, { qty: e.target.value })} />
+                        <Input
+                          aria-label={`Line ${i + 1} quantity`}
+                          type="number"
+                          min={0}
+                          step="any"
+                          className="text-right font-mono"
+                          value={r.qty}
+                          onChange={(e) =>
+                            patchRow(r.key, {
+                              qty: e.target.value,
+                            })
+                          }
+                        />
                       </Td>
                       <Td>
-                        <Input aria-label={`Line ${i + 1} unit price`} type="number" min={0} step="any" className="text-right font-mono" value={r.price} onChange={(e) => patchRow(r.key, { price: e.target.value })} />
+                        <Input
+                          aria-label={`Line ${i + 1} unit price`}
+                          type="number"
+                          min={0}
+                          step="any"
+                          className="text-right font-mono"
+                          value={r.price}
+                          onChange={(e) =>
+                            patchRow(r.key, {
+                              price: e.target.value,
+                            })
+                          }
+                        />
                       </Td>
                       <Td>
                         <MoneyCell amount={parsed[i].qty * parsed[i].unit_price} currency={currency} />
@@ -204,7 +268,12 @@ export function InvoiceEditorPage() {
           <Card>
             <CardHeader title="Notes" />
             <CardBody>
-              <Textarea aria-label="Notes" placeholder="Payment instructions or a short note for the client" value={notes} onChange={(e) => setNotes(e.target.value)} />
+              <Textarea
+                aria-label="Notes"
+                placeholder="Payment instructions or a short note for the client"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
             </CardBody>
           </Card>
         </div>

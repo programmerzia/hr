@@ -1,63 +1,72 @@
-import { AtSign, CalendarDays, CheckCheck, ClipboardCheck, Receipt, Wallet, type LucideIcon } from 'lucide-react'
+import { router } from '@inertiajs/react'
+import { AtSign, CalendarDays, CheckCheck, ClipboardCheck, FileText, Receipt, Wallet, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
-import { Link } from 'react-router'
 import { PageHeader } from '../../components/shared/PageHeader'
-import { PersonCell } from '../../components/shared/PersonCell'
-import { Button, Card, Dialog, EmptyState, Field, SegmentedControl, Textarea } from '../../components/ui'
+import { Button, Card, EmptyState, SegmentedControl } from '../../components/ui'
+import { useShared } from '../../inertia/props'
 import { relativeTime } from '../../lib/format'
-import { isApprovalKind, useInboxItems, type InboxAction, type InboxItem, type InboxKind } from '../../mock/stores/inbox'
+import type { Notification, NotificationKind } from '../../types'
 
-type Filter = 'all' | 'approvals' | 'mentions'
+type Filter = 'all' | 'unread'
 
-const icons: Record<InboxKind, LucideIcon> = {
+const icons: Record<NotificationKind, LucideIcon> = {
   leave: CalendarDays,
   regularization: ClipboardCheck,
   claim: Receipt,
   payroll: Wallet,
+  invoice: FileText,
   mention: AtSign,
 }
 
-const kindLabels: Record<InboxKind, string> = {
+const kindLabels: Record<NotificationKind, string> = {
   leave: 'Leave',
   regularization: 'Regularization',
   claim: 'Claim',
   payroll: 'Payroll',
+  invoice: 'Invoice',
   mention: 'Mention',
 }
 
 const empty: Record<Filter, { title: string; description: string }> = {
   all: { title: 'Nothing waiting on you', description: 'Approvals and mentions show up here as they arrive.' },
-  approvals: { title: 'No approvals pending', description: 'Leave, regularization and other requests will appear here.' },
-  mentions: { title: 'No recent mentions', description: 'Messages that mention you in the last 7 days will appear here.' },
+  unread: { title: 'Nothing unread', description: 'New notifications will appear here.' },
 }
 
-export function InboxPage() {
-  const items = useInboxItems()
+export default function InboxPage() {
+  const { notifications, unread } = useShared<{ notifications: Notification[]; unread: number }>()
   const [filter, setFilter] = useState<Filter>('all')
-  const [rejecting, setRejecting] = useState<{ item: InboxItem; action: InboxAction } | null>(null)
-  const [note, setNote] = useState('')
+  const shown = notifications.filter((n) => filter === 'all' || n.read_at === null)
 
-  const shown = items.filter((i) =>
-    filter === 'all' ? true : filter === 'approvals' ? isApprovalKind(i.kind) : i.kind === 'mention',
-  )
-  const approvals = items.filter((i) => isApprovalKind(i.kind)).length
+  const open = (n: Notification) => {
+    if (n.read_at !== null) {
+      router.visit(n.link)
+      return
+    }
+    router.post(route('inbox.read'), { id: n.id }, { preserveScroll: true, onSuccess: () => router.visit(n.link) })
+  }
 
   return (
     <div className="mx-auto max-w-content">
       <PageHeader
         title="Inbox"
-        description={approvals > 0 ? `${approvals} ${approvals === 1 ? 'item needs' : 'items need'} your decision.` : 'You are all caught up.'}
+        description={unread > 0 ? `${unread} unread ${unread === 1 ? 'notification' : 'notifications'}.` : 'You are all caught up.'}
         actions={
-          <SegmentedControl
-            aria-label="Filter inbox"
-            value={filter}
-            onValueChange={setFilter}
-            options={[
-              { value: 'all', label: 'All' },
-              { value: 'approvals', label: 'Approvals' },
-              { value: 'mentions', label: 'Mentions' },
-            ]}
-          />
+          <div className="flex items-center gap-2">
+            {unread > 0 && (
+              <Button size="sm" onClick={() => router.post(route('inbox.read-all'), {}, { preserveScroll: true })}>
+                Mark all read
+              </Button>
+            )}
+            <SegmentedControl
+              aria-label="Filter inbox"
+              value={filter}
+              onValueChange={setFilter}
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'unread', label: 'Unread' },
+              ]}
+            />
+          </div>
         }
       />
       <Card>
@@ -65,80 +74,36 @@ export function InboxPage() {
           <EmptyState icon={CheckCheck} {...empty[filter]} />
         ) : (
           <ul>
-            {shown.map((item) => {
-              const Icon = icons[item.kind]
+            {shown.map((n) => {
+              const Icon = icons[n.kind] ?? AtSign
               return (
-                <li key={item.id} className="flex flex-wrap items-start gap-3 border-b border-border px-4 py-3 last:border-b-0">
-                  <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded bg-surface-2 text-fg-muted" title={kindLabels[item.kind]}>
+                <li key={n.id} className="flex flex-wrap items-start gap-3 border-b border-border px-4 py-3 last:border-b-0">
+                  <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded bg-surface-2 text-fg-muted" title={kindLabels[n.kind]}>
                     <Icon size={16} aria-hidden />
-                    <span className="sr-only">{kindLabels[item.kind]}</span>
+                    <span className="sr-only">{kindLabels[n.kind]}</span>
                   </span>
                   <div className="min-w-0 flex-1 basis-64">
-                    {item.person && <PersonCell name={item.person} className="mb-0.5" />}
-                    <Link to={item.href} className="block text-base font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
-                      {item.title}
-                    </Link>
-                    <p className="line-clamp-2 text-sm text-fg-muted">{item.subtitle}</p>
+                    <a
+                      href={n.link}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        open(n)
+                      }}
+                      className={`block text-base hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${n.read_at === null ? 'font-semibold' : 'font-medium'}`}
+                    >
+                      {n.title}
+                    </a>
+                    {n.body && <p className="line-clamp-2 text-sm text-fg-muted">{n.body}</p>}
                   </div>
-                  <time className="shrink-0 text-sm text-fg-muted" dateTime={item.at}>
-                    {relativeTime(item.at)}
+                  <time className="shrink-0 text-sm text-fg-muted" dateTime={n.created_at}>
+                    {relativeTime(n.created_at)}
                   </time>
-                  {item.actions && (
-                    <div className="flex shrink-0 gap-2">
-                      {item.actions.map((a) =>
-                        a.tone === 'approve' ? (
-                          <Button key={a.label} size="sm" variant="primary" onClick={() => a.run()}>
-                            {a.label}
-                          </Button>
-                        ) : (
-                          <Button
-                            key={a.label}
-                            size="sm"
-                            onClick={() => {
-                              setNote('')
-                              setRejecting({ item, action: a })
-                            }}
-                          >
-                            {a.label}
-                          </Button>
-                        ),
-                      )}
-                    </div>
-                  )}
                 </li>
               )
             })}
           </ul>
         )}
       </Card>
-
-      <Dialog
-        open={rejecting !== null}
-        onOpenChange={(o) => !o && setRejecting(null)}
-        title="Reject request"
-        description={rejecting?.item.title}
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setRejecting(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              disabled={!note.trim()}
-              onClick={() => {
-                rejecting?.action.run(note.trim())
-                setRejecting(null)
-              }}
-            >
-              Reject
-            </Button>
-          </>
-        }
-      >
-        <Field label="Note for the requester" required>
-          <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Why is this being rejected?" />
-        </Field>
-      </Dialog>
     </div>
   )
 }
