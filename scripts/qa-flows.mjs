@@ -2,7 +2,9 @@
 // Usage: SMOKE_PORT=8051 pnpm qa   (QA_PORT or SMOKE_PORT, default 8198)
 // WARNING: resets the local `vivacom_hr` database with `migrate:fresh --seed` first. E2E_NO_RESET=1 skips that.
 // Sections: A auth and attendance basics; B HR onboarding and forced password change; C time tracking;
-// D work (board, task drawer, projects); E leave two-stage approval; F payroll run and payslip, contractor claim.
+// D work (board, task drawer, projects); E leave two-stage approval; G late, half day, regularise, LOP (runs before F, which
+// pays the November draft G recomputes); F payroll run and payslip, contractor claim; H joiner proration; I hold, bank advice,
+// approve, reopen (December draft); J settings effective by date; K reports.
 import { chipText, clickText, launchBrowser, loginDemo, loginEmail, pathOf, signOut, startLaravel, wait, waitForChip } from './lib/laravel.mjs'
 
 const PORT = Number(process.env.QA_PORT || process.env.SMOKE_PORT) || 8198
@@ -45,6 +47,9 @@ try {
       if (m.type() === 'error' && !/Download the React DevTools/.test(m.text())) consoleErrors.push(m.text().slice(0, 160))
     })
     page.on('pageerror', (e) => consoleErrors.push(String(e.message).slice(0, 160)))
+    page.on('response', (r) => {
+      if (r.status() >= 400) consoleErrors.push(`HTTP ${r.status()} ${r.request().method()} ${r.url().replace(/^https?:\/\/[^/]+/, '')}`)
+    })
     return page
   }
   const bodyText = () => page.evaluate(() => document.body.innerText)
@@ -57,6 +62,58 @@ try {
   const waitPath = (re, timeout = 8000) =>
     page.waitForFunction((s) => new RegExp(s).test(location.pathname), { timeout }, re.source)
   const hasTopbar = () => page.evaluate(() => !!document.querySelector('[data-testid="topbar"]'))
+
+  /** Sets a Radix switch by its label text: clicks the label only when the switch is not already in that state. */
+  async function setSwitch(label, on) {
+    const ok = await page.evaluate((l, want) => {
+      const lab = [...document.querySelectorAll('label')].find((x) => x.offsetParent !== null && x.textContent.trim().startsWith(l))
+      const sw = lab && document.getElementById(lab.htmlFor)
+      if (!sw) return 'no switch';
+      if ((sw.getAttribute('aria-checked') === 'true') !== want) lab.click()
+      return 'ok'
+    }, label, on)
+    await wait(300)
+    const now = await page.evaluate((l) => {
+      const lab = [...document.querySelectorAll('label')].find((x) => x.textContent.trim().startsWith(l))
+      return document.getElementById(lab?.htmlFor)?.getAttribute('aria-checked')
+    }, label)
+    if (ok !== 'ok' || (now === 'true') !== on) throw new Error(`switch "${label}" did not reach ${on} (${ok}, aria-checked ${now})`)
+  }
+  /** Fetches a same-origin URL with the page's cookies. */
+  const fetchInPage = (u) =>
+    page.evaluate(async (url) => {
+      const r = await fetch(url, { credentials: 'same-origin' })
+      return { status: r.status, type: r.headers.get('content-type') ?? '', text: await r.text() }
+    }, u)
+  /** Text of the open drawer or dialog, or the whole body when none is open. */
+  const dialogText = () => page.evaluate(() => (document.querySelector('[role="dialog"]') ?? document.body).innerText)
+  const rowTexts = (re) =>
+    page.evaluate((s) => [...document.querySelectorAll('tr, [role="row"]')].map((r) => r.innerText.replace(/\s+/g, ' ')).filter((t) => new RegExp(s).test(t)), re.source)
+  const tomorrowISO = () => {
+    const d = new Date(Date.now() + 86400000)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  /** Acknowledges every flagged item on the open run page (HR, in review). Returns counts. */
+  async function ackAllFlags() {
+    let acked = 0
+    for (let i = 0; i < 40; i++) {
+      const clicked = await page.evaluate(() => {
+        const b = [...document.querySelectorAll('button')].find((x) => x.offsetParent !== null && x.textContent.trim() === 'Acknowledge')
+        if (!b) return false
+        b.click()
+        return true
+      })
+      if (!clicked) break
+      acked++
+      await wait(900)
+    }
+    const left = await page.evaluate(() => [...document.querySelectorAll('button')].filter((x) => x.textContent.trim() === 'Acknowledge').length)
+    return { acked, left }
+  }
+  const lopDays = (t) => {
+    const m = t.match(/Loss of pay \(([\d.]+) days?\)/)
+    return m ? Number(m[1]) : 0
+  }
 
   /** Sets a native input, select or textarea by its label (scoped to an open dialog when there is one). */
   function setNative(el, v) {
@@ -473,8 +530,89 @@ try {
     return { ok: /leave/i.test(t) && /approved/i.test(t), observed: snip(t, /leave/i) }
   })
 
-  // ---------- F. Payroll and billing ----------
+  // ---------- G. Late, half day, regularise, payroll ----------
   const RUN = ['November 2026', 'Nov 2026']
+  // Runs before F: the November draft is the run that G recomputes and F later sends, approves and pays.
+  const G_REASON = `QA regularise ${TS}`
+  await step('G.1', 'HR creates a payroll policy version from today with late penalty and LOP on', async () => {
+    await freshPage()
+    await loginEmail(BASE, page, HR_EMAIL, 'password')
+    await page.goto(`${BASE}/settings/payroll`, { waitUntil: 'networkidle0' })
+    await clickBtn('New version')
+    await wait(400)
+    await setSwitch('Deduct for absences and half days', true)
+    await setSwitch('Deduct for repeated lates', true)
+    await clickBtn('Create version')
+    await waitBody(/takes effect from/i, 8000).catch(() => {})
+    await wait(600)
+    const t = await bodyText()
+    return { ok: /In force now/.test(t) && /Deduct for repeated lates/.test(t), observed: `${await pathOf(page)}; ${snip(t, /takes effect from|In force now/i)}` }
+  })
+  await step('G.2', 'HR /settings/attendance: the current version carries half_day_after_minutes', async () => {
+    await page.goto(`${BASE}/settings/attendance`, { waitUntil: 'networkidle0' })
+    const t = await bodyText()
+    const v = await page.evaluate(() => {
+      const lab = [...document.querySelectorAll('label')].find((x) => x.textContent.trim().startsWith('Half day if login later than'))
+      return lab ? (document.getElementById(lab.htmlFor) ?? lab.querySelector('input'))?.value : null
+    })
+    return { ok: /In force now/.test(t) && /^\d+$/.test(v ?? ''), observed: `half_day_after_minutes field = ${v ?? 'missing'}; ${snip(t, /In force now/)}` }
+  })
+  await step('G.3', 'Sadia /my-day: Needs attention lists the seeded absence and auto-closed day', async () => {
+    await freshPage()
+    await loginDemo(BASE, page, 'Sadia Sultana')
+    await page.goto(`${BASE}/my-day`, { waitUntil: 'networkidle0' })
+    await waitBody(/Needs attention this month/, 8000)
+    const absent = await rowTexts(/Absence/)
+    const auto = await rowTexts(/Auto-closed day/)
+    return { ok: absent.length > 0 && auto.length > 0, observed: `absence rows ${absent.length}, auto-closed rows ${auto.length}` }
+  })
+  await step('G.4', 'Sadia regularises the absence (kind Absence) with a reason', async () => {
+    await clickInRow('Absence', 'Regularise')
+    await page.waitForSelector('[role="dialog"]', { timeout: 5000 })
+    const kind = (await dialogText()).match(/Absence/) ? 'Absence' : 'other'
+    await setField('Reason', G_REASON)
+    await clickDlg('Send request')
+    await waitBody(/Regularization pending/, 8000)
+    const rows = await rowTexts(/Absence/)
+    return { ok: kind === 'Absence' && rows.some((r) => /Regularization pending/.test(r)), observed: `kind ${kind}; ${snip(rows[0] ?? '', /Regularization pending|Absence/)}` }
+  })
+  await step('G.5', 'Tanvir (lead) approves the absence with resolution Excused', async () => {
+    await freshPage()
+    await loginDemo(BASE, page, 'Tanvir Hossain')
+    await page.goto(`${BASE}/team/regularizations`, { waitUntil: 'networkidle0' })
+    await waitBody(new RegExp(G_REASON), 8000)
+    await clickInRow(G_REASON, 'Approve')
+    await page.waitForSelector('[role="dialog"]', { timeout: 5000 })
+    const dlg = await dialogText()
+    await clickDlg('Approve')
+    await waitBody(/Decision saved/, 8000).catch(() => {})
+    return { ok: /Excused/.test(dlg) && /Decision saved/.test(await bodyText()), observed: `dialog default ${snip(dlg, /Excused|Resolution/)}` }
+  })
+  await step('G.6', 'HR Nov draft: LOP days before recompute, recompute, LOP days drop by 1; Late penalty column shows', async () => {
+    await freshPage()
+    await loginEmail(BASE, page, HR_EMAIL, 'password')
+    await page.goto(`${BASE}/payroll`, { waitUntil: 'networkidle0' })
+    await clickRow(...RUN)
+    await wait(1000)
+    if (!/Draft/i.test(await bodyText())) throw new Error('November run is not a draft')
+    await clickRow('Sadia Sultana')
+    await wait(800)
+    const before = lopDays(await dialogText())
+    await page.keyboard.press('Escape')
+    await wait(500)
+    await clickBtn('Recompute')
+    await waitBody(/Recomputed/, 8000).catch(() => {})
+    await wait(800)
+    await clickRow('Sadia Sultana')
+    await wait(800)
+    const after = lopDays(await dialogText())
+    await page.keyboard.press('Escape')
+    await wait(400)
+    const lateCol = await page.evaluate(() => [...document.querySelectorAll('th')].some((th) => /Late penalty/.test(th.textContent)))
+    return { ok: after === before - 1 && lateCol, observed: `LOP days before ${before}, after ${after}; late penalty column ${lateCol}` }
+  })
+
+  // ---------- F. Payroll and billing ----------
   const PAY_REF = `BEFTN-QA-${TS}`
   await step('F.1', 'HR opens the Nov 2026 draft payroll run', async () => {
     await freshPage()
@@ -502,9 +640,11 @@ try {
     await wait(800)
     await clickBtn('Send for review')
     await waitBody(/Waiting for management to approve|In review/, 8000).catch(() => {})
+    // A new payee (Test Person, flow B) is flagged on submit and approval waits for HR to acknowledge it.
+    const acks = await ackAllFlags()
     const t = await bodyText()
     const btns = await page.evaluate(() => [...document.querySelectorAll('button')].map((b) => b.textContent.trim()).filter((x) => /Send|Approve|Recompute|review/i.test(x)))
-    return { ok: !/Send for review/.test(t) && /In review/.test(t), observed: `buttons [${btns.join(' | ')}]; ${snip(t, /Draft|In review|Waiting for management|Send for review/)}` }
+    return { ok: !/Send for review/.test(t) && /In review/.test(t) && acks.left === 0, observed: `acknowledged ${acks.acked} flag(s); buttons [${btns.join(' | ')}]; ${snip(t, /Draft|In review|Waiting for management|Send for review/)}` }
   })
   await step('F.4', 'Rafiq approves the run', async () => {
     await freshPage()
@@ -594,6 +734,191 @@ try {
     await wait(1200)
     const t = await bodyText()
     return { ok: /Paid/.test(t), observed: snip(t, /Paid/) }
+  })
+
+  // ---------- H. Joiner proration (paid runs) ----------
+  await step('H.1', 'Imran Kabir joined 25 Aug: August gross is 98,000 x 5/22 = 22,273 with a 5-day slice', async () => {
+    await freshPage()
+    await loginEmail(BASE, page, HR_EMAIL, 'password')
+    await page.goto(`${BASE}/payroll`, { waitUntil: 'networkidle0' })
+    await clickRow('August 2026', 'Aug 2026')
+    await wait(1000)
+    await clickRow('Imran Kabir')
+    await wait(800)
+    const drawer = await dialogText()
+    const gross = drawer.match(/Gross salary[^\n]*\n?\s*[^\n]*?([\d,]+)/)
+    const five = /\b5(\.0+)? days of/.test(drawer)
+    const ok = /22,273/.test(drawer) && five
+    return { ok, observed: `gross line ${gross ? gross[1] : 'n/a'}; slice 5 days ${five}; ${snip(drawer, /days of/)}` }
+  })
+  await step('H.2', 'October 2026 run: Sadia Sultana shows 2 salary slices (raise on 16 Oct)', async () => {
+    await page.keyboard.press('Escape').catch(() => {})
+    await page.goto(`${BASE}/payroll`, { waitUntil: 'networkidle0' })
+    await clickRow('October 2026', 'Oct 2026')
+    await wait(1000)
+    await clickRow('Sadia Sultana')
+    await wait(800)
+    const drawer = await dialogText()
+    const slices = drawer.match(/From [^\n]*days of/g) ?? []
+    return { ok: slices.length === 2, observed: `${slices.length} slices: ${slices.join(' | ').slice(0, 200)}` }
+  })
+
+  // ---------- I. Hold, bank advice, approval, reopen ----------
+  // The November run is paid by F, so the "current draft" for this block is the next regular month (December 2026),
+  // started from the New run menu like HR does.
+  const I_HOLD = `QA hold ${TS}`
+  const I_REOPEN = `QA reopen ${TS}`
+  let employeesBefore = null
+  await step('I.1', 'HR starts the December 2026 draft and holds Imran Kabir with a reason', async () => {
+    await freshPage()
+    await loginEmail(BASE, page, HR_EMAIL, 'password')
+    await page.goto(`${BASE}/payroll`, { waitUntil: 'networkidle0' })
+    await clickBtn('New run')
+    await wait(300)
+    await clickText(page, 'Regular, December', '[role="menuitem"]')
+    await page.waitForFunction(() => /\/payroll\/\d+/.test(location.pathname), { timeout: 10000 })
+    await wait(800)
+    employeesBefore = Number((await bodyText()).match(/Employees\s*\n?\s*(\d+)/)?.[1] ?? NaN)
+    await clickInRow('Imran Kabir', 'Hold')
+    await page.waitForSelector('[role="dialog"]', { timeout: 5000 })
+    await setField('Reason', I_HOLD)
+    await clickDlg('Hold')
+    await waitBody(/on hold, not included/, 8000)
+    const t = await bodyText()
+    const employeesAfter = Number(t.match(/Employees\s*\n?\s*(\d+)/)?.[1] ?? NaN)
+    return { ok: employeesAfter === employeesBefore - 1 && /1 on hold/.test(t), observed: `employees ${employeesBefore} -> ${employeesAfter}; ${snip(t, /on hold/)}` }
+  })
+  await step('I.2', 'Send for review: flagged items show variance badges', async () => {
+    await clickBtn('Send for review')
+    await waitBody(/In review/, 8000).catch(() => {})
+    await wait(600)
+    const t = await bodyText()
+    const flags = (t.match(/New payee|vs last month/g) ?? []).length
+    return { ok: /In review/.test(t) && flags > 0, observed: `${flags} variance badges; ${snip(t, /In review/)}` }
+  })
+  await step('I.3', 'HR acknowledges every flagged item', async () => {
+    const { acked, left } = await ackAllFlags()
+    return { ok: acked > 0 && left === 0, observed: `acknowledged ${acked}, remaining ${left}` }
+  })
+  await step('I.4', 'Rafiq (management) approves the December run', async () => {
+    await freshPage()
+    await loginDemo(BASE, page, 'Rafiq Ahmed')
+    await page.goto(`${BASE}/payroll`, { waitUntil: 'networkidle0' })
+    await clickRow('December 2026', 'Dec 2026')
+    await wait(1000)
+    await clickBtn('Approve')
+    await page.waitForSelector('[role="dialog"], [role="alertdialog"]', { timeout: 5000 })
+    await clickDlg('Approve')
+    await wait(1200)
+    const t = await bodyText()
+    return { ok: /Approved/.test(t), observed: snip(t, /Approved/) }
+  })
+  await step('I.5', 'Bank advice CSV: header row, no VIV-109 (held), contains VIV-107', async () => {
+    await freshPage()
+    await loginEmail(BASE, page, HR_EMAIL, 'password')
+    await page.goto(`${BASE}/payroll`, { waitUntil: 'networkidle0' })
+    await clickRow('December 2026', 'Dec 2026')
+    await wait(1000)
+    const href = await page.evaluate(() => document.querySelector('a[href*="bank-advice.csv"]')?.href ?? null)
+    if (!href) throw new Error('no bank advice link')
+    const r = await fetchInPage(href)
+    const header = r.text.split('\n')[0] ?? ''
+    const ok = r.status === 200 && /text\/csv/.test(r.type) && /^code,name/.test(header) && !r.text.includes('VIV-109') && r.text.includes('VIV-107')
+    return { ok, observed: `HTTP ${r.status} ${r.type}; header "${header.slice(0, 80)}"; VIV-109 ${r.text.includes('VIV-109')}, VIV-107 ${r.text.includes('VIV-107')}` }
+  })
+  await step('I.6', 'Rafiq reopens the approved run with a reason; status back to review', async () => {
+    await freshPage()
+    await loginDemo(BASE, page, 'Rafiq Ahmed')
+    await page.goto(`${BASE}/payroll`, { waitUntil: 'networkidle0' })
+    await clickRow('December 2026', 'Dec 2026')
+    await wait(1000)
+    await clickBtn('Reopen')
+    await page.waitForSelector('[role="dialog"]', { timeout: 5000 })
+    await setField('Reason', I_REOPEN)
+    await clickDlg('Reopen')
+    await waitBody(/In review|Waiting for management/, 8000).catch(() => {})
+    const t = await bodyText()
+    return { ok: /In review/.test(t) && !/Approved/.test(snip(t, /In review|Approved/)), observed: snip(t, /In review|Approved|Reopen/) }
+  })
+
+  // ---------- J. Settings take effect by date ----------
+  const TOMORROW = tomorrowISO()
+  let currentRow = ''
+  await step('J.1', `HR creates an attendance version from ${TOMORROW} with grace 5; it is upcoming and the current one is unchanged`, async () => {
+    await freshPage()
+    await loginEmail(BASE, page, HR_EMAIL, 'password')
+    await page.goto(`${BASE}/settings/attendance`, { waitUntil: 'networkidle0' })
+    currentRow = (await rowTexts(/In force now/))[0] ?? ''
+    await clickBtn('New version')
+    await wait(400)
+    await setField('Takes effect from', TOMORROW)
+    await setField('Late grace (min)', '5')
+    await clickBtn('Create version')
+    await waitBody(/takes effect from/i, 8000).catch(() => {})
+    await wait(600)
+    const upcoming = await rowTexts(/Upcoming/)
+    const current = (await rowTexts(/In force now/))[0] ?? ''
+    const ok = upcoming.some((r) => / 5 min/.test(r)) && current === currentRow && currentRow !== ''
+    return { ok, observed: `upcoming rows ${upcoming.length}; current row unchanged ${current === currentRow}; ${snip(upcoming[0] ?? '', /Upcoming/)}` }
+  })
+  await step('J.2', 'Delete the upcoming attendance version; it is gone', async () => {
+    const ok0 = await page.evaluate(() => {
+      const tr = [...document.querySelectorAll('tr')].find((r) => /Upcoming/.test(r.textContent) && /5 min/.test(r.textContent))
+      const b = tr?.querySelector('[aria-label="Remove upcoming version"]')
+      if (!b) return false
+      b.click()
+      return true
+    })
+    if (!ok0) throw new Error('no remove button on the upcoming row')
+    await page.waitForSelector('[role="alertdialog"], [role="dialog"]', { timeout: 5000 })
+    await clickDlg('Remove')
+    await waitBody(/Upcoming version removed/, 8000).catch(() => {})
+    await wait(600)
+    const left = (await rowTexts(/Upcoming/)).filter((r) => / 5 min/.test(r))
+    return { ok: left.length === 0, observed: `upcoming with 5 min remaining: ${left.length}` }
+  })
+  await step('J.3', 'Sadia GET /settings is refused (403 or redirect), not the settings page', async () => {
+    await freshPage()
+    await loginDemo(BASE, page, 'Sadia Sultana')
+    const res = await page.goto(`${BASE}/settings`, { waitUntil: 'networkidle0' })
+    const path = await pathOf(page)
+    const status = res?.status() ?? 0
+    return { ok: status >= 400 || path !== '/settings', observed: `HTTP ${status}, path ${path}` }
+  })
+
+  // ---------- K. Reports render ----------
+  await step('K.1', 'HR /reports: summary chart and Export CSV returns text/csv', async () => {
+    await freshPage()
+    await loginEmail(BASE, page, HR_EMAIL, 'password')
+    await page.goto(`${BASE}/reports`, { waitUntil: 'networkidle0' })
+    const chart = await page.evaluate(() => !!document.querySelector('[role="img"][aria-label^="Gross, net and employer cost"]'))
+    const href = await page.evaluate(() => document.querySelector('a[download][href*="payroll-summary"]')?.href ?? null)
+    const r = href ? await fetchInPage(href) : { status: 0, type: '' }
+    return { ok: chart && r.status === 200 && /text\/csv/.test(r.type), observed: `chart ${chart}; export HTTP ${r.status} ${r.type}` }
+  })
+  await step('K.2', 'HR /reports?tab=sheet: the attendance grid has rows and its CSV responds', async () => {
+    await page.goto(`${BASE}/reports?tab=sheet`, { waitUntil: 'networkidle0' })
+    const rows = await page.evaluate(() => document.querySelectorAll('[data-testid="attendance-sheet"] tbody tr').length)
+    const href = await page.evaluate(() => document.querySelector('a[download][href*="attendance-sheet"]')?.href ?? null)
+    const r = href ? await fetchInPage(href) : { status: 0, type: '' }
+    // The grid shows names only; codes are not rendered in the sheet (recorded in the report, not asserted).
+    return { ok: rows > 0 && r.status === 200 && /text\/csv/.test(r.type), observed: `grid rows ${rows}; export HTTP ${r.status} ${r.type}` }
+  })
+  await step('K.3', 'Tanvir /team/sheet shows his team only (no Nasrin Akter row)', async () => {
+    await freshPage()
+    await loginDemo(BASE, page, 'Tanvir Hossain')
+    const res = await page.goto(`${BASE}/team/sheet`, { waitUntil: 'networkidle0' })
+    const names = await page.evaluate(() => [...document.querySelectorAll('[data-testid="attendance-sheet"] tbody tr td:first-child')].map((td) => td.textContent.trim()))
+    return { ok: res?.status() === 200 && names.length > 0 && !names.includes('Nasrin Akter'), observed: `HTTP ${res?.status()}; ${names.length} rows: ${names.slice(0, 6).join(', ')}` }
+  })
+  await step('K.4', 'Sadia: /me/statement renders (200) and /reports is refused (403)', async () => {
+    await freshPage()
+    await loginDemo(BASE, page, 'Sadia Sultana')
+    const st = await page.goto(`${BASE}/me/statement`, { waitUntil: 'networkidle0' })
+    const stStatus = st?.status() ?? 0
+    const rep = await page.goto(`${BASE}/reports`, { waitUntil: 'networkidle0' })
+    const repStatus = rep?.status() ?? 0
+    return { ok: stStatus === 200 && repStatus === 403, observed: `/me/statement HTTP ${stStatus}; /reports HTTP ${repStatus}` }
   })
 
   for (const [id, desc] of SKIPPED) console.log(`SKIP ${id} ${desc}`)
