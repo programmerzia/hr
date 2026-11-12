@@ -1,4 +1,4 @@
-import { Download, FileText } from 'lucide-react'
+import { BarChart3, Download, FileText } from 'lucide-react'
 import { router } from '@inertiajs/react'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { MoneyCell } from '../../components/shared/MoneyCell'
@@ -15,7 +15,15 @@ export default function MyPayslipsPage() {
 
   return (
     <div className="mx-auto max-w-content">
-      <PageHeader title="My payslips" description="Payslips appear here once the month's payroll is paid." />
+      <PageHeader
+        title="My payslips"
+        description="Payslips appear here once the month's payroll is paid."
+        actions={
+          <a href="/me/statement" className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
+            <BarChart3 className="h-4 w-4" /> Yearly statement
+          </a>
+        }
+      />
       {slips.length === 0 ? (
         <EmptyTable icon={FileText} title="No payslips yet" description="Your first payslip will show up after payroll is paid." />
       ) : (
