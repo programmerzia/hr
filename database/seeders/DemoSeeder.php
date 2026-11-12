@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Domain\Leave\Actions\ProvisionBalances;
 use App\Models\AttendanceDay;
 use App\Models\AttendancePolicy;
 use App\Models\BankAccount;
@@ -10,8 +11,6 @@ use App\Models\Employee;
 use App\Models\EmployeeAsset;
 use App\Models\EmployeeDocument;
 use App\Models\Holiday;
-use App\Models\LeaveBalance;
-use App\Models\LeaveType;
 use App\Models\OnboardingChecklistItem;
 use App\Models\RegularizationRequest;
 use App\Models\SalaryStructure;
@@ -149,12 +148,7 @@ class DemoSeeder extends Seeder
         // Leave balances for the current year (requests come with the Leave module seed).
         $year = (int) now()->year;
         foreach ($this->emp as $e) {
-            foreach (LeaveType::all() as $t) {
-                LeaveBalance::create([
-                    'employee_id' => $e->id, 'leave_type_id' => $t->id, 'year' => $year,
-                    'entitled' => $e->employment_type === 'contractor' ? 0 : $t->annual_quota, 'used' => 0, 'pending' => 0,
-                ]);
-            }
+            app(ProvisionBalances::class)($e, $year);
         }
 
         // Module demo seeders (owned by module agents; skipped until the class exists).

@@ -8,12 +8,14 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   leaveTypes: LeaveType[]
+  onProbation?: boolean
   balances: BalanceRow[]
   holidays: ISODate[]
   weekend: number[]
 }
 
-export function RequestLeaveDialog({ open, onOpenChange, leaveTypes, balances, holidays, weekend }: Props) {
+export function RequestLeaveDialog({ open, onOpenChange, leaveTypes: allTypes, onProbation = false, balances, holidays, weekend }: Props) {
+  const leaveTypes = allTypes.filter((t) => !onProbation || t.allowed_on_probation)
   const defaultType = (leaveTypes.find((t) => /casual/i.test(t.name)) ?? leaveTypes[0])?.id ?? ''
   const form = useForm({
     leave_type_id: defaultType,

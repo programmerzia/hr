@@ -18,6 +18,9 @@ class LeaveTypeResource extends JsonResource
             'is_paid' => (bool) $this->is_paid,
             'carry_forward' => (bool) $this->carry_forward,
             'allows_half_day' => (bool) $this->allows_half_day,
+            'carry_forward_cap' => $this->carry_forward_cap === null ? null : (float) $this->carry_forward_cap,
+            'allowed_on_probation' => (bool) $this->allowed_on_probation,
+            'encashable' => (bool) $this->encashable,
         ];
     }
 }

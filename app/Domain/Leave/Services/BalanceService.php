@@ -43,16 +43,19 @@ class BalanceService
                 if (! (self::isUnlimited($type) || (float) $type->annual_quota > 0)) {
                     continue;
                 }
+                $emp = $employee instanceof Employee ? $employee : Employee::find($employeeId);
+                $entitled = $emp && $emp->employment_type === 'contractor' ? 0.0
+                    : ($emp ? Entitlement::prorated($type, $emp->joined_on, $year) : (float) $type->annual_quota);
                 $row = new LeaveBalance([
                     'employee_id' => $employeeId, 'leave_type_id' => $type->id, 'year' => $year,
-                    'entitled' => $type->annual_quota, 'used' => 0, 'pending' => 0,
+                    'entitled' => $entitled, 'used' => 0, 'pending' => 0, 'carried_in' => 0, 'encashed' => 0,
                 ]);
                 $row->id = "synthetic-{$employeeId}-{$type->id}-{$year}";
             }
             $unlimited = self::isUnlimited($type);
             $out[] = [
                 'balance' => $row, 'type' => $type, 'unlimited' => $unlimited,
-                'available' => $unlimited ? null : max(0.0, (float) $row->entitled - (float) $row->used - (float) $row->pending),
+                'available' => $unlimited ? null : max(0.0, (float) $row->entitled + (float) $row->carried_in - (float) $row->used - (float) $row->pending),
             ];
         }
 

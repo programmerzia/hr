@@ -223,6 +223,9 @@ export interface LeaveType {
   is_paid: boolean
   carry_forward: boolean
   allows_half_day: boolean
+  carry_forward_cap: number | null
+  allowed_on_probation: boolean
+  encashable: boolean
 }
 
 export interface LeaveBalance {
@@ -233,6 +236,8 @@ export interface LeaveBalance {
   entitled: number
   used: number
   pending: number
+  carried_in: number
+  encashed: number
 }
 
 export type LeaveStatus = 'pending_lead' | 'pending_hr' | 'approved' | 'rejected' | 'cancelled'
@@ -607,5 +612,6 @@ export type Ability =
   | 'approve_claims'
   | 'manage_projects'
   | 'manage_settings'
+  | 'manage_policy'
 
 export type BadgeVariant = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'accent'

@@ -19,6 +19,8 @@ class LeaveBalanceResource extends JsonResource
             'entitled' => (float) $this->entitled,
             'used' => (float) $this->used,
             'pending' => (float) $this->pending,
+            'carried_in' => (float) $this->carried_in,
+            'encashed' => (float) $this->encashed,
         ];
     }
 }

@@ -19,6 +19,9 @@ class LeaveType extends Model
             'is_paid' => 'boolean',
             'carry_forward' => 'boolean',
             'allows_half_day' => 'boolean',
+            'carry_forward_cap' => 'float',
+            'allowed_on_probation' => 'boolean',
+            'encashable' => 'boolean',
         ];
     }
 }

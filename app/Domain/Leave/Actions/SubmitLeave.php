@@ -21,6 +21,9 @@ class SubmitLeave
         if (! $type) {
             Fail::with('Choose a leave type');
         }
+        if (! $type->allowed_on_probation && self::onProbation($employee)) {
+            Fail::with('This leave type is not available during probation.');
+        }
         if (! $startsOn || ! $endsOn) {
             Fail::with('Choose the dates');
         }
@@ -73,6 +76,12 @@ class SubmitLeave
 
             return $request;
         });
+    }
+
+    public static function onProbation(Employee $employee): bool
+    {
+        return $employee->status === 'probation'
+            || ($employee->probation_until !== null && $employee->probation_until->startOfDay()->gte(now()->startOfDay()));
     }
 
     private function num(float $n): string

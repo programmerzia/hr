@@ -20,6 +20,8 @@ class LeaveBalance extends Model
             'entitled' => 'float',
             'used' => 'float',
             'pending' => 'float',
+            'carried_in' => 'float',
+            'encashed' => 'float',
         ];
     }
 

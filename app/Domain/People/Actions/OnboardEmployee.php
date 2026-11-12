@@ -2,6 +2,7 @@
 
 namespace App\Domain\People\Actions;
 
+use App\Domain\Leave\Actions\ProvisionBalances;
 use App\Models\BankAccount;
 use App\Models\Employee;
 use App\Models\OnboardingChecklistItem;
@@ -49,6 +50,7 @@ class OnboardEmployee
             foreach ($p['checklist'] ?? [] as $label) {
                 OnboardingChecklistItem::create(['employee_id' => $employee->id, 'label' => $label, 'done' => false]);
             }
+            app(ProvisionBalances::class)($employee, (int) $employee->joined_on->format('Y'));
             Concerns::event($employee, 'joined', 'Joined as '.mb_strtolower($employee->designation), $p['joined_on']);
 
             return $employee;

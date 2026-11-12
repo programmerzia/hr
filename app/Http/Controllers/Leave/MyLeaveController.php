@@ -30,6 +30,7 @@ class MyLeaveController extends Controller
 
         return Inertia::render('Leave/MyLeavePage', [
             'year' => $year,
+            'on_probation' => SubmitLeave::onProbation($employee),
             'balances' => array_map(Shape::balance(...), $rows),
             'requests' => LeaveRequestResource::collection(
                 LeaveRequest::where('employee_id', $employee->id)->orderByDesc('starts_on')->orderByDesc('created_at')->get(),

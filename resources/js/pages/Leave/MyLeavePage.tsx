@@ -19,11 +19,12 @@ interface MyLeaveProps {
   leave_types: LeaveType[]
   holidays: Holiday[]
   policy: AttendancePolicy
+  on_probation: boolean
 }
 
 export default function MyLeavePage() {
   const { role } = useAuth()
-  const { year, balances: allBalances, requests, leave_types, holidays, policy } = useShared<MyLeaveProps>()
+  const { year, balances: allBalances, requests, leave_types, holidays, policy, on_probation } = useShared<MyLeaveProps>()
   const [open, setOpen] = useState(false)
   const [toCancel, setToCancel] = useState<LeaveRequest | null>(null)
   const typeById = (id: string) => leave_types.find((t) => t.id === id)
@@ -56,8 +57,13 @@ export default function MyLeavePage() {
             key={b.id}
             icon={Plane}
             label={`${typeName(b.leave_type_id)}${typeById(b.leave_type_id)?.is_paid ? '' : ' (unpaid)'}`}
-            value={b.unlimited ? 'Unlimited' : `${b.available} of ${b.entitled}`}
-            delta={{ value: `${b.used} used, ${b.pending} pending`, tone: 'neutral' }}
+            value={b.unlimited ? 'Unlimited' : `${b.available} of ${b.entitled + b.carried_in}`}
+            delta={{
+              value: `${b.used} used, ${b.pending} pending${b.carried_in > 0 ? `, carried in ${b.carried_in}` : ''}${
+                !b.unlimited && (typeById(b.leave_type_id)?.annual_quota ?? 0) > b.entitled ? ', prorated' : ''
+              }`,
+              tone: 'neutral',
+            }}
           />
         ))}
       </div>
@@ -112,6 +118,7 @@ export default function MyLeavePage() {
         open={open}
         onOpenChange={setOpen}
         leaveTypes={leave_types}
+        onProbation={on_probation}
         balances={allBalances}
         holidays={holidays.map((h) => h.date)}
         weekend={policy.weekend_days}
