@@ -62,7 +62,7 @@ class ProfileController extends Controller
 
         $leave = LeaveType::orderBy('name')->get()->map(function (LeaveType $t) use ($employee, $year) {
             $b = LeaveBalance::where(['employee_id' => $employee->id, 'leave_type_id' => $t->id, 'year' => $year])->first();
-            $entitled = (float) ($b?->entitled ?? $t->annual_quota);
+            $entitled = (float) ($b?->entitled ?? $t->annual_quota) + (float) ($b?->carried_in ?? 0);
             $used = (float) ($b?->used ?? 0);
             $pending = (float) ($b?->pending ?? 0);
             $unlimited = ! $t->is_paid && (float) $t->annual_quota === 0.0;
