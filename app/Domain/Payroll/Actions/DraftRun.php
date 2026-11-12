@@ -19,11 +19,11 @@ class DraftRun
         $exists = 'A run for '.PayrollPeriod::label($year, $month).' already exists.';
 
         return DB::transaction(function () use ($year, $month, $by, $exists) {
-            if (PayrollRun::where('year', $year)->where('month', $month)->lockForUpdate()->exists()) {
+            if (PayrollRun::where('year', $year)->where('month', $month)->where('kind', 'regular')->lockForUpdate()->exists()) {
                 Fail::with($exists);
             }
             try {
-                $run = PayrollRun::create(['year' => $year, 'month' => $month, 'status' => 'draft']);
+                $run = PayrollRun::create(['year' => $year, 'month' => $month, 'kind' => 'regular', 'status' => 'draft']);
             } catch (UniqueConstraintViolationException) {
                 Fail::with($exists);
             }

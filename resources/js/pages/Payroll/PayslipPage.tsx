@@ -3,7 +3,7 @@ import { PageHeader } from '../../components/shared/PageHeader'
 import { Button } from '../../components/ui'
 import { useShared } from '../../inertia/props'
 import { formatDate, formatDuration, formatMoney } from '../../lib/format'
-import type { BankAccount, PayrollAdjustment, PayrollItem, PayrollRun, SalaryStructure } from '../../types'
+import type { BankAccount, PayrollAdjustment, PayrollItem, PayrollPolicySwitches, PayrollRun } from '../../types'
 import { monthEnd, monthLabel, monthStart, type PersonRef } from './helpers'
 import { cn } from '../../lib/cn'
 
@@ -28,13 +28,16 @@ interface PayslipProps {
   adjustments: PayrollAdjustment[]
   employee: PersonRef
   department: string | null
-  salary: SalaryStructure | null
   bank: BankAccount | null
   staff: boolean
+  policy: PayrollPolicySwitches
 }
 
+const days = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
+
 export default function PayslipPage() {
-  const { run, item, adjustments, employee: emp, department, salary, bank, staff } = useShared<PayslipProps>()
+  const { run, item, adjustments, employee: emp, department, bank, staff } = useShared<PayslipProps>()
+  const c = item.components
   const bonuses = adjustments.filter((a) => a.kind === 'bonus')
   const deductionAdj = adjustments.filter((a) => a.kind === 'deduction')
   const totalEarnings = item.gross + item.overtime_pay + bonuses.reduce((t, a) => t + a.amount, 0)
@@ -83,8 +86,11 @@ export default function PayslipPage() {
             <span className="text-fg-muted">Attendance </span>
             {formatDuration(item.worked_minutes * 60)} of {formatDuration(item.standard_minutes * 60)}
           </p>
-          <p><span className="text-fg-muted">Unpaid leave </span>{item.unpaid_leave_days} days</p>
-          <p><span className="text-fg-muted">Late arrivals </span>{item.late_count}</p>
+          <p><span className="text-fg-muted">Payable days </span>{days(item.eligible_days)}</p>
+          {item.absent_days + item.half_days > 0 && <p><span className="text-fg-muted">Absent / half days </span>{days(item.absent_days)} / {days(item.half_days)}</p>}
+          {item.paid_leave_days > 0 && <p><span className="text-fg-muted">Paid leave </span>{days(item.paid_leave_days)} days</p>}
+          {item.unpaid_leave_days > 0 && <p><span className="text-fg-muted">Unpaid leave </span>{days(item.unpaid_leave_days)} days</p>}
+          {item.late_count > 0 && <p><span className="text-fg-muted">Late arrivals </span>{item.late_count}</p>}
         </section>
 
         <section className="grid grid-cols-1 gap-6 py-4 sm:grid-cols-2">
@@ -92,13 +98,18 @@ export default function PayslipPage() {
             <h2 className="mb-1 text-sm font-semibold">Earnings</h2>
             <table className="w-full text-sm">
               <tbody>
-                {salary && (
+                {c ? (
                   <>
-                    <Row label="Basic" value={formatMoney(salary.basic)} />
-                    <Row label="House rent" value={formatMoney(salary.house_rent)} />
-                    <Row label="Medical" value={formatMoney(salary.medical)} />
-                    <Row label="Conveyance" value={formatMoney(salary.conveyance)} />
+                    <Row label="Basic" value={formatMoney(c.basic)} />
+                    <Row label="House rent" value={formatMoney(c.house_rent)} />
+                    <Row label="Medical" value={formatMoney(c.medical)} />
+                    <Row label="Conveyance" value={formatMoney(c.conveyance)} />
+                    {c.other_allowances.map((o) => (
+                      <Row key={o.label} label={o.label} value={formatMoney(o.amount)} />
+                    ))}
                   </>
+                ) : (
+                  <Row label="Gross salary" value={formatMoney(item.gross)} />
                 )}
                 {item.overtime_pay > 0 && <Row label="Overtime" value={formatMoney(item.overtime_pay)} />}
                 {bonuses.map((a) => (
@@ -112,10 +123,10 @@ export default function PayslipPage() {
             <h2 className="mb-1 text-sm font-semibold">Deductions</h2>
             <table className="w-full text-sm">
               <tbody>
-                <Row label="Income tax" value={formatMoney(item.tax)} />
-                <Row label={`Provident fund (${salary?.pf_percent ?? 0}% of basic)`} value={formatMoney(item.pf)} />
-                {item.unpaid_deduction > 0 && <Row label={`Unpaid leave (${item.unpaid_leave_days} days)`} value={formatMoney(item.unpaid_deduction)} />}
-                {item.late_deduction > 0 && <Row label="Late arrival penalty" value={formatMoney(item.late_deduction)} />}
+                {item.tax > 0 && <Row label="Income tax" value={formatMoney(item.tax)} />}
+                {item.pf > 0 && <Row label="Provident fund" value={formatMoney(item.pf)} />}
+                {item.unpaid_deduction > 0 && <Row label={`Loss of pay (${days(item.lop_days)} days)`} value={formatMoney(item.unpaid_deduction)} />}
+                {item.late_deduction > 0 && <Row label={`Late penalty (${days(item.late_penalty_days)} days)`} value={formatMoney(item.late_deduction)} />}
                 {deductionAdj.map((a) => (
                   <Row key={a.id} label={a.label} value={formatMoney(a.amount)} />
                 ))}
@@ -124,6 +135,21 @@ export default function PayslipPage() {
             </table>
           </div>
         </section>
+
+        {item.slices.length > 1 && (
+          <section className="border-t border-border py-3 text-sm">
+            <h2 className="mb-1 font-semibold">Salary changes this month</h2>
+            {item.slices.map((sl) => (
+              <p key={sl.effective_from} className="flex justify-between">
+                <span className="text-fg-muted">
+                  From {formatDate(sl.effective_from)}, {days(sl.days)} days of {formatMoney(sl.gross)}
+                </span>
+                <span className="font-mono tabular-nums">{formatMoney(sl.gross_share)}</span>
+              </p>
+            ))}
+          </section>
+        )}
+        {item.pf_employer > 0 && <p className="pb-3 text-sm text-fg-muted">Employer provident fund contribution {formatMoney(item.pf_employer)}</p>}
 
         <section className="flex items-center justify-between rounded border border-border bg-surface-2 px-4 py-3">
           <span className="text-base font-semibold">Net pay</span>

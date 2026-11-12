@@ -1,4 +1,4 @@
-import { Check, FileText, RefreshCw, Send, Trash2, Users } from 'lucide-react'
+import { Check, Download, FileText, Pause, Play, RefreshCw, RotateCcw, Send, Trash2, Users } from 'lucide-react'
 import { Link, router, useForm } from '@inertiajs/react'
 import { useMemo, useState } from 'react'
 import { StackedBar } from '../../components/charts/StackedBar'
@@ -30,7 +30,7 @@ import {
 } from '../../components/ui'
 import { formatDate, formatDuration, formatMoney } from '../../lib/format'
 import { useAuth, useShared } from '../../inertia/props'
-import type { PayrollAdjustment, PayrollAdjustmentKind, PayrollItem, PayrollRun } from '../../types'
+import type { PayrollAdjustment, PayrollAdjustmentKind, PayrollItem, PayrollPolicySwitches, PayrollRun } from '../../types'
 import { deductionMix } from './charts'
 import { act, failureOf, monthLabel, netAdjustment, todayIso, type HistoryEvent, type PersonRef, type RunTotals } from './helpers'
 
@@ -42,6 +42,38 @@ interface RunDetailProps {
   mix: { label: string; value: number; color: string }[]
   events: HistoryEvent[]
   people: PersonRef[]
+  policy: PayrollPolicySwitches
+}
+
+const days = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
+
+/** Reason dialog shared by hold and reopen (both POST {reason}). */
+function ReasonDialog({ open, onOpenChange, title, description, url, confirm }: { open: boolean; onOpenChange: (o: boolean) => void; title: string; description: string; url: string; confirm: string }) {
+  const form = useForm({ reason: '' })
+  const errors = form.errors as Record<string, string>
+  const submit = () => form.post(url, { preserveScroll: true, onSuccess: () => onOpenChange(false) })
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={description}
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={submit} disabled={!form.data.reason.trim() || form.processing}>
+            {confirm}
+          </Button>
+        </>
+      }
+    >
+      <Field label="Reason" required error={errors.reason ?? errors.payroll ?? undefined}>
+        <Textarea rows={3} value={form.data.reason} onChange={(e) => form.setData('reason', e.target.value)} />
+      </Field>
+    </Dialog>
+  )
 }
 
 const hours = (minutes: number) => formatDuration(minutes * 60)
@@ -141,17 +173,22 @@ function ItemSheet({
               <p><span className="text-fg-muted">Overtime </span>{hours(item.overtime_minutes)}</p>
               <p><span className="text-fg-muted">Unpaid leave </span>{item.unpaid_leave_days} days</p>
               <p><span className="text-fg-muted">Late arrivals </span>{item.late_count}</p>
+              <p><span className="text-fg-muted">Eligible days </span>{days(item.eligible_days)}</p>
+              <p><span className="text-fg-muted">Absent </span>{days(item.absent_days)}</p>
+              <p><span className="text-fg-muted">Half days </span>{days(item.half_days)}</p>
+              <p><span className="text-fg-muted">Paid leave </span>{days(item.paid_leave_days)}</p>
             </div>
+            {item.hold && <p className="mt-2 text-sm text-warning">On hold: {item.hold_reason}</p>}
           </section>
 
           <section className="divide-y divide-border">
             {line('Gross salary', item.gross)}
             {item.overtime_pay > 0 && line('Overtime pay', item.overtime_pay, '+')}
             {adjustments.filter((a) => a.kind === 'bonus').length > 0 && line('Bonuses', adjustments.filter((a) => a.kind === 'bonus').reduce((t, a) => t + a.amount, 0), '+')}
-            {line('Unpaid leave', item.unpaid_deduction, '-')}
-            {line('Late arrival penalty', item.late_deduction, '-')}
-            {line('Income tax', item.tax, '-')}
-            {line('Provident fund', item.pf, '-')}
+            {item.unpaid_deduction > 0 && line(`Loss of pay (${days(item.lop_days)} days)`, item.unpaid_deduction, '-')}
+            {item.late_deduction > 0 && line(`Late penalty (${days(item.late_penalty_days)} days)`, item.late_deduction, '-')}
+            {item.tax > 0 && line('Income tax', item.tax, '-')}
+            {item.pf > 0 && line('Provident fund', item.pf, '-')}
             {adjustments.filter((a) => a.kind === 'deduction').length > 0 && line('Other deductions', adjustments.filter((a) => a.kind === 'deduction').reduce((t, a) => t + a.amount, 0), '-')}
             {line('Net pay', item.net, '', true)}
           </section>
@@ -233,15 +270,19 @@ function ItemSheet({
 
 export default function RunDetailPage() {
   const { role } = useAuth()
-  const { run, items: rawItems, adjustments, totals, mix: rawMix, events, people } = useShared<RunDetailProps>()
+  const { run, items: rawItems, adjustments, totals, mix: rawMix, events, people, policy } = useShared<RunDetailProps>()
   const mix = useMemo(() => deductionMix(rawMix), [rawMix])
   const person = (id: string) => people.find((p) => p.id === id)
 
   const [selected, setSelected] = useState<string | null>(null)
   const [payOpen, setPayOpen] = useState(false)
   const [approveOpen, setApproveOpen] = useState(false)
+  const [reopenOpen, setReopenOpen] = useState(false)
+  const [holdId, setHoldId] = useState<string | null>(null)
 
   const items = rawItems
+  const showPf = policy.pf_enabled || items.some((i) => i.pf > 0)
+  const canManage = role === 'hr' || role === 'management'
   const history = useMemo(
     () => events.map((e) => ({ at: e.created_at, actor: (e.actor_id && person(e.actor_id)?.name) || 'Someone', text: e.description })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -270,6 +311,16 @@ export default function RunDetailPage() {
         <Button variant="primary" icon={<Check size={16} />} onClick={() => setApproveOpen(true)}>
           Approve
         </Button>
+      )}
+      {run.status === 'approved' && role === 'management' && (
+        <Button icon={<RotateCcw size={16} />} onClick={() => setReopenOpen(true)}>
+          Reopen
+        </Button>
+      )}
+      {(run.status === 'approved' || run.status === 'paid') && (
+        <a href={route('payroll.runs.bank-advice', run.id)} className={buttonVariants({ variant: 'secondary' })}>
+          <Download size={16} aria-hidden /> Bank advice
+        </a>
       )}
       {run.status === 'approved' && (
         <Button variant="primary" onClick={() => setPayOpen(true)}>
@@ -318,6 +369,7 @@ export default function RunDetailPage() {
               </div>
             ))}
           </dl>
+          {(totals.held ?? 0) > 0 && <p className="text-sm text-warning">{totals.held} on hold, not included in the totals or the bank advice.</p>}
           {mix.some((m) => m.value > 0) && (
             <div className="border-t border-border pt-4">
               <p className="mb-2 text-sm text-fg-muted">Deductions by type</p>
@@ -336,13 +388,17 @@ export default function RunDetailPage() {
               <Thead>
                 <Tr className="hover:bg-transparent">
                   <Th>Employee</Th>
-                  <Th numeric>Worked / standard</Th>
-                  <Th numeric>Late</Th>
-                  <Th numeric>Unpaid days</Th>
+                  <Th numeric>Days</Th>
+                  <Th numeric>Absent / half</Th>
+                  <Th numeric>Paid / unpaid leave</Th>
                   <Th numeric>Gross</Th>
+                  <Th numeric>LOP</Th>
+                  <Th numeric>Late penalty</Th>
+                  {showPf && <Th numeric>PF</Th>}
                   <Th numeric>Adjustments</Th>
                   <Th numeric>Deductions</Th>
                   <Th numeric>Net</Th>
+                  {canManage && open && <Th>Hold</Th>}
                 </Tr>
               </Thead>
               <Tbody>
@@ -352,7 +408,7 @@ export default function RunDetailPage() {
                   return (
                     <Tr
                       key={i.id}
-                      className="cursor-pointer"
+                      className={`cursor-pointer ${i.hold ? 'opacity-60' : ''}`}
                       tabIndex={0}
                       onClick={() => setSelected(i.id)}
                       onKeyDown={(e) => e.key === 'Enter' && setSelected(i.id)}
@@ -360,14 +416,27 @@ export default function RunDetailPage() {
                       <Td>
                         <PersonCell name={emp?.name ?? i.employee_id} subtitle={emp?.code} />
                       </Td>
+                      <Td numeric>{days(i.eligible_days)}</Td>
                       <Td numeric className="whitespace-nowrap">
-                        {hours(i.worked_minutes)} / {hours(i.standard_minutes)}
+                        {days(i.absent_days)} / {days(i.half_days)}
                       </Td>
-                      <Td numeric>{i.late_count}</Td>
-                      <Td numeric>{i.unpaid_leave_days}</Td>
+                      <Td numeric className="whitespace-nowrap">
+                        {days(i.paid_leave_days)} / {days(i.unpaid_leave_days)}
+                      </Td>
                       <Td>
                         <MoneyCell amount={i.gross} />
                       </Td>
+                      <Td>
+                        <MoneyCell amount={i.unpaid_deduction} />
+                      </Td>
+                      <Td>
+                        <MoneyCell amount={i.late_deduction} />
+                      </Td>
+                      {showPf && (
+                        <Td>
+                          <MoneyCell amount={i.pf} />
+                        </Td>
+                      )}
                       <Td>
                         <MoneyCell amount={adj} className={adj > 0 ? 'text-success' : undefined} />
                       </Td>
@@ -377,6 +446,19 @@ export default function RunDetailPage() {
                       <Td>
                         <MoneyCell amount={i.net} className="font-semibold" />
                       </Td>
+                      {canManage && open && (
+                        <Td onClick={(e) => e.stopPropagation()}>
+                          {i.hold ? (
+                            <Button size="sm" variant="ghost" icon={<Play size={14} />} title={i.hold_reason ?? undefined} onClick={() => act(route('payroll.items.unhold', i.id))}>
+                              Release
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="ghost" icon={<Pause size={14} />} onClick={() => setHoldId(i.id)}>
+                              Hold
+                            </Button>
+                          )}
+                        </Td>
+                      )}
                     </Tr>
                   )
                 })}
@@ -393,6 +475,24 @@ export default function RunDetailPage() {
         adjustments={adjustments.filter((a) => a.item_id === selected)}
         name={selectedItem ? person(selectedItem.employee_id)?.name : undefined}
         onClose={() => setSelected(null)}
+      />
+      <ReasonDialog
+        key={`hold-${holdId ?? ''}`}
+        open={holdId !== null}
+        onOpenChange={(o) => !o && setHoldId(null)}
+        title="Hold salary"
+        description="A held salary is left out of the run totals and the bank advice."
+        url={holdId ? route('payroll.items.hold', holdId) : ''}
+        confirm="Hold"
+      />
+      <ReasonDialog
+        key={`reopen-${String(reopenOpen)}`}
+        open={reopenOpen}
+        onOpenChange={setReopenOpen}
+        title={`Reopen ${label}`}
+        description="The run goes back to review and can be recomputed or adjusted before approving again."
+        url={route('payroll.runs.reopen', run.id)}
+        confirm="Reopen"
       />
       <MarkPaidDialog key={String(payOpen)} open={payOpen} onOpenChange={setPayOpen} runId={run.id} label={label} />
       <ConfirmDialog

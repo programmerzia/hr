@@ -6,7 +6,9 @@ use App\Domain\Payroll\Actions\ApproveRun;
 use App\Domain\Payroll\Actions\DraftRun;
 use App\Domain\Payroll\Actions\MarkPaid;
 use App\Domain\Payroll\Actions\Recompute;
+use App\Domain\Payroll\Actions\ReopenRun;
 use App\Domain\Payroll\Actions\SubmitForReview;
+use App\Domain\Payroll\Services\BankAdvice;
 use App\Domain\Payroll\Support\Shape;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Payroll\MarkPaidRequest;
@@ -17,6 +19,7 @@ use App\Models\PayrollItem;
 use App\Models\PayrollRun;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -59,6 +62,7 @@ class RunController extends Controller
         return Inertia::render('Payroll/RunDetailPage', [
             'run' => PayrollRunResource::make($run)->resolve(),
             'items' => $items->map(fn (PayrollItem $i) => Shape::item($i))->all(),
+            'policy' => Shape::policy($run, $items),
             'adjustments' => Shape::adjustments($adjustments),
             'totals' => Shape::totals($items, $adjustments),
             'mix' => Shape::mix($items, $adjustments),
@@ -89,6 +93,27 @@ class RunController extends Controller
         $action($run, $request->user()->employee);
 
         return back()->with('success', 'Run approved and locked');
+    }
+
+    public function reopen(Request $request, PayrollRun $run, ReopenRun $action): RedirectResponse
+    {
+        Gate::authorize('approve', $run);
+        $data = $request->validate(['reason' => ['required', 'string', 'max:255']], ['reason.required' => 'Give a reason for reopening the run.']);
+        $action($run, $data['reason'], $request->user()->employee);
+
+        return back()->with('success', 'Run reopened for review');
+    }
+
+    public function bankAdvice(PayrollRun $run): HttpResponse
+    {
+        Gate::authorize('view', $run);
+        abort_unless(in_array($run->status, ['approved', 'paid'], true), 404);
+        $name = sprintf('bank-advice-%d-%02d.csv', $run->year, $run->month);
+
+        return response(BankAdvice::csv($run), 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$name}\"",
+        ]);
     }
 
     public function pay(MarkPaidRequest $form, PayrollRun $run, MarkPaid $action): RedirectResponse

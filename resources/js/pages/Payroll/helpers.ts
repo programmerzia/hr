@@ -18,6 +18,8 @@ export interface RunTotals {
   adjustments: number
   deductions: number
   net: number
+  pf_employer?: number
+  held?: number
 }
 
 export interface PersonRef {

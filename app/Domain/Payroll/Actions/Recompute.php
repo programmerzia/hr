@@ -3,7 +3,6 @@
 namespace App\Domain\Payroll\Actions;
 
 use App\Domain\Payroll\Services\RunBuilder;
-use App\Domain\Payroll\Support\Fail;
 use App\Models\Employee;
 use App\Models\PayrollRun;
 use Illuminate\Support\Facades\DB;
@@ -16,9 +15,7 @@ class Recompute
     {
         return DB::transaction(function () use ($run, $by) {
             $run = PayrollRun::lockForUpdate()->findOrFail($run->id);
-            if (! in_array($run->status, ['draft', 'review'], true)) {
-                Fail::with('Approved runs are locked and cannot be recomputed.');
-            }
+            RunBuilder::assertOpen($run, 'Approved runs are locked and cannot be recomputed.');
             $this->builder->recompute($run);
             $this->builder->log($run, $by, 'recomputed the run from attendance and leave');
 

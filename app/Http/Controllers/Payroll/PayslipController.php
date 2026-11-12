@@ -32,6 +32,7 @@ class PayslipController extends Controller
             'department' => $emp->department_id ? Department::whereKey($emp->department_id)->value('name') : null,
             'salary' => $item->salaryStructure ? SalaryStructureResource::make($item->salaryStructure)->resolve() : null,
             'bank' => $item->bankAccount ? BankAccountResource::make($item->bankAccount)->resolve() : null,
+            'policy' => Shape::policy($run, collect([$item])),
             'staff' => Gate::any(['manage_payroll', 'approve_payroll']),
         ]);
     }

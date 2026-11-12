@@ -21,6 +21,11 @@ class PayrollRunResource extends JsonResource
             'paid_at' => Fmt::dt($this->paid_at),
             'payment_reference' => $this->payment_reference,
             'locked_at' => Fmt::dt($this->locked_at),
+            'kind' => $this->kind ?? 'regular',
+            'employee_id' => $this->employee_id,
+            'reopened_at' => Fmt::dt($this->reopened_at),
+            'reopened_by' => $this->reopened_by,
+            'reopen_reason' => $this->reopen_reason,
         ];
     }
 }

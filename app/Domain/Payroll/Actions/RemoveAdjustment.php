@@ -3,7 +3,6 @@
 namespace App\Domain\Payroll\Actions;
 
 use App\Domain\Payroll\Services\RunBuilder;
-use App\Domain\Payroll\Support\Fail;
 use App\Models\Employee;
 use App\Models\PayrollAdjustment;
 use App\Models\PayrollRun;
@@ -18,9 +17,7 @@ class RemoveAdjustment
         DB::transaction(function () use ($adjustment, $by) {
             $item = $adjustment->item()->with('employee')->firstOrFail();
             $run = PayrollRun::lockForUpdate()->findOrFail($item->run_id);
-            if (! in_array($run->status, ['draft', 'review'], true)) {
-                Fail::with('This run is locked.');
-            }
+            RunBuilder::assertOpen($run);
             $adjustment->delete();
             $this->builder->reprice($item->refresh());
             $this->builder->log($run, $by, sprintf('removed %s "%s" for %s', $adjustment->kind, $adjustment->label, $item->employee?->name ?? 'an employee'), [

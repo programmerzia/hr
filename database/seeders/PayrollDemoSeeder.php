@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Domain\Payroll\Actions\DraftRun;
 use App\Domain\Payroll\Services\PayrollCalculator;
+use App\Domain\Payroll\Services\PayrollFacts;
 use App\Domain\Payroll\Services\PayrollPeriod;
 use App\Domain\Payroll\Services\RunBuilder;
 use App\Models\ActivityLogEntry;
@@ -11,10 +12,15 @@ use App\Models\AttendancePolicy;
 use App\Models\Employee;
 use App\Models\PayrollAdjustment;
 use App\Models\PayrollItem;
+use App\Models\PayrollPolicy;
 use App\Models\PayrollRun;
+use App\Models\SalaryStructure;
 use Illuminate\Database\Seeder;
 
-/** Three paid months (Aug to Oct 2026) and a November draft, mirroring resources/js/mock/db/payroll.ts. */
+/**
+ * Three paid months (Aug to Oct 2026) and a November draft. Exercises proration: Imran Kabir (VIV-109) joins on
+ * 25 August, and Sadia Sultana (VIV-107) gets a raise effective 16 October (two salary slices that month).
+ */
 class PayrollDemoSeeder extends Seeder
 {
     /** @var array<string, list<array{string,string,string,int,?string}>> code, kind, label, amount, note */
@@ -44,6 +50,7 @@ class PayrollDemoSeeder extends Seeder
         if (! $hr || ! $mgmt) {
             return;
         }
+        $this->prorationCases();
         foreach ([[2026, 8], [2026, 9], [2026, 10]] as [$y, $m]) {
             $this->paid($y, $m, $hr, $mgmt);
         }
@@ -60,37 +67,65 @@ class PayrollDemoSeeder extends Seeder
         return self::ADJUSTMENTS[$this->key($y, $m)] ?? [];
     }
 
+    /** Adjust existing seed rows (no new people): a joiner on the 25th and a mid-month raise. */
+    private function prorationCases(): void
+    {
+        $joiner = Employee::where('code', 'VIV-109')->first();
+        if ($joiner) {
+            $joiner->update(['joined_on' => '2026-08-25']);
+            $latest = SalaryStructure::where('employee_id', $joiner->id)->orderByDesc('effective_from')->first();
+            SalaryStructure::where('employee_id', $joiner->id)->where('id', '!=', $latest?->id)->delete();
+            $latest?->update(['effective_from' => '2026-08-25']);
+        }
+        $raised = Employee::where('code', 'VIV-107')->first();
+        $current = $raised ? SalaryStructure::where('employee_id', $raised->id)->orderByDesc('effective_from')->first() : null;
+        if ($current && $current->effective_from->format('Y-m-d') < '2026-10-16') {
+            $gross = 165000;
+            $basic = (int) round($gross * 0.55);
+            $house = (int) round($gross * 0.25);
+            $medical = (int) round($gross * 0.1);
+            SalaryStructure::create([
+                'employee_id' => $raised->id, 'effective_from' => '2026-10-16', 'basic' => $basic, 'house_rent' => $house,
+                'medical' => $medical, 'conveyance' => $gross - $basic - $house - $medical, 'pf_percent' => $current->pf_percent,
+                'tax_monthly' => (int) round($current->tax_monthly * 1.1), 'gross' => $gross, 'hourly_rate' => (int) round($gross / 22 / 8),
+                'note' => 'Annual review',
+            ]);
+        }
+    }
+
     private function paid(int $y, int $m, Employee $hr, Employee $mgmt): void
     {
-        $policy = AttendancePolicy::current();
-        $std = (int) $policy->standard_minutes;
-        $calc = PayrollCalculator::fromPolicy($policy);
-        $wd = count(PayrollPeriod::workingDates($y, $m));
+        $attendance = AttendancePolicy::forDate(PayrollPeriod::end($y, $m));
+        $money = PayrollPolicy::forDate(PayrollPeriod::end($y, $m));
         $last = PayrollPeriod::end($y, $m);
         $approvedAt = now()->parse($last)->subDays(3)->setTime(16, 0);
         $paidAt = now()->parse($last)->setTime(11, 30);
         $ref = sprintf('BEFTN-%d%02d-001', $y, $m);
         $run = PayrollRun::create([
-            'year' => $y, 'month' => $m, 'status' => 'paid', 'approved_by' => $mgmt->id, 'approved_at' => $approvedAt,
+            'year' => $y, 'month' => $m, 'kind' => 'regular', 'status' => 'paid', 'approved_by' => $mgmt->id, 'approved_at' => $approvedAt,
             'paid_at' => $paidAt, 'payment_reference' => $ref, 'locked_at' => $approvedAt,
         ]);
         $plan = collect($this->adjustmentsFor($y, $m));
         foreach (PayrollPeriod::eligible($y, $m)->values() as $i => $e) {
-            $structure = PayrollPeriod::salaryOn($e->id, $last);
-            if (! $structure) {
+            // Past months have no attendance rows in the demo, so the attendance facts are synthesised.
+            $facts = PayrollFacts::for($e, $y, $m, $attendance, $money);
+            if ($facts['slices'] === []) {
                 continue;
             }
-            $unpaid = ($i * 5 + $m) % 13 === 0 ? 1 : 0;
-            $late = ($i * 3 + $m) % 5;
-            $worked = $wd * $std - $unpaid * $std + ((($i * 7 + $m) % 5) - 2) * 90;
+            $absent = ($i * 5 + $m) % 13 === 0 ? 1 : 0;
+            $std = (int) $attendance->standard_minutes;
+            $facts = [
+                ...$facts,
+                'absent_days' => (float) $absent, 'half_days' => 0.0,
+                'day_fraction_total' => $facts['eligible_days'] - $absent,
+                'late_count' => ($i * 3 + $m) % 5,
+                'worked_minutes' => (int) max(0, ($facts['eligible_days'] - $absent) * $std + ((($i * 7 + $m) % 5) - 2) * 90),
+            ];
             $adjs = $plan->where(0, $e->code)->values();
-            $values = $calc->calc([
-                'structure' => $structure->only(['basic', 'gross', 'hourly_rate', 'pf_percent', 'tax_monthly']),
-                'working_days' => $wd, 'worked_minutes' => $worked, 'unpaid_days' => (float) $unpaid, 'late_count' => $late,
-                'adjustments' => $adjs->map(fn ($a) => ['kind' => $a[1], 'amount' => $a[3]])->all(),
-            ]);
+            $values = PayrollCalculator::compute($money, $facts['slices'], $facts, $adjs->map(fn ($a) => ['kind' => $a[1], 'amount' => $a[3]])->all());
             $item = PayrollItem::create([
-                'run_id' => $run->id, 'employee_id' => $e->id, 'salary_structure_id' => $structure->id, ...$values,
+                'run_id' => $run->id, 'employee_id' => $e->id, ...$values,
+                'payroll_policy_id' => $money->id, 'attendance_policy_id' => $attendance->id, 'snapshot_at' => $approvedAt,
                 'bank_account_id' => $e->bankAccounts()->where('is_primary', true)->value('id'),
                 'payslip_path' => sprintf('payslips/%s-%d-%02d.pdf', $e->code, $y, $m),
             ]);

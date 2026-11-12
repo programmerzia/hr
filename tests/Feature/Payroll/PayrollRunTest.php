@@ -1,13 +1,25 @@
 <?php
 
+use App\Domain\Payroll\Services\PayrollPeriod;
 use App\Domain\Payroll\Support\Badges;
 use App\Models\ActivityLogEntry;
+use App\Models\AttendanceDay;
 use App\Models\BankAccount;
 use App\Models\PayrollAdjustment;
 use App\Models\PayrollItem;
 use App\Models\PayrollRun;
 use App\Models\SalaryStructure;
 use Inertia\Testing\AssertableInertia as Assert;
+
+/** Attendance rows for every past working date of the month (so the fallback-absent rule does not fire). */
+function presentFor($employee, int $y, int $m, array $except = []): void
+{
+    foreach (PayrollPeriod::workingDates($y, $m) as $d) {
+        if ($d < now()->toDateString() && ! in_array($d, $except, true)) {
+            AttendanceDay::create(['employee_id' => $employee->id, 'date' => $d, 'status' => 'ended', 'work_seconds' => 480 * 60]);
+        }
+    }
+}
 
 function salaryFor($employee, int $gross = 100000): SalaryStructure
 {
@@ -28,6 +40,7 @@ beforeEach(function () {
     foreach ([$this->hr, $this->mgmt, $this->emp, $this->other, $this->contractor, $this->intern] as $u) {
         salaryFor($u->employee);
         BankAccount::create(['employee_id' => $u->employee_id, 'bank' => 'City', 'account_name' => $u->name, 'account_no' => '1234567890', 'routing_no' => '1', 'branch' => 'Main', 'is_primary' => true]);
+        presentFor($u->employee, 2026, 11);
     }
 });
 
@@ -80,7 +93,7 @@ it('approves, locks adjustments and notifies HR', function () {
     $run = draftRun($this);
     $item = PayrollItem::where('run_id', $run->id)->where('employee_id', $this->emp->employee_id)->firstOrFail();
     $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['kind' => 'bonus', 'label' => 'Spot bonus', 'amount' => 5000]);
-    expect($item->refresh()->net)->toBe(100000 + 5000 - 4000 - 2750);
+    expect($item->refresh()->net)->toBe(100000 + 5000 - 4000); // PF is off by default
     $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
     $this->actingAs($this->mgmt)->post(route('payroll.runs.approve', $run))->assertSessionHas('success');
     $run->refresh();

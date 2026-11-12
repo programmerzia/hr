@@ -23,6 +23,9 @@ class SalaryStructureResource extends JsonResource
             'tax_monthly' => (int) $this->tax_monthly,
             'gross' => (int) $this->gross,
             'hourly_rate' => (int) $this->hourly_rate,
+            'pf_employer_percent' => $this->pf_employer_percent === null ? null : (float) $this->pf_employer_percent,
+            'other_allowances' => $this->resource->otherAllowances(),
+            'note' => $this->note,
         ];
     }
 }

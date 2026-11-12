@@ -18,9 +18,7 @@ class AddAdjustment
     {
         return DB::transaction(function () use ($item, $kind, $label, $amount, $note, $by) {
             $run = PayrollRun::lockForUpdate()->findOrFail($item->run_id);
-            if (! in_array($run->status, ['draft', 'review'], true)) {
-                Fail::with('This run is locked.');
-            }
+            RunBuilder::assertOpen($run);
             if (trim($label) === '') {
                 Fail::with('Add a label.');
             }

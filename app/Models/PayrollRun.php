@@ -21,7 +21,14 @@ class PayrollRun extends Model
             'approved_at' => 'datetime',
             'paid_at' => 'datetime',
             'locked_at' => 'datetime',
+            'reopened_at' => 'datetime',
         ];
+    }
+
+    /** Adjustments, recompute and holds are only possible while the run is open and unlocked. */
+    public function isOpen(): bool
+    {
+        return $this->locked_at === null && in_array($this->status, ['draft', 'review'], true);
     }
 
     public function approvedByEmployee(): BelongsTo

@@ -2,22 +2,18 @@
 
 namespace App\Domain\Payroll\Services;
 
+use App\Domain\Payroll\Support\Fail;
 use App\Models\ActivityLogEntry;
 use App\Models\AttendancePolicy;
 use App\Models\Employee;
 use App\Models\PayrollAdjustment;
 use App\Models\PayrollItem;
+use App\Models\PayrollPolicy;
 use App\Models\PayrollRun;
-use App\Models\SalaryStructure;
 
-/** Builds and prices payroll items (buildItem / repriceItem / recomputeInto in the mock store). */
+/** Builds and prices payroll items from PayrollFacts + PayrollCalculator (docs/07 §4). */
 class RunBuilder
 {
-    public function calculator(): PayrollCalculator
-    {
-        return PayrollCalculator::fromPolicy(AttendancePolicy::current());
-    }
-
     public function log(PayrollRun $run, Employee $actor, string $text, array $properties = []): ActivityLogEntry
     {
         return ActivityLogEntry::create([
@@ -26,61 +22,70 @@ class RunBuilder
         ]);
     }
 
+    /** Fails with the module's validation error unless the run is open (draft/review) and not locked. */
+    public static function assertOpen(PayrollRun $run, string $message = 'This run is locked.'): void
+    {
+        if (! $run->isOpen()) {
+            Fail::with($message);
+        }
+    }
+
     /** @return list<array{kind:string,amount:int}> */
     public function adjustmentRows(PayrollItem $item): array
     {
         return PayrollAdjustment::where('item_id', $item->id)->get(['kind', 'amount'])->map(fn ($a) => ['kind' => $a->kind, 'amount' => (int) $a->amount])->all();
     }
 
-    private function structureArray(SalaryStructure $s): array
+    /** @return array{0:AttendancePolicy,1:PayrollPolicy} policies in force at the end of the run month */
+    public function policies(PayrollRun $run): array
     {
-        return $s->only(['basic', 'gross', 'hourly_rate', 'pf_percent', 'tax_monthly']);
+        $end = PayrollPeriod::end($run->year, $run->month);
+
+        return [AttendancePolicy::forDate($end), PayrollPolicy::forDate($end)];
     }
 
-    /** Recalculates money fields of one item from its stored facts (after adjustments change). */
+    /** Facts + money for one employee. @return array<string,mixed>|null null when there is no salary in the window */
+    public function price(PayrollRun $run, Employee $emp, array $adjustments, ?AttendancePolicy $attendance = null, ?PayrollPolicy $money = null): ?array
+    {
+        if (! $attendance || ! $money) {
+            [$attendance, $money] = $this->policies($run);
+        }
+        $facts = PayrollFacts::for($emp, $run->year, $run->month, $attendance, $money);
+        if ($facts['slices'] === []) {
+            return null;
+        }
+
+        return [
+            ...PayrollCalculator::compute($money, $facts['slices'], $facts, $adjustments),
+            'payroll_policy_id' => $money->id,
+            'attendance_policy_id' => $attendance->id,
+        ];
+    }
+
+    /** Recalculates one item (after adjustments change) from fresh facts. */
     public function reprice(PayrollItem $item): void
     {
-        $structure = SalaryStructure::find($item->salary_structure_id);
-        if (! $structure) {
-            return;
+        $run = PayrollRun::findOrFail($item->run_id);
+        $emp = Employee::find($item->employee_id);
+        $values = $emp ? $this->price($run, $emp, $this->adjustmentRows($item)) : null;
+        if ($values) {
+            $item->update($values);
         }
-        $std = (int) AttendancePolicy::current()->standard_minutes;
-        $item->update($this->calculator()->calc([
-            'structure' => $this->structureArray($structure),
-            'working_days' => $item->standard_minutes / $std,
-            'worked_minutes' => $item->worked_minutes,
-            'unpaid_days' => (float) $item->unpaid_leave_days,
-            'late_count' => $item->late_count,
-            'adjustments' => $this->adjustmentRows($item),
-        ]));
     }
 
     /** Eligible people get an item from fresh attendance and leave facts; people no longer eligible lose theirs. */
     public function recompute(PayrollRun $run): void
     {
         $keep = [];
-        $calc = $this->calculator();
-        $end = PayrollPeriod::end($run->year, $run->month);
+        [$attendance, $money] = $this->policies($run);
         foreach (PayrollPeriod::eligible($run->year, $run->month) as $emp) {
-            $structure = PayrollPeriod::salaryOn($emp->id, $end);
-            if (! $structure) {
+            $existing = PayrollItem::where('run_id', $run->id)->where('employee_id', $emp->id)->first();
+            $values = $this->price($run, $emp, $existing ? $this->adjustmentRows($existing) : [], $attendance, $money);
+            if (! $values) {
                 continue;
             }
-            $existing = PayrollItem::where('run_id', $run->id)->where('employee_id', $emp->id)->first();
-            $facts = PayrollPeriod::facts($emp->id, $run->year, $run->month);
-            $values = $calc->calc([
-                'structure' => $this->structureArray($structure),
-                ...$facts,
-                'unpaid_days' => $facts['unpaid_days'],
-                'adjustments' => $existing ? $this->adjustmentRows($existing) : [],
-            ]);
-            $attrs = [
-                ...$values,
-                'salary_structure_id' => $structure->id,
-                'bank_account_id' => $emp->bankAccounts()->where('is_primary', true)->value('id'),
-            ];
             $item = $existing ?? new PayrollItem(['run_id' => $run->id, 'employee_id' => $emp->id, 'payslip_path' => null]);
-            $item->fill($attrs)->save();
+            $item->fill([...$values, 'bank_account_id' => $emp->bankAccounts()->where('is_primary', true)->value('id')])->save();
             $keep[] = $item->id;
         }
         PayrollItem::where('run_id', $run->id)->whereNotIn('id', $keep)->get()->each->delete();

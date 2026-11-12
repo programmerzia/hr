@@ -115,7 +115,29 @@ class ProfileController extends Controller
 
     public function salary(SalaryRequest $request, Employee $employee, AddSalaryStructure $action): RedirectResponse
     {
-        $action($employee, $request->payload());
+        $extra = $request->validate([
+            'pf_employer_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'other_allowances' => ['nullable', 'array', 'max:10'],
+            'other_allowances.*.label' => ['required', 'string', 'max:60'],
+            'other_allowances.*.amount' => ['required', 'integer', 'min:0'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ], [
+            'pf_employer_percent.*' => 'Enter a percentage from 0 to 100',
+            'other_allowances.*.label.required' => 'Name the allowance',
+            'other_allowances.*.amount.*' => 'Enter an amount, 0 or more',
+        ]);
+        $structure = $action($employee, $request->payload());
+        if ($employee->employment_type !== 'contractor') {
+            $others = array_values(array_map(fn ($a) => ['label' => trim($a['label']), 'amount' => (int) $a['amount']], $extra['other_allowances'] ?? []));
+            $gross = (int) $structure->gross + array_sum(array_column($others, 'amount'));
+            $structure->update([
+                'pf_employer_percent' => isset($extra['pf_employer_percent']) && $extra['pf_employer_percent'] !== '' ? (float) $extra['pf_employer_percent'] : null,
+                'other_allowances' => $others ?: null,
+                'note' => trim((string) ($extra['note'] ?? '')) ?: null,
+                'gross' => $gross,
+                'hourly_rate' => $request->input('hourly_rate') ? $structure->hourly_rate : (int) round($gross / 22 / 8),
+            ]);
+        }
 
         return back()->with('success', 'Salary structure added');
     }

@@ -70,6 +70,15 @@ export interface SalaryStructure {
   tax_monthly: number
   gross: number
   hourly_rate: number
+  /** Overrides the payroll policy's employer PF percent when set. */
+  pf_employer_percent?: number | null
+  other_allowances?: SalaryAllowance[]
+  note?: string | null
+}
+
+export interface SalaryAllowance {
+  label: string
+  amount: number
 }
 
 export interface BankAccount {
@@ -266,6 +275,46 @@ export interface PayrollRun {
   paid_at: ISODateTime | null
   payment_reference: string | null
   locked_at: ISODateTime | null
+  kind?: PayrollRunKind
+  employee_id?: Id | null
+  reopened_at?: ISODateTime | null
+  reopened_by?: Id | null
+  reopen_reason?: string | null
+}
+
+export type PayrollRunKind = 'regular' | 'festival' | 'settlement'
+export type DailyRateBasis = 'working_days' | 'calendar_days' | 'fixed_30' | 'fixed_26'
+
+/** Frozen earnings breakdown on a payroll item (prorated, sums to gross). */
+export interface PayrollComponents {
+  basic: number
+  house_rent: number
+  medical: number
+  conveyance: number
+  other_allowances: SalaryAllowance[]
+  basis: DailyRateBasis | null
+  divisor: number | null
+  daily_rate: number | null
+  hourly_rate: number | null
+}
+
+export interface PayrollSlice {
+  effective_from: ISODate
+  structure_id: Id
+  days: number
+  gross: number
+  gross_share: number
+}
+
+/** Money switches that applied to a run (payroll_policies row). */
+export interface PayrollPolicySwitches {
+  id: Id
+  daily_rate_basis: DailyRateBasis
+  lop_enabled: boolean
+  late_penalty_enabled: boolean
+  pf_enabled: boolean
+  tax_enabled: boolean
+  overtime_enabled: boolean
 }
 
 export interface PayrollItem {
@@ -285,6 +334,22 @@ export interface PayrollItem {
   tax: number
   pf: number
   net: number
+  pf_employer: number
+  eligible_days: number
+  absent_days: number
+  half_days: number
+  paid_leave_days: number
+  holiday_days: number
+  lop_days: number
+  late_penalty_days: number
+  day_fraction_total: number
+  components: PayrollComponents | null
+  slices: PayrollSlice[]
+  hold: boolean
+  hold_reason: string | null
+  payroll_policy_id: Id | null
+  attendance_policy_id: Id | null
+  snapshot_at: ISODateTime | null
   bank_account_id: Id | null
   payslip_path: string | null
 }

@@ -28,6 +28,19 @@ class PayrollItem extends Model
             'tax' => 'integer',
             'pf' => 'integer',
             'net' => 'integer',
+            'components' => 'array',
+            'slices' => 'array',
+            'eligible_days' => 'float',
+            'absent_days' => 'float',
+            'half_days' => 'float',
+            'paid_leave_days' => 'float',
+            'holiday_days' => 'float',
+            'lop_days' => 'float',
+            'late_penalty_days' => 'float',
+            'day_fraction_total' => 'float',
+            'pf_employer' => 'integer',
+            'hold' => 'bool',
+            'snapshot_at' => 'datetime',
         ];
     }
 
