@@ -322,6 +322,8 @@ export interface PayrollPolicySwitches {
   overtime_enabled: boolean
 }
 
+export type PayrollVarianceKind = 'none' | 'up' | 'down' | 'new'
+
 export interface PayrollItem {
   id: Id
   run_id: Id
@@ -352,6 +354,11 @@ export interface PayrollItem {
   slices: PayrollSlice[]
   hold: boolean
   hold_reason: string | null
+  variance_flag: boolean
+  variance_kind: PayrollVarianceKind
+  variance_pct: number | null
+  variance_ack_by: Id | null
+  variance_ack_at: ISODateTime | null
   payroll_policy_id: Id | null
   attendance_policy_id: Id | null
   snapshot_at: ISODateTime | null
@@ -615,3 +622,65 @@ export type Ability =
   | 'manage_policy'
 
 export type BadgeVariant = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'accent'
+
+// ---------- Settings (P1.3) ----------
+export interface SettingsHistoryEntry {
+  at: ISODateTime
+  actor: string
+  text: string
+}
+
+export interface AttendancePolicyVersion extends AttendancePolicy {
+  id: string
+  effective_from: string
+  is_current: boolean
+  editable: boolean
+}
+
+export interface PayrollPolicyFields {
+  daily_rate_basis: DailyRateBasis
+  lop_enabled: boolean
+  late_penalty_enabled: boolean
+  lates_per_penalty: number
+  penalty_days: number
+  max_penalty_days_per_month: number
+  pf_enabled: boolean
+  pf_employee_percent: number
+  pf_employer_percent: number
+  tax_enabled: boolean
+  overtime_enabled: boolean
+  overtime_multiplier: number
+  overtime_requires_approval: boolean
+  overtime_min_block_minutes: number
+  overtime_daily_cap_minutes: number
+  effective_from: string
+}
+
+export interface PayrollPolicyVersion extends PayrollPolicyFields {
+  id: string
+  is_current: boolean
+  editable: boolean
+}
+
+export interface PolicyPreviewResult {
+  month: string
+  gross: number
+  basis: DailyRateBasis
+  divisor: number
+  daily_rate: number
+  absence: number
+  half_day: number
+  lates: number
+  late_days: number
+}
+
+export interface SettingsLeaveType extends LeaveType {
+  in_use: boolean
+}
+
+export interface SettingsHoliday {
+  id: string
+  date: string
+  name: string
+  locked: boolean
+}

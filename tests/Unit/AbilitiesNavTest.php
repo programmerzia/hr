@@ -7,8 +7,8 @@ use App\Support\Nav;
 
 it('maps roles to abilities like permissions.ts', function () {
     expect(Abilities::for(new User(['role' => 'employee'])))->toBe([])
-        ->and(Abilities::for(new User(['role' => 'management'])))->toHaveCount(11)
-        ->and(Abilities::for(new User(['role' => 'hr'])))->toBe(['view_team', 'approve_leave_hr', 'manage_people', 'manage_payroll', 'manage_settings']);
+        ->and(Abilities::for(new User(['role' => 'management'])))->toHaveCount(12)
+        ->and(Abilities::for(new User(['role' => 'hr'])))->toBe(['view_team', 'approve_leave_hr', 'manage_people', 'manage_payroll', 'manage_settings', 'manage_policy']);
 });
 
 it('shows claims to a contractor and payslips to full time staff', function () {
