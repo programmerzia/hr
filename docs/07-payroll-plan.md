@@ -1,6 +1,6 @@
 # 07 — HR & Payroll upgrade plan
 
-Status: proposed 2026-11-12. Builds on the deployed Laravel + Inertia app (`06-backend-plan.md`). Scope is the
+Status: implemented and deployed 2026-11-12 (waves P0–P3, commits 48fece4…5fd1872). Open items are listed in §8. Builds on the deployed Laravel + Inertia app (`06-backend-plan.md`). Scope is the
 HR / attendance / leave / payroll chain only. Billing, Work and Inbox are untouched except where they consume
 shared props.
 
@@ -170,3 +170,15 @@ Estimated agent cost: P0 2 Opus sessions, P1–P2 5 Sonnet sessions, P3 1 Haiku 
 
 ## 7. Out of scope here
 Chat, Reverb realtime, bank API integration, biometric devices, multi-company, multi-currency.
+
+## 8. Shipped state (2026-11-12) and open items
+
+Shipped: DayGrader + nightly `attendance:close-day`, regularisation kinds/resolutions, PayrollFacts (proration, slices, open-day rule),
+switch-driven PayrollCalculator, snapshots, hold/reopen/variance ack, bank advice CSV, PF ledger, dompdf payslips, paid notifications,
+Settings (versioned attendance + payroll policy, leave types, holidays), leave proration/rollover/probation/encashment, reports
+(summary, department cost, tax-year statement, attendance sheet), festival bonus and final settlement runs, overtime approval.
+Tests 235, QA flows A–K 60/60, smoke 80/80.
+
+Open: tax slab automation (TDS stays HR-entered); gratuity; Bengali PDF font; department cost month range; HR nav entry for Claims;
+Reverb realtime; chat. Operational: HR must create the first real payroll policy version in Settings → Payroll (defaults ship with
+PF and late penalty OFF, LOP ON); run `attendance:close-day` manually for any backlog dates if the cron was down.
