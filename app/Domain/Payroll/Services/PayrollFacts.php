@@ -50,6 +50,10 @@ final class PayrollFacts
         $worked = 0;
         foreach ($eligible as $date) {
             $row = $rows[$date] ?? null;
+            // A day still in progress (today, not yet closed by the nightly job) is not an absence yet: price it as full.
+            if ($row && $date >= $today && ! $row->closed_at && in_array($row->status, ['not_started', 'working', 'on_break'], true)) {
+                $row = null;
+            }
             $p = $paid[$date] ?? 0.0;
             $u = $unpaid[$date] ?? 0.0;
             if ($row) {

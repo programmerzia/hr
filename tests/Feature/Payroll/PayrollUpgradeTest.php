@@ -130,6 +130,19 @@ it('counts a missing past working day as absent and a future day as full', funct
     expect($nov['absent_days'])->toBe(0.0)->and($nov['gross'])->toBe(100000);
 });
 
+it('does not price an open, not yet closed day as an absence', function () {
+    puStructure($this->emp->employee);
+    puPresent($this->emp->employee, 2026, 11);
+    // Today's row as StartWork leaves it at 10:00: working, graded 0 so far, not closed by the nightly job.
+    AttendanceDay::create(['employee_id' => $this->emp->employee_id, 'date' => '2026-11-12', 'status' => 'working', 'work_seconds' => 0, 'day_fraction' => 0, 'absence_kind' => 'unapproved']);
+    $nov = puPrice($this->emp->employee, 2026, 11);
+    expect($nov['absent_days'])->toBe(0.0)->and($nov['unpaid_deduction'])->toBe(0);
+
+    // Once the nightly job closes it (closed_at set) the grade counts.
+    AttendanceDay::where('employee_id', $this->emp->employee_id)->whereDate('date', '2026-11-12')->update(['status' => 'ended', 'closed_at' => now()]);
+    expect(puPrice($this->emp->employee, 2026, 11)['absent_days'])->toBe(1.0);
+});
+
 it('treats half days, excused and paid-leave rows correctly', function () {
     puStructure($this->emp->employee);
     [$a, $b, $c] = array_slice($this->october, 0, 3);
