@@ -127,3 +127,10 @@ it('stores an uploaded document privately', function () {
     Storage::disk('local')->assertExists($doc->path);
     expect($doc->name)->toBe('nid.pdf');
 });
+
+it('gives the onboarding form the active people so it can warn about a duplicate name', function () {
+    $hr = makeUser('hr');
+    $this->actingAs($hr)->post(route('people.store'), onboardPayload());
+    $this->get(route('people.onboard'))->assertInertia(fn ($page) => $page->component('People/OnboardPage')
+        ->where('existing', fn ($rows) => collect($rows)->contains(fn ($r) => $r['name'] === 'Maya Rahman' && $r['email'] === 'maya@vivacom.example')));
+});

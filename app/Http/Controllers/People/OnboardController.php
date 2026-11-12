@@ -26,6 +26,9 @@ class OnboardController extends Controller
                 'lead_employee_id' => $t->lead_employee_id, 'lead_name' => $names->get($t->lead_employee_id),
             ]),
             'default_checklist' => Concerns::DEFAULT_CHECKLIST,
+            // Active people, so the form can warn before the same person is onboarded twice under another email.
+            'existing' => Employee::whereNotIn('status', ['resigned', 'terminated'])->orderBy('name')
+                ->get(['code', 'name', 'email'])->map(fn (Employee $e) => ['code' => $e->code, 'name' => $e->name, 'email' => $e->email]),
         ]);
     }
 

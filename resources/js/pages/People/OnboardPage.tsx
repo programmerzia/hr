@@ -20,6 +20,7 @@ interface Props {
   departments: Department[]
   teams: { id: string; name: string; department_id: string; lead_employee_id: string; lead_name: string | null }[]
   default_checklist: string[]
+  existing: { code: string; name: string; email: string }[]
 }
 
 /** Which wizard step shows each server-validated field, so a server error can bring the person back to it. */
@@ -56,7 +57,7 @@ type Errors = Partial<Record<keyof Form, string>> & SalaryErrors
 const required = 'Required'
 
 export default function OnboardPage() {
-  const { departments, teams, default_checklist: DEFAULT_CHECKLIST } = useShared<Props>()
+  const { departments, teams, default_checklist: DEFAULT_CHECKLIST, existing } = useShared<Props>()
   const [step, setStep] = useState(0)
   const [form, setForm] = useState<Form>({
     name: '', email: '', phone: '', nid: '',
@@ -162,6 +163,15 @@ export default function OnboardPage() {
           {step === 0 && (
             <>
               <Field label="Full name" error={errors.name} required><Input {...text('name')} /></Field>
+              {(() => {
+                const typed = form.name.trim().toLowerCase().replace(/\s+/g, ' ')
+                const dup = typed.length >= 3 ? existing.find((e) => e.name.trim().toLowerCase().replace(/\s+/g, ' ') === typed) : undefined
+                return dup ? (
+                  <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+                    An active employee with this name already exists: {dup.code}, {dup.email}. Only continue if this is a different person.
+                  </p>
+                ) : null
+              })()}
               <Field label="Work email" error={errors.email} hint="Used as the sign-in username." required><Input type="email" {...text('email')} /></Field>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Phone" error={errors.phone} required><Input {...text('phone')} placeholder="+8801712345678" /></Field>
