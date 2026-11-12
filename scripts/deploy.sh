@@ -8,6 +8,7 @@ composer install --no-dev --optimize-autoloader --no-interaction
 npx -y pnpm@12 install --frozen-lockfile
 npx -y pnpm@12 build
 php artisan migrate --force
+php artisan payroll:backfill-snapshots
 php artisan storage:link >/dev/null 2>&1 || true
 php artisan optimize:clear
 php artisan config:cache
