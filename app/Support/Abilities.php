@@ -4,7 +4,7 @@ namespace App\Support;
 
 use App\Models\User;
 
-/** Mirrors resources/js/lib/permissions.ts. Role-level only; scope lives in policies. */
+/** TABLE is the seed matrix for system roles; live checks go through Spatie permissions. Scope lives in policies. */
 final class Abilities
 {
     public const TABLE = [
@@ -23,14 +23,22 @@ final class Abilities
         'view_reports' => ['hr', 'management'],
     ];
 
+    /** Seed-matrix check (role defaults only). Runtime checks use has(). */
     public static function can(string $role, string $ability): bool
     {
         return in_array($role, self::TABLE[$ability] ?? [], true);
     }
 
+    public static function has(User $user, string $ability): bool
+    {
+        return $user->checkPermissionTo($ability);
+    }
+
     /** @return list<string> */
     public static function for(User $user): array
     {
-        return array_values(array_keys(array_filter(self::TABLE, fn ($roles) => in_array($user->role, $roles, true))));
+        $has = $user->getAllPermissions()->pluck('name')->all();
+
+        return array_values(array_intersect(Access::names(), $has));
     }
 }

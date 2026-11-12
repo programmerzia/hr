@@ -627,6 +627,7 @@ export type Ability =
   | 'manage_settings'
   | 'manage_policy'
   | 'view_reports'
+  | 'manage_access'
 
 export type BadgeVariant = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'accent'
 

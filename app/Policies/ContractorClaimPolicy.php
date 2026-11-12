@@ -37,14 +37,14 @@ class ContractorClaimPolicy
     /** The contractor's own team lead. */
     public function verify(User $user, ContractorClaim $claim): bool
     {
-        return Abilities::can($user->role, 'verify_claims')
+        return Abilities::has($user, 'verify_claims')
             && $claim->employee_id !== $user->employee_id
             && (bool) $user->employee?->leads($claim->employee()->firstOrFail());
     }
 
     public function approve(User $user, ContractorClaim $claim): bool
     {
-        return Abilities::can($user->role, 'approve_claims') && $claim->employee_id !== $user->employee_id;
+        return Abilities::has($user, 'approve_claims') && $claim->employee_id !== $user->employee_id;
     }
 
     public function pay(User $user, ContractorClaim $claim): bool

@@ -10,7 +10,7 @@ class ClientPolicy
 {
     public function viewAny(User $user): bool
     {
-        return Abilities::can($user->role, 'manage_billing');
+        return Abilities::has($user, 'manage_billing');
     }
 
     public function create(User $user): bool

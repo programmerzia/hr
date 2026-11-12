@@ -29,27 +29,28 @@ final class Nav
                 ['id' => 'chat', 'label' => 'Chat', 'to' => '/chat', 'icon' => 'MessageSquare'],
                 ['id' => 'inbox', 'label' => 'Inbox', 'to' => '/inbox', 'icon' => 'Inbox'],
             ]],
-            ['id' => 'team', 'label' => 'Team', 'roles' => ['team_lead', 'hr', 'management'], 'items' => [
-                ['id' => 'team', 'label' => 'Team', 'to' => '/team', 'icon' => 'Users'],
-                ['id' => 'team-history', 'label' => 'History', 'to' => '/team/history', 'icon' => 'History'],
-                ['id' => 'regularizations', 'label' => 'Regularizations', 'to' => '/team/regularizations', 'icon' => 'ClipboardCheck'],
-                ['id' => 'leave-approvals', 'label' => 'Leave approvals', 'to' => '/leave/approvals', 'icon' => 'CalendarCheck'],
-                ['id' => 'team-sheet', 'label' => 'Month sheet', 'to' => '/team/sheet', 'icon' => 'Calendar', 'roles' => ['team_lead']],
-                ['id' => 'leave-calendar', 'label' => 'Calendar', 'to' => '/leave/calendar', 'icon' => 'Calendar'],
-                ['id' => 'claims', 'label' => 'Claims', 'to' => '/claims', 'icon' => 'Receipt', 'roles' => ['team_lead']],
+            ['id' => 'team', 'label' => 'Team', 'items' => [
+                ['id' => 'team', 'label' => 'Team', 'to' => '/team', 'icon' => 'Users', 'permission' => 'view_team'],
+                ['id' => 'team-history', 'label' => 'History', 'to' => '/team/history', 'icon' => 'History', 'permission' => 'view_team'],
+                ['id' => 'regularizations', 'label' => 'Regularizations', 'to' => '/team/regularizations', 'icon' => 'ClipboardCheck', 'permission' => 'view_team'],
+                ['id' => 'leave-approvals', 'label' => 'Leave approvals', 'to' => '/leave/approvals', 'icon' => 'CalendarCheck', 'permission' => ['approve_leave_lead', 'approve_leave_hr']],
+                ['id' => 'team-sheet', 'label' => 'Month sheet', 'to' => '/team/sheet', 'icon' => 'Calendar', 'permission' => 'view_team'],
+                ['id' => 'leave-calendar', 'label' => 'Calendar', 'to' => '/leave/calendar', 'icon' => 'Calendar', 'permission' => 'view_team'],
+                // Finance shows Claims to approvers; avoid listing it twice.
+                ['id' => 'claims', 'label' => 'Claims', 'to' => '/claims', 'icon' => 'Receipt', 'permission' => 'verify_claims', 'unless' => 'approve_claims'],
             ]],
-            ['id' => 'people-pay', 'label' => 'People & pay', 'roles' => ['hr', 'management'], 'items' => [
-                ['id' => 'people', 'label' => 'People', 'to' => '/people', 'icon' => 'UserRound'],
-                ['id' => 'payroll', 'label' => 'Payroll', 'to' => '/payroll', 'icon' => 'Wallet'],
-                ['id' => 'reports', 'label' => 'Reports', 'to' => '/reports', 'icon' => 'FileText'],
+            ['id' => 'people-pay', 'label' => 'People & pay', 'items' => [
+                ['id' => 'people', 'label' => 'People', 'to' => '/people', 'icon' => 'UserRound', 'permission' => 'manage_people'],
+                ['id' => 'payroll', 'label' => 'Payroll', 'to' => '/payroll', 'icon' => 'Wallet', 'permission' => 'manage_payroll'],
+                ['id' => 'reports', 'label' => 'Reports', 'to' => '/reports', 'icon' => 'FileText', 'permission' => 'view_reports'],
             ]],
-            ['id' => 'finance', 'label' => 'Finance', 'roles' => ['management'], 'items' => [
-                ['id' => 'clients', 'label' => 'Clients', 'to' => '/clients', 'icon' => 'Building2'],
-                ['id' => 'invoices', 'label' => 'Invoices', 'to' => '/invoices', 'icon' => 'FileText'],
-                ['id' => 'claims', 'label' => 'Claims', 'to' => '/claims', 'icon' => 'Receipt'],
+            ['id' => 'finance', 'label' => 'Finance', 'items' => [
+                ['id' => 'clients', 'label' => 'Clients', 'to' => '/clients', 'icon' => 'Building2', 'permission' => 'manage_billing'],
+                ['id' => 'invoices', 'label' => 'Invoices', 'to' => '/invoices', 'icon' => 'FileText', 'permission' => 'manage_billing'],
+                ['id' => 'claims', 'label' => 'Claims', 'to' => '/claims', 'icon' => 'Receipt', 'permission' => 'approve_claims'],
             ]],
-            ['id' => 'admin', 'roles' => ['hr', 'management'], 'items' => [
-                ['id' => 'settings', 'label' => 'Settings', 'to' => '/settings', 'icon' => 'Settings'],
+            ['id' => 'admin', 'items' => [
+                ['id' => 'settings', 'label' => 'Settings', 'to' => '/settings', 'icon' => 'Settings', 'permission' => ['manage_policy', 'manage_access']],
             ]],
         ];
     }
@@ -59,14 +60,16 @@ final class Nav
     {
         $employee = $user->employee;
         $role = $user->role;
+        $perms = Abilities::for($user);
+        $has = fn (string|array $p) => array_intersect((array) $p, $perms) !== [];
         $out = [];
         foreach (self::groups() as $g) {
-            if (isset($g['roles']) && ! in_array($role, $g['roles'], true)) {
-                continue;
-            }
             $items = [];
             foreach ($g['items'] as $i) {
-                if (isset($i['roles']) && ! in_array($role, $i['roles'], true)) {
+                if (isset($i['permission']) && ! $has($i['permission'])) {
+                    continue;
+                }
+                if (isset($i['unless']) && $has($i['unless'])) {
                     continue;
                 }
                 if (isset($i['visible']) && (! $employee || ! ($i['visible'])($employee, $role))) {

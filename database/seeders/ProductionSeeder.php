@@ -6,6 +6,7 @@ use App\Domain\People\Actions\OnboardEmployee;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\User;
+use App\Support\Access;
 use Illuminate\Database\Seeder;
 use RuntimeException;
 
@@ -14,6 +15,7 @@ class ProductionSeeder extends Seeder
     public function run(): void
     {
         $this->call(BaseDataSeeder::class);
+        Access::sync();
 
         $email = config('vivacom.seed_admin_email');
         $password = config('vivacom.seed_admin_password');

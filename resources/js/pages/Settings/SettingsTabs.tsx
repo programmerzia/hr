@@ -1,4 +1,5 @@
 import { Link } from '@inertiajs/react'
+import { useCan, usePathname } from '../../inertia/props'
 import { cn } from '../../lib/cn'
 
 const tabs = [
@@ -10,6 +11,8 @@ const tabs = [
 
 /** Link row shown under every Settings page title. */
 export function SettingsTabs() {
+  const canAccess = useCan('manage_access')
+  const pathname = usePathname()
   return (
     <nav aria-label="Settings sections" className="flex gap-1 border-b border-border">
       {tabs.map((t) => {
@@ -28,6 +31,18 @@ export function SettingsTabs() {
           </Link>
         )
       })}
+      {canAccess && (
+        <Link
+          href="/settings/access"
+          aria-current={pathname.startsWith('/settings/access') ? 'page' : undefined}
+          className={cn(
+            '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+            pathname.startsWith('/settings/access') ? 'border-accent text-fg' : 'border-transparent text-fg-muted hover:text-fg',
+          )}
+        >
+          Access
+        </Link>
+      )}
     </nav>
   )
 }

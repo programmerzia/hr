@@ -22,7 +22,7 @@ const roles = [
 const PORTED = new Set(['/', '/account/password', '/my-day', '/team', '/team/history', '/team/regularizations', '/leave', '/leave/approvals', '/leave/calendar', '/leave/policy', '/projects', '/tasks'])
 for (const r of ['/people']) PORTED.add(r) // people module
 for (const r of ['/payroll', '/payslips']) PORTED.add(r) // payroll module
-for (const r of ['/inbox', '/chat', '/settings', '/settings/attendance', '/settings/payroll', '/settings/leave-types', '/settings/holidays']) PORTED.add(r) // platform + settings
+for (const r of ['/inbox', '/chat', '/settings', '/settings/attendance', '/settings/payroll', '/settings/leave-types', '/settings/holidays', '/settings/access']) PORTED.add(r) // platform + settings
 for (const r of ['/reports', '/team/sheet', '/me/statement']) PORTED.add(r) // reports module
 for (const r of ['/clients', '/invoices', '/claims']) PORTED.add(r) // billing module
 const mobileRoutes = ['/']

@@ -10,7 +10,7 @@ class InvoicePolicy
 {
     public function viewAny(User $user): bool
     {
-        return Abilities::can($user->role, 'manage_billing');
+        return Abilities::has($user, 'manage_billing');
     }
 
     public function view(User $user, Invoice $invoice): bool

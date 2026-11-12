@@ -11,11 +11,13 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('leave')->name('leave.')->group(function () {
     Route::get('/', [MyLeaveController::class, 'index'])->name('mine');
     Route::post('/', [MyLeaveController::class, 'store'])->name('store');
-    Route::get('/approvals', [ApprovalController::class, 'index'])->name('approvals');
     Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar');
     Route::get('/policy', [PolicyController::class, 'index'])->name('policy');
-    Route::patch('/types/{leaveType}', [PolicyController::class, 'update'])->name('types.update');
     Route::post('/{leaveRequest}/cancel', [MyLeaveController::class, 'cancel'])->name('cancel');
-    Route::post('/{leaveRequest}/approve', [ApprovalController::class, 'approve'])->name('approve');
-    Route::post('/{leaveRequest}/reject', [ApprovalController::class, 'reject'])->name('reject');
+    Route::middleware('can:leave_approver')->group(function () {
+        Route::get('/approvals', [ApprovalController::class, 'index'])->name('approvals');
+        Route::post('/{leaveRequest}/approve', [ApprovalController::class, 'approve'])->name('approve');
+        Route::post('/{leaveRequest}/reject', [ApprovalController::class, 'reject'])->name('reject');
+    });
+    Route::middleware('can:manage_settings')->patch('/types/{leaveType}', [PolicyController::class, 'update'])->name('types.update');
 });

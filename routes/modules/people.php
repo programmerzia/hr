@@ -6,6 +6,7 @@ use App\Http\Controllers\People\DirectoryController;
 use App\Http\Controllers\People\OnboardController;
 use App\Http\Controllers\People\PasswordResetController;
 use App\Http\Controllers\People\ProfileController;
+use App\Http\Controllers\People\RoleController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('people')->name('people.')->group(function () {
@@ -22,6 +23,7 @@ Route::prefix('people')->name('people.')->group(function () {
         Route::post('/password-resets/{passwordReset}/reject', [PasswordResetController::class, 'reject'])->name('password-resets.reject');
     });
 
+    Route::patch('/{employee}/role', [RoleController::class, 'update'])->middleware('can:manage_access')->name('role');
     Route::get('/{employee}', [ProfileController::class, 'show'])->name('profile');
     Route::get('/{employee}/documents/{document}', [ProfileController::class, 'downloadDocument'])->scopeBindings()->name('documents.download');
 

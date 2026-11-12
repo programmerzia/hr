@@ -8,12 +8,16 @@ use App\Http\Controllers\Payroll\PayslipController;
 use App\Http\Controllers\Payroll\RunController;
 use Illuminate\Support\Facades\Route;
 
+// Payslips are visible to their owner; everything else in payroll needs the manage/approve permission (policies add scope).
 Route::prefix('payroll')->name('payroll.')->group(function () {
+    Route::get('/items/{item}/payslip', [PayslipController::class, 'show'])->name('payslip');
+    Route::get('/items/{item}/payslip.pdf', [PayslipController::class, 'pdf'])->name('payslip.pdf');
+});
+
+Route::middleware('can:payroll_staff')->prefix('payroll')->name('payroll.')->group(function () {
     Route::get('/', [RunController::class, 'index'])->name('runs');
     Route::post('/', [RunController::class, 'store'])->name('runs.store');
-    Route::get('/items/{item}/payslip', [PayslipController::class, 'show'])->name('payslip');
     Route::post('/items/{item}/adjustments', [AdjustmentController::class, 'store'])->name('adjustments.store');
-    Route::get('/items/{item}/payslip.pdf', [PayslipController::class, 'pdf'])->name('payslip.pdf');
     Route::post('/items/{item}/ack-variance', [ItemController::class, 'ackVariance'])->name('items.ack-variance');
     Route::post('/items/{item}/hold', [ItemController::class, 'hold'])->name('items.hold');
     Route::post('/items/{item}/unhold', [ItemController::class, 'unhold'])->name('items.unhold');

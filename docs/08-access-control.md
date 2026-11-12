@@ -20,7 +20,7 @@ Owner decision (2026-11-12): Spatie-style RBAC managed by management in-app. Men
 | projects | manage_projects | Create projects, columns, members |
 | reports | view_reports | Company reports and CSV exports |
 | settings | manage_policy | Attendance/payroll policies, holidays |
-| settings | manage_settings | (kept, same as manage_policy group) |
+| settings | manage_settings | Edit leave types from the Leave policy page |
 | access | manage_access | Roles & permissions (NEW) |
 
 - **Roles**: seeded from today's five: `employee`, `team_lead`, `hr`, `management`, `contractor`. Seed matrix = `App\Support\Abilities::TABLE` + `manage_access` → management. Built-in roles are `is_system` (cannot be deleted/renamed; management role cannot lose `manage_access`). Management can create custom roles.
@@ -40,3 +40,6 @@ Owner decision (2026-11-12): Spatie-style RBAC managed by management in-app. Men
 ## Tests
 - Feature: each guarded route 403 for a role without the permission and 200 with it (table-driven over routes above); matrix save; role create/delete rules; role change rules; management can't lose manage_access; nav reflects permissions.
 - Browser QA flow L: management revokes `view_reports` from hr → HR menu loses Reports and `/reports` returns 403; restore.
+
+## Shipped (2026-11-12)
+Everything above, plus: `users.role` widened to string(40) for custom roles; composite gates `view_settings`, `payroll_staff`, `leave_approver` guard /settings, /payroll/* (except own payslips) and leave approvals at route level; `access:sync` runs on deploy and never overwrites matrix edits. Custom roles carry permissions only; scope rules (own team / own record) follow the built-in role semantics. Browser QA: scripts/qa-access.mjs (flow L).
