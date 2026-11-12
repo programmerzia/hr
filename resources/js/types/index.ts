@@ -282,6 +282,8 @@ export interface PayrollRun {
   locked_at: ISODateTime | null
   kind?: PayrollRunKind
   employee_id?: Id | null
+  label?: string | null
+  bonus_percent_of_basic?: number | null
   reopened_at?: ISODateTime | null
   reopened_by?: Id | null
   reopen_reason?: string | null
@@ -301,6 +303,8 @@ export interface PayrollComponents {
   divisor: number | null
   daily_rate: number | null
   hourly_rate: number | null
+  encashment_days?: number
+  bonus_percent?: number
 }
 
 export interface PayrollSlice {
@@ -342,6 +346,7 @@ export interface PayrollItem {
   pf: number
   net: number
   pf_employer: number
+  leave_encashment: number
   eligible_days: number
   absent_days: number
   half_days: number
@@ -620,6 +625,7 @@ export type Ability =
   | 'manage_projects'
   | 'manage_settings'
   | 'manage_policy'
+  | 'view_reports'
 
 export type BadgeVariant = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'accent'
 

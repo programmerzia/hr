@@ -34,12 +34,14 @@ final class Nav
                 ['id' => 'team-history', 'label' => 'History', 'to' => '/team/history', 'icon' => 'History'],
                 ['id' => 'regularizations', 'label' => 'Regularizations', 'to' => '/team/regularizations', 'icon' => 'ClipboardCheck'],
                 ['id' => 'leave-approvals', 'label' => 'Leave approvals', 'to' => '/leave/approvals', 'icon' => 'CalendarCheck'],
+                ['id' => 'team-sheet', 'label' => 'Month sheet', 'to' => '/team/sheet', 'icon' => 'Calendar', 'roles' => ['team_lead']],
                 ['id' => 'leave-calendar', 'label' => 'Calendar', 'to' => '/leave/calendar', 'icon' => 'Calendar'],
                 ['id' => 'claims', 'label' => 'Claims', 'to' => '/claims', 'icon' => 'Receipt', 'roles' => ['team_lead']],
             ]],
             ['id' => 'people-pay', 'label' => 'People & pay', 'roles' => ['hr', 'management'], 'items' => [
                 ['id' => 'people', 'label' => 'People', 'to' => '/people', 'icon' => 'UserRound'],
                 ['id' => 'payroll', 'label' => 'Payroll', 'to' => '/payroll', 'icon' => 'Wallet'],
+                ['id' => 'reports', 'label' => 'Reports', 'to' => '/reports', 'icon' => 'FileText'],
             ]],
             ['id' => 'finance', 'label' => 'Finance', 'roles' => ['management'], 'items' => [
                 ['id' => 'clients', 'label' => 'Clients', 'to' => '/clients', 'icon' => 'Building2'],

@@ -15,6 +15,7 @@ const table: Record<Ability, Role[]> = {
   manage_projects: ['team_lead', 'management'],
   manage_settings: ['hr', 'management'],
   manage_policy: ['hr', 'management'],
+  view_reports: ['hr', 'management'],
 }
 
 /** Role-level check. Scope (e.g. "only own team") is enforced in the stores. */

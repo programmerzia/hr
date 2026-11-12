@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Attendance\MyDayController;
+use App\Http\Controllers\Attendance\OvertimeController;
 use App\Http\Controllers\Attendance\RegularizationController;
 use App\Http\Controllers\Attendance\TeamController;
 use App\Http\Controllers\Attendance\TeamHistoryController;
@@ -16,6 +17,8 @@ Route::name('attendance.')->group(function () {
         Route::get('/team/history', [TeamHistoryController::class, 'index'])->name('team.history');
         Route::get('/team/history/export', [TeamHistoryController::class, 'csv'])->name('team.history.csv');
         Route::get('/team/regularizations', [RegularizationController::class, 'index'])->name('regularizations');
+        Route::post('/team/overtime/{day}/approve', [OvertimeController::class, 'approve'])->name('overtime.approve');
+        Route::post('/team/overtime/{day}/revoke', [OvertimeController::class, 'revoke'])->name('overtime.revoke');
         Route::post('/team/regularizations/decide', [RegularizationController::class, 'decide'])->name('regularizations.decide');
     });
 });

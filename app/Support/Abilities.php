@@ -20,6 +20,7 @@ final class Abilities
         'manage_projects' => ['team_lead', 'management'],
         'manage_settings' => ['hr', 'management'],
         'manage_policy' => ['hr', 'management'],
+        'view_reports' => ['hr', 'management'],
     ];
 
     public static function can(string $role, string $ability): bool
