@@ -30,7 +30,7 @@ class SubmitForReview
             $run->update(['status' => 'review']);
             $this->variance->apply($run);
             $this->builder->log($run, $by, 'sent the run for review');
-            $label = PayrollPeriod::label($run->year, $run->month);
+            $label = PayrollPeriod::runTitle($run);
             $n = new PayrollNotification("Payroll for {$label} is ready for review", "{$by->name} sent the run for approval.", "/payroll/{$run->id}");
             User::where('role', 'management')->get()->each->notify($n);
 

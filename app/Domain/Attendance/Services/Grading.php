@@ -41,7 +41,7 @@ final class Grading
     {
         $date = $day->date->format('Y-m-d');
         $resolution = $day->is_regularized
-            ? RegularizationRequest::where('attendance_day_id', $day->id)->where('status', 'approved')->latest('decided_at')->value('resolution')
+            ? RegularizationRequest::where('attendance_day_id', $day->id)->where('kind', '!=', 'overtime')->where('status', 'approved')->latest('decided_at')->value('resolution')
             : null;
         $g = DayGrader::grade(AttendancePolicy::forDate($date), [
             'date' => $date,

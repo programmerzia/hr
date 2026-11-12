@@ -77,6 +77,7 @@ interface Props {
   history: { id: string; effective_on: string; kind: string; text: string }[]
   presence: string
   leave_balances: LeaveRow[]
+  settlement: { run_id: string | null } | null
   credentials: { email: string; temporary_password: string; context: 'onboard' | 'reset' } | null
 }
 
@@ -139,11 +140,27 @@ export default function ProfilePage() {
                 <DropdownMenuItem onSelect={() => setDialog('status')}>Change status</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setDialog('edit')}>Edit details</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setDialog('reset')}>Reset password</DropdownMenuItem>
+                {p.settlement && (
+                  <DropdownMenuItem
+                    onSelect={() =>
+                      p.settlement?.run_id
+                        ? router.get(route('payroll.runs.show', p.settlement.run_id))
+                        : router.post(route('payroll.runs.store'), { kind: 'settlement', employee_id: employee.id }, { preserveScroll: true })
+                    }
+                  >
+                    {p.settlement.run_id ? 'Open final settlement' : 'Create final settlement'}
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
           )}
         </div>
+        {p.settlement && !p.settlement.run_id && (
+          <p className="mt-3 rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-fg-muted">
+            {employee.name} left on {formatDate(employee.exited_on ?? '')}. Create the final settlement from the actions menu to pay the last salary and unused leave.
+          </p>
+        )}
         <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-border pt-4 text-sm">
           <div className="flex gap-2">
             <dt className="text-fg-muted">Code</dt>

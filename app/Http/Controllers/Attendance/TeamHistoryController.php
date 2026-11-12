@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Attendance;
 
 use App\Domain\Attendance\Services\DayCalculator;
+use App\Domain\Attendance\Services\Overtime;
 use App\Domain\Attendance\Services\Scope;
 use App\Domain\Attendance\Services\Series;
 use App\Http\Controllers\Controller;
@@ -38,6 +39,7 @@ class TeamHistoryController extends Controller
             'members' => EmployeeResource::collection($members)->resolve(),
             'teams' => TeamResource::collection(Team::orderBy('name')->get())->resolve(),
             'heat' => Series::heat($members->pluck('id')->all(), now(), 30),
+            'overtime' => ['approval' => Overtime::needsApproval(now()->toDateString())],
         ]);
     }
 
@@ -106,9 +108,10 @@ class TeamHistoryController extends Controller
             ->sortBy([fn ($a, $b) => $b->date <=> $a->date, fn ($a, $b) => strcmp($byId[$a->employee_id]->name, $byId[$b->employee_id]->name)])
             ->values();
         $segs = TimeSegment::whereIn('attendance_day_id', $days->pluck('id'))->get()->groupBy('attendance_day_id');
-        $regs = RegularizationRequest::whereIn('attendance_day_id', $days->pluck('id'))->get()->groupBy('attendance_day_id');
+        $regs = RegularizationRequest::whereIn('attendance_day_id', $days->pluck('id'))->where('kind', '!=', 'overtime')->get()->groupBy('attendance_day_id');
 
-        $rows = $days->map(function (AttendanceDay $d) use ($byId, $segs, $regs, $teams, $now, $cap) {
+        $approval = Overtime::needsApproval($now->toDateString());
+        $rows = $days->map(function (AttendanceDay $d) use ($byId, $segs, $regs, $teams, $now, $cap, $approval) {
             $e = $byId[$d->employee_id];
             $r = $regs[$d->id] ?? collect();
             $reg = $d->is_regularized ? 'Approved' : ($r->contains('status', 'pending') ? 'Pending' : ($r->contains('status', 'rejected') ? 'Rejected' : null));
@@ -119,6 +122,7 @@ class TeamHistoryController extends Controller
                 'team' => $teams[$e->team_id] ?? null,
                 'totals' => DayCalculator::totals($segs[$d->id] ?? [], $now, $cap),
                 'regularization' => $reg,
+                'overtime' => $approval ? ['raw' => $d->work_seconds > 0 ? Overtime::raw($d) : 0, 'approved' => (int) $d->approved_overtime_minutes] : null,
             ];
         })->all();
 

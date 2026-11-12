@@ -22,6 +22,9 @@ class ReopenRun
             if ($run->status !== 'approved') {
                 Fail::with('Only approved runs that are not paid can be reopened.');
             }
+            if ($run->kind === 'settlement') {
+                Fail::with('Settlement runs cannot be reopened.');
+            }
             $reason = trim($reason);
             if ($reason === '') {
                 Fail::with('Give a reason for reopening the run.');

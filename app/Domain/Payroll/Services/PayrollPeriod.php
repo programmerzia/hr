@@ -5,6 +5,7 @@ namespace App\Domain\Payroll\Services;
 use App\Models\AttendancePolicy;
 use App\Models\Employee;
 use App\Models\Holiday;
+use App\Models\PayrollRun;
 use App\Models\SalaryStructure;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -25,6 +26,18 @@ final class PayrollPeriod
     public static function label(int $y, int $m): string
     {
         return CarbonImmutable::create($y, $m, 1)->format('F Y');
+    }
+
+    /** Human title of a run: the month, plus the festival label or "Final settlement" for extra runs. */
+    public static function runTitle(PayrollRun $run): string
+    {
+        $month = self::label($run->year, $run->month);
+
+        return match ($run->kind) {
+            'festival' => ($run->label ?: 'Festival bonus').', '.$month,
+            'settlement' => 'Final settlement, '.$month,
+            default => $month,
+        };
     }
 
     /** Full-time employees who joined by month end and had not exited before it began. @return Collection<int,Employee> */

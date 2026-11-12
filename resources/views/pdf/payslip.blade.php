@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Payslip {{ $label }}</title>
+<title>{{ $title }} {{ $label }}</title>
 <style>
   @page { margin: 14mm; }
   body { font-family: DejaVu Sans, sans-serif; font-size: 10px; color: #1a1a1a; }
@@ -23,7 +23,7 @@
 @php($money = fn ($n) => number_format((int) $n))
 @php($d = fn ($n) => rtrim(rtrim(number_format((float) $n, 1), '0'), '.'))
 <table class="head"><tr>
-  <td><h1>{{ $company }}</h1><div class="muted">Payslip for {{ $label }}</div></td>
+  <td><h1>{{ $company }}</h1><div class="muted">{{ $title }} for {{ $label }}</div></td>
   <td class="right muted">
     @if($run->paid_at)Paid on {{ $run->paid_at->format('d M Y') }}<br>@endif
     @if($run->payment_reference)Reference {{ $run->payment_reference }}@endif
@@ -33,6 +33,7 @@
 <table>
   <tr><td><span class="muted">Employee</span> {{ $employee->name }}</td><td><span class="muted">Employee ID</span> {{ $employee->code }}</td></tr>
   <tr><td><span class="muted">Designation</span> {{ $employee->designation }}</td><td><span class="muted">Department</span> {{ $department ?? '-' }}</td></tr>
+  @if($run->kind !== 'festival')
   <tr><td><span class="muted">Payable days</span> {{ $d($item->eligible_days) }}</td>
       <td><span class="muted">Attendance</span> {{ intdiv($item->worked_minutes, 60) }}h {{ $item->worked_minutes % 60 }}m of {{ intdiv($item->standard_minutes, 60) }}h</td></tr>
   @if($item->lop_days > 0 || $item->absent_days + $item->half_days + $item->unpaid_leave_days > 0)
@@ -40,13 +41,18 @@
     (absent {{ $d($item->absent_days) }}, half days {{ $d($item->half_days) }}, unpaid leave {{ $d($item->unpaid_leave_days) }})</td></tr>
   @endif
   @if($item->paid_leave_days > 0)<tr><td colspan="2"><span class="muted">Paid leave</span> {{ $d($item->paid_leave_days) }} days</td></tr>@endif
+  @else
+  <tr><td colspan="2"><span class="muted">Bonus</span> {{ $d($item->components['bonus_percent'] ?? $run->bonus_percent_of_basic) }}% of basic {{ $money($item->components['basic'] ?? 0) }}</td></tr>
+  @endif
 </table>
 
 <table style="margin-top:10px"><tr>
 <td class="col">
   <h2>Earnings</h2>
   <table>
-    @if($item->components)
+    @if($run->kind === 'festival')
+      <tr class="rule"><td>{{ $run->label ?: 'Festival bonus' }}</td><td class="right">{{ $money($item->gross) }}</td></tr>
+    @elseif($item->components)
       <tr class="rule"><td>Basic</td><td class="right">{{ $money($item->components['basic'] ?? 0) }}</td></tr>
       <tr class="rule"><td>House rent</td><td class="right">{{ $money($item->components['house_rent'] ?? 0) }}</td></tr>
       <tr class="rule"><td>Medical</td><td class="right">{{ $money($item->components['medical'] ?? 0) }}</td></tr>
@@ -57,6 +63,7 @@
     @else
       <tr class="rule"><td>Gross salary</td><td class="right">{{ $money($item->gross) }}</td></tr>
     @endif
+    @if($item->leave_encashment > 0)<tr class="rule"><td>Leave encashment ({{ $d($item->components['encashment_days'] ?? 0) }} days)</td><td class="right">{{ $money($item->leave_encashment) }}</td></tr>@endif
     @if($item->overtime_pay > 0)<tr class="rule"><td>Overtime</td><td class="right">{{ $money($item->overtime_pay) }}</td></tr>@endif
     @foreach($bonuses as $a)<tr class="rule"><td>{{ $a->label }}</td><td class="right">{{ $money($a->amount) }}</td></tr>@endforeach
     <tr class="strong"><td>Total earnings</td><td class="right">{{ $money($totalEarnings) }}</td></tr>

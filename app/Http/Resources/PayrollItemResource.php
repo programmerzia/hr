@@ -29,6 +29,7 @@ class PayrollItemResource extends JsonResource
             'pf' => (int) $this->pf,
             'net' => (int) $this->net,
             'pf_employer' => (int) $this->pf_employer,
+            'leave_encashment' => (int) $this->leave_encashment,
             'eligible_days' => (float) $this->eligible_days,
             'absent_days' => (float) $this->absent_days,
             'half_days' => (float) $this->half_days,

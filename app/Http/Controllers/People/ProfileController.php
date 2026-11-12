@@ -36,6 +36,7 @@ use App\Models\EmployeeDocument;
 use App\Models\LeaveBalance;
 use App\Models\LeaveType;
 use App\Models\OnboardingChecklistItem;
+use App\Models\PayrollRun;
 use App\Models\SalaryStructure;
 use App\Models\Team;
 use App\Models\User;
@@ -93,10 +94,22 @@ class ProfileController extends Controller
             'month_weeks' => [$employee->id => Series::monthWeeks($employee->id, now())],
             'presence' => AttendanceDay::where('employee_id', $employee->id)->whereDate('date', $today)->value('status') ?? 'not_started',
             'leave_balances' => $leave,
+            'settlement' => $this->settlement($employee),
             'credentials' => $manage ? $request->session()->get('credentials') : null,
         ];
 
         return Inertia::render('People/ProfilePage', $props);
+    }
+
+    /** Final-settlement state for HR: null unless the person has left and the viewer manages payroll. */
+    private function settlement(Employee $employee): ?array
+    {
+        if (! Gate::allows('manage_payroll') || $employee->employment_type !== 'full_time'
+            || ! in_array($employee->status, ['resigned', 'terminated'], true) || ! $employee->exited_on) {
+            return null;
+        }
+
+        return ['run_id' => PayrollRun::where('kind', 'settlement')->where('employee_id', $employee->id)->value('id')];
     }
 
     public function update(UpdateEmployeeRequest $request, Employee $employee, UpdateEmployee $action): RedirectResponse

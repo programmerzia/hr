@@ -2,6 +2,7 @@
 
 namespace App\Domain\Payroll\Actions;
 
+use App\Domain\Leave\Services\Encashment;
 use App\Domain\Payroll\Services\PayrollPeriod;
 use App\Domain\Payroll\Services\RunBuilder;
 use App\Domain\Payroll\Support\Fail;
@@ -32,13 +33,27 @@ class ApproveRun
             $at = now();
             $run->update(['status' => 'approved', 'approved_by' => $by->id, 'approved_at' => $at, 'locked_at' => $at]);
             $this->snapshot($run, $at);
+            $this->consumeEncashment($run, $by);
             $this->builder->log($run, $by, 'approved and locked the run');
-            $label = PayrollPeriod::label($run->year, $run->month);
+            $label = PayrollPeriod::runTitle($run);
             $n = new PayrollNotification("Payroll for {$label} approved", "{$by->name} approved and locked the run. Mark it as paid after the bank transfer.", "/payroll/{$run->id}");
             User::where('role', 'hr')->get()->each->notify($n);
 
             return $run;
         });
+    }
+
+    /** A settlement pays out the leave balance, so it is marked as encashed the moment the run is approved. */
+    private function consumeEncashment(PayrollRun $run, Employee $by): void
+    {
+        if ($run->kind !== 'settlement' || ! $run->employee_id) {
+            return;
+        }
+        $held = PayrollItem::where('run_id', $run->id)->where('employee_id', $run->employee_id)->where('hold', true)->exists();
+        $employee = Employee::find($run->employee_id);
+        if ($employee && ! $held) {
+            Encashment::consume($employee, (int) $run->year, $by);
+        }
     }
 
     /** Freeze every item (components, slices and policy ids are already on it) and write PF ledger rows. */

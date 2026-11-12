@@ -39,6 +39,7 @@ class PayrollItem extends Model
             'late_penalty_days' => 'float',
             'day_fraction_total' => 'float',
             'pf_employer' => 'integer',
+            'leave_encashment' => 'integer',
             'hold' => 'bool',
             'variance_flag' => 'bool',
             'variance_pct' => 'float',

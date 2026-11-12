@@ -23,7 +23,8 @@ final class PayslipPdf
         $policy = $item->payroll_policy_id ? PayrollPolicy::find($item->payroll_policy_id) : null;
 
         $bonuses = $adjustments->where('kind', 'bonus');
-        $earnings = $item->gross + $item->overtime_pay + (int) $bonuses->sum('amount');
+        $earnings = $item->gross + $item->overtime_pay + (int) $item->leave_encashment + (int) $bonuses->sum('amount');
+        $festival = $run->kind === 'festival';
 
         $pdf = Pdf::loadView('pdf.payslip', [
             'company' => config('app.name'),
@@ -32,14 +33,19 @@ final class PayslipPdf
             'employee' => $emp,
             'department' => $emp->department_id ? Department::whereKey($emp->department_id)->value('name') : null,
             'label' => PayrollPeriod::label($run->year, $run->month),
+            'title' => match ($run->kind) {
+                'festival' => ($run->label ?: 'Festival bonus').' (festival bonus)',
+                'settlement' => 'Final settlement',
+                default => 'Payslip',
+            },
             'bonuses' => $bonuses,
             'deductionAdjustments' => $adjustments->where('kind', 'deduction'),
             'totalEarnings' => $earnings,
             'totalDeductions' => $earnings - $item->net,
-            'showPf' => (bool) $policy?->pf_enabled || $item->pf > 0,
-            'showLate' => (bool) $policy?->late_penalty_enabled || $item->late_deduction > 0,
-            'showTax' => (bool) ($policy?->tax_enabled ?? true) || $item->tax > 0,
-            'showLop' => (bool) ($policy?->lop_enabled ?? true) || $item->unpaid_deduction > 0,
+            'showPf' => ! $festival && ((bool) $policy?->pf_enabled || $item->pf > 0),
+            'showLate' => ! $festival && ((bool) $policy?->late_penalty_enabled || $item->late_deduction > 0),
+            'showTax' => ! $festival && ((bool) ($policy?->tax_enabled ?? true) || $item->tax > 0),
+            'showLop' => ! $festival && ((bool) ($policy?->lop_enabled ?? true) || $item->unpaid_deduction > 0),
             'bankMasked' => $bank ? self::mask($bank->account_no) : null,
             'bank' => $bank,
         ])->setPaper('a4');

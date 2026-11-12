@@ -16,7 +16,7 @@ class AttendanceDay extends Model
     {
         return [
             'date' => 'date', 'first_in_at' => 'datetime', 'last_out_at' => 'datetime', 'is_regularized' => 'boolean',
-            'day_fraction' => 'float', 'auto_closed' => 'boolean', 'closed_at' => 'datetime',
+            'day_fraction' => 'float', 'auto_closed' => 'boolean', 'closed_at' => 'datetime', 'approved_overtime_minutes' => 'integer',
         ];
     }
 

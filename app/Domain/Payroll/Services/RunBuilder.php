@@ -2,6 +2,7 @@
 
 namespace App\Domain\Payroll\Services;
 
+use App\Domain\Leave\Services\Encashment;
 use App\Domain\Payroll\Support\Fail;
 use App\Models\ActivityLogEntry;
 use App\Models\AttendancePolicy;
@@ -50,13 +51,59 @@ class RunBuilder
         if (! $attendance || ! $money) {
             [$attendance, $money] = $this->policies($run);
         }
+        if ($run->kind === 'festival') {
+            return $this->priceFestival($run, $emp, $adjustments, $attendance, $money);
+        }
         $facts = PayrollFacts::for($emp, $run->year, $run->month, $attendance, $money);
         if ($facts['slices'] === []) {
             return null;
         }
+        $values = [
+            ...PayrollCalculator::compute($money, $facts['slices'], $facts, $adjustments),
+            'payroll_policy_id' => $money->id,
+            'attendance_policy_id' => $attendance->id,
+        ];
+        if ($run->kind === 'settlement') {
+            $values = $this->withEncashment($values, $emp, $run->year);
+        }
+
+        return $values;
+    }
+
+    /** Settlement: unused encashable leave (exit year) at the daily rate is added to net. */
+    private function withEncashment(array $values, Employee $emp, int $year): array
+    {
+        $enc = Encashment::for($emp, $year);
+        $daily = (float) ($values['components']['daily_rate'] ?? 0);
+        $amount = (int) round($enc['days'] * $daily);
+        $values['leave_encashment'] = $amount;
+        $values['net'] += $amount;
+        $values['components'] = [...$values['components'], 'encashment_days' => $enc['days'], 'encashment_by_type' => $enc['by_type']];
+
+        return $values;
+    }
+
+    /** Festival bonus: round(basic x pct / 100) from the structure in force at month end. No LOP, late, PF or tax. */
+    private function priceFestival(PayrollRun $run, Employee $emp, array $adjustments, AttendancePolicy $attendance, PayrollPolicy $money): ?array
+    {
+        $structure = PayrollPeriod::salaryOn($emp->id, PayrollPeriod::end($run->year, $run->month));
+        if (! $structure) {
+            return null;
+        }
+        $pct = (float) $run->bonus_percent_of_basic;
+        $gross = (int) round($structure->basic * $pct / 100);
+        $adj = PayrollCalculator::adjustmentTotals($adjustments);
 
         return [
-            ...PayrollCalculator::compute($money, $facts['slices'], $facts, $adjustments),
+            'salary_structure_id' => $structure->id,
+            'standard_minutes' => 0, 'worked_minutes' => 0, 'overtime_minutes' => 0, 'late_count' => 0,
+            'eligible_days' => 0, 'absent_days' => 0, 'half_days' => 0, 'paid_leave_days' => 0, 'holiday_days' => 0,
+            'unpaid_leave_days' => 0, 'day_fraction_total' => 0, 'lop_days' => 0, 'late_penalty_days' => 0,
+            'gross' => $gross, 'overtime_pay' => 0, 'unpaid_deduction' => 0, 'late_deduction' => 0,
+            'tax' => 0, 'pf' => 0, 'pf_employer' => 0, 'leave_encashment' => 0,
+            'net' => $gross + $adj['bonus'] - $adj['deduction'],
+            'components' => ['basic' => (int) $structure->basic, 'bonus_percent' => $pct, 'house_rent' => 0, 'medical' => 0, 'conveyance' => 0, 'other_allowances' => []],
+            'slices' => [],
             'payroll_policy_id' => $money->id,
             'attendance_policy_id' => $attendance->id,
         ];
@@ -73,12 +120,29 @@ class RunBuilder
         }
     }
 
-    /** Eligible people get an item from fresh attendance and leave facts; people no longer eligible lose theirs. */
-    public function recompute(PayrollRun $run): void
+    /**
+     * Eligible people get an item from fresh attendance and leave facts; people no longer eligible lose theirs.
+     * Regular runs skip anyone with a settlement run for the month.
+     *
+     * @return list<string> names skipped because a settlement run exists
+     */
+    public function recompute(PayrollRun $run): array
     {
         $keep = [];
+        $skipped = [];
         [$attendance, $money] = $this->policies($run);
-        foreach (PayrollPeriod::eligible($run->year, $run->month) as $emp) {
+        $settled = $run->kind === 'regular'
+            ? PayrollRun::where('kind', 'settlement')->where('year', $run->year)->where('month', $run->month)->pluck('employee_id')->all()
+            : [];
+        $people = $run->kind === 'settlement'
+            ? Employee::whereKey($run->employee_id)->get()
+            : PayrollPeriod::eligible($run->year, $run->month);
+        foreach ($people as $emp) {
+            if (in_array($emp->id, $settled, true)) {
+                $skipped[] = $emp->name;
+
+                continue;
+            }
             $existing = PayrollItem::where('run_id', $run->id)->where('employee_id', $emp->id)->first();
             $values = $this->price($run, $emp, $existing ? $this->adjustmentRows($existing) : [], $attendance, $money);
             if (! $values) {
@@ -94,6 +158,16 @@ class RunBuilder
             app(VarianceCheck::class)->apply($run);
         } else {
             PayrollItem::where('run_id', $run->id)->update(['variance_flag' => false, 'variance_kind' => 'none', 'variance_pct' => null, 'variance_ack_by' => null, 'variance_ack_at' => null]);
+        }
+
+        return $skipped;
+    }
+
+    /** Writes the "left out of this run" note for people covered by a settlement run. */
+    public function logSkipped(PayrollRun $run, Employee $actor, array $skipped): void
+    {
+        if ($skipped !== []) {
+            $this->log($run, $actor, 'left out (final settlement run exists): '.implode(', ', $skipped));
         }
     }
 

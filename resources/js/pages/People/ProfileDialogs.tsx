@@ -85,7 +85,7 @@ export function ChangeStatusDialog({ open, onOpenChange, employee }: DialogProps
             {statusOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </NativeSelect>
         </Field>
-        <Field label="Effective on" hint={exiting ? 'Sets the exit date and disables sign-in.' : undefined} error={form.errors.effective_on}>
+        <Field label={exiting ? 'Exit date' : 'Effective on'} required={exiting} hint={exiting ? 'Last working day. Sets the exit date and disables sign-in; HR can then create the final settlement.' : undefined} error={form.errors.effective_on}>
           <Input type="date" value={form.data.effective_on} onChange={(e) => form.setData('effective_on', e.target.value)} />
         </Field>
       </div>

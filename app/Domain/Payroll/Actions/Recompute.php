@@ -16,8 +16,9 @@ class Recompute
         return DB::transaction(function () use ($run, $by) {
             $run = PayrollRun::lockForUpdate()->findOrFail($run->id);
             RunBuilder::assertOpen($run, 'Approved runs are locked and cannot be recomputed.');
-            $this->builder->recompute($run);
+            $skipped = $this->builder->recompute($run);
             $this->builder->log($run, $by, 'recomputed the run from attendance and leave');
+            $this->builder->logSkipped($run, $by, $skipped);
 
             return $run;
         });

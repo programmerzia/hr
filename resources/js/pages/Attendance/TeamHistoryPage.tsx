@@ -1,4 +1,4 @@
-import { router } from '@inertiajs/react'
+import { router, useForm } from '@inertiajs/react'
 import { CalendarDays, Download } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { HeatStrip } from '../../components/charts/HeatStrip'
@@ -14,6 +14,9 @@ import {
   Card,
   CardHeader,
   DateRangePicker,
+  Dialog,
+  Field,
+  Input,
   NativeSelect,
   Table,
   TableFooter,
@@ -37,6 +40,7 @@ interface HistoryRow {
   team: string | null
   totals: DayTotals
   regularization: 'Approved' | 'Pending' | 'Rejected' | null
+  overtime: { raw: number; approved: number } | null
 }
 
 interface HistoryProps {
@@ -47,7 +51,40 @@ interface HistoryProps {
   members: Employee[]
   teams: Team[]
   heat: Record<string, HeatDay[]>
+  overtime: { approval: boolean }
   attendance: { policy: { standard_minutes: number } }
+}
+
+function ApproveOvertimeDialog({ row, onClose }: { row: HistoryRow | null; onClose: () => void }) {
+  const raw = row?.overtime?.raw ?? 0
+  const form = useForm({ minutes: String(row?.overtime?.approved || raw) })
+  const errors = form.errors as Record<string, string>
+  return (
+    <Dialog
+      open={Boolean(row)}
+      onOpenChange={(o) => !o && onClose()}
+      title="Approve overtime"
+      description={row ? `${row.employee.name}, ${formatDate(row.day.date)}. ${raw} minutes worked beyond the standard day.` : undefined}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={!(Number(form.data.minutes) > 0) || form.processing}
+            onClick={() => row && form.post(route('attendance.overtime.approve', row.day.id), { preserveScroll: true, onSuccess: onClose })}
+          >
+            Approve
+          </Button>
+        </>
+      }
+    >
+      <Field label="Minutes to approve" required error={errors.minutes} hint="Payroll rounds down to the policy block and applies the daily cap.">
+        <Input type="number" min={1} max={raw} value={form.data.minutes} onChange={(e) => form.setData('minutes', e.target.value)} />
+      </Field>
+    </Dialog>
+  )
 }
 
 function MemberHeat({ name, days, target }: { name: string; days: HeatDay[]; target: number }) {
@@ -63,7 +100,8 @@ function MemberHeat({ name, days, target }: { name: string; days: HeatDay[]; tar
 
 export default function TeamHistoryPage() {
   const role = useAuth().role
-  const { filters, rows, total, limit, members, teams, heat, attendance } = useShared<HistoryProps>()
+  const { filters, rows, total, limit, members, teams, heat, attendance, overtime } = useShared<HistoryProps>()
+  const [approving, setApproving] = useState<HistoryRow | null>(null)
   const [search, setSearch] = useState(filters.q)
   const target = attendance.policy.standard_minutes * 60
 
@@ -163,6 +201,7 @@ export default function TeamHistoryPage() {
               <Th>Status</Th>
               <Th>Grade</Th>
               <Th>Regularized</Th>
+              {overtime.approval && <Th numeric>Overtime (raw / approved)</Th>}
             </Tr>
           </Thead>
           <Tbody>
@@ -200,12 +239,34 @@ export default function TeamHistoryPage() {
                       <span className="text-fg-subtle">-</span>
                     )}
                   </Td>
+                  {overtime.approval && (
+                    <Td numeric>
+                      {r.overtime && r.overtime.raw > 0 ? (
+                        <span className="inline-flex items-center justify-end gap-2">
+                          <span className="font-mono tabular-nums">
+                            {r.overtime.raw} / {r.overtime.approved}
+                          </span>
+                          <Button size="sm" variant="secondary" onClick={() => setApproving(r)}>
+                            {r.overtime.approved > 0 ? 'Change' : 'Approve OT'}
+                          </Button>
+                          {r.overtime.approved > 0 && (
+                            <Button size="sm" variant="ghost" onClick={() => router.post(route('attendance.overtime.revoke', d.id), {}, { preserveScroll: true })}>
+                              Revoke
+                            </Button>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-fg-subtle">-</span>
+                      )}
+                    </Td>
+                  )}
                 </Tr>
               )
             })}
           </Tbody>
         </Table>
       )}
+      {approving && <ApproveOvertimeDialog key={approving.day.id} row={approving} onClose={() => setApproving(null)} />}
       <TableFooter count={total} noun={total === 1 ? 'record' : 'records'}>
         {total > limit && <span>Showing the first {limit}. The CSV has all rows.</span>}
       </TableFooter>

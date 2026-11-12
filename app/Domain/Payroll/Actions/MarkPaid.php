@@ -36,7 +36,7 @@ class MarkPaid
     /** Real PDFs for every item (a failed render is retried lazily on download), then the notifications. */
     private function payslipsAndNotices(PayrollRun $run): void
     {
-        $label = PayrollPeriod::label($run->year, $run->month);
+        $label = PayrollPeriod::runTitle($run);
         $held = [];
         foreach (PayrollItem::with('employee')->where('run_id', $run->id)->get() as $item) {
             try {

@@ -20,6 +20,7 @@ export interface RunTotals {
   net: number
   pf_employer?: number
   held?: number
+  encashment?: number
 }
 
 export interface PersonRef {
@@ -51,3 +52,11 @@ export function act(url: string, data: Record<string, unknown> = {}) {
 /** Net adjustment (bonus minus deduction) for one item. */
 export const netAdjustment = (adj: Pick<PayrollAdjustment, 'kind' | 'amount'>[]) =>
   adj.reduce((t, a) => t + (a.kind === 'bonus' ? a.amount : -a.amount), 0)
+
+/** Page title of a run: month for regular, label for festival, "Final settlement" for exits. */
+export const runTitle = (run: Pick<PayrollRun, 'year' | 'month' | 'kind' | 'label'>, employee?: string) =>
+  run.kind === 'festival'
+    ? `${run.label ?? 'Festival bonus'}, ${monthLabel(run.year, run.month)}`
+    : run.kind === 'settlement'
+      ? `Final settlement${employee ? `, ${employee}` : ''}`
+      : monthLabel(run.year, run.month)

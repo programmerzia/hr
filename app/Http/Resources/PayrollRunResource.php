@@ -22,6 +22,8 @@ class PayrollRunResource extends JsonResource
             'payment_reference' => $this->payment_reference,
             'locked_at' => Fmt::dt($this->locked_at),
             'kind' => $this->kind ?? 'regular',
+            'label' => $this->label,
+            'bonus_percent_of_basic' => $this->bonus_percent_of_basic === null ? null : (float) $this->bonus_percent_of_basic,
             'employee_id' => $this->employee_id,
             'reopened_at' => Fmt::dt($this->reopened_at),
             'reopened_by' => $this->reopened_by,

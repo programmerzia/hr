@@ -33,7 +33,7 @@ import { formatDate, formatDuration, formatMoney } from '../../lib/format'
 import { useAuth, useShared } from '../../inertia/props'
 import type { PayrollAdjustment, PayrollAdjustmentKind, PayrollItem, PayrollPolicySwitches, PayrollRun } from '../../types'
 import { deductionMix } from './charts'
-import { act, failureOf, monthLabel, netAdjustment, todayIso, type HistoryEvent, type PersonRef, type RunTotals } from './helpers'
+import { act, failureOf, monthLabel, netAdjustment, runTitle, todayIso, type HistoryEvent, type PersonRef, type RunTotals } from './helpers'
 
 interface RunDetailProps {
   run: PayrollRun
@@ -169,7 +169,7 @@ function ItemSheet({
       open={Boolean(item)}
       onOpenChange={(o) => !o && onClose()}
       title={name ?? 'Payroll item'}
-      description={`${monthLabel(run.year, run.month)} breakdown`}
+      description={`${runTitle(run)} breakdown`}
       footer={
         item ? (
           <Link href={route('payroll.payslip', item.id)} className={buttonVariants({ variant: 'secondary' })}>
@@ -180,6 +180,7 @@ function ItemSheet({
     >
       {item && (
         <div className="flex flex-col gap-5 p-4">
+          {run.kind !== 'festival' && (
           <section>
             <h3 className="mb-1 text-sm font-semibold">Attendance</h3>
             <div className="grid grid-cols-2 gap-2 text-sm">
@@ -195,6 +196,7 @@ function ItemSheet({
             </div>
             {item.hold && <p className="mt-2 text-sm text-warning">On hold: {item.hold_reason}</p>}
           </section>
+          )}
 
           {item.variance_flag && (
             <section>
@@ -202,7 +204,7 @@ function ItemSheet({
             </section>
           )}
 
-          {(item.slices.length > 0 || item.components) && (
+          {run.kind !== 'festival' && (item.slices.length > 0 || item.components) && (
             <section>
               <h3 className="mb-1 text-sm font-semibold">Salary basis</h3>
               {item.slices.map((sl) => (
@@ -235,7 +237,8 @@ function ItemSheet({
           )}
 
           <section className="divide-y divide-border">
-            {line('Gross salary', item.gross)}
+            {line(run.kind === 'festival' ? (run.label ?? 'Festival bonus') : 'Gross salary', item.gross)}
+            {item.leave_encashment > 0 && line(`Leave encashment (${days(item.components?.encashment_days ?? 0)} days)`, item.leave_encashment, '+')}
             {item.overtime_pay > 0 && line('Overtime pay', item.overtime_pay, '+')}
             {adjustments.filter((a) => a.kind === 'bonus').length > 0 && line('Bonuses', adjustments.filter((a) => a.kind === 'bonus').reduce((t, a) => t + a.amount, 0), '+')}
             {item.unpaid_deduction > 0 && line(`Loss of pay (${days(item.lop_days)} days)`, item.unpaid_deduction, '-')}
@@ -335,13 +338,16 @@ export default function RunDetailPage() {
 
   const items = rawItems
   const [flaggedOnly, setFlaggedOnly] = useState(false)
-  const showPf = policy.pf_enabled || items.some((i) => i.pf > 0)
-  const showLop = policy.lop_enabled || items.some((i) => i.unpaid_deduction > 0)
-  const showLate = policy.late_penalty_enabled || items.some((i) => i.late_deduction > 0)
-  const showOt = policy.overtime_enabled || items.some((i) => i.overtime_pay > 0)
+  const festival = run.kind === 'festival'
+  const settlement = run.kind === 'settlement'
+  const showEncash = settlement
+  const showPf = !festival && (policy.pf_enabled || items.some((i) => i.pf > 0))
+  const showLop = !festival && (policy.lop_enabled || items.some((i) => i.unpaid_deduction > 0))
+  const showLate = !festival && (policy.late_penalty_enabled || items.some((i) => i.late_deduction > 0))
+  const showOt = !festival && (policy.overtime_enabled || items.some((i) => i.overtime_pay > 0))
   const live = items.filter((i) => !i.hold)
   const overtimeTotal = live.reduce((t, i) => t + i.overtime_pay, 0)
-  const employerCost = totals.gross + (totals.pf_employer ?? 0) + overtimeTotal
+  const employerCost = totals.gross + (totals.pf_employer ?? 0) + overtimeTotal + (totals.encashment ?? 0)
   const flagged = items.filter((i) => i.variance_flag && !i.hold)
   const pendingFlags = flagged.filter((i) => !i.variance_ack_at).length
   const shown = flaggedOnly ? items.filter((i) => i.variance_flag) : items
@@ -353,7 +359,7 @@ export default function RunDetailPage() {
   )
   const selectedItem = items.find((i) => i.id === selected) ?? null
 
-  const label = monthLabel(run.year, run.month)
+  const label = runTitle(run, person(run.employee_id ?? '')?.name)
   const open = run.status === 'draft' || run.status === 'review'
   const actions = (
     <>
@@ -375,7 +381,7 @@ export default function RunDetailPage() {
           Approve
         </Button>
       )}
-      {run.status === 'approved' && role === 'management' && (
+      {run.status === 'approved' && role === 'management' && !settlement && (
         <Button icon={<RotateCcw size={16} />} onClick={() => setReopenOpen(true)}>
           Reopen
         </Button>
@@ -401,7 +407,13 @@ export default function RunDetailPage() {
         title={label}
         breadcrumb={[{ label: 'Payroll', to: '/payroll' }, { label }]}
         description={
-          run.status === 'review' && role !== 'management'
+          run.status === 'draft' && festival
+            ? `${run.bonus_percent_of_basic ?? 0}% of basic for ${monthLabel(run.year, run.month)}. No loss of pay, PF or tax applies.`
+            : run.status === 'draft' && settlement
+              ? `Prorated salary to the exit date plus unused leave. Add asset deductions as adjustments. ${monthLabel(run.year, run.month)}.`
+              : run.status === 'approved' && settlement
+                ? 'Approved and locked. Leave has been encashed, so a settlement run cannot be reopened.'
+                : run.status === 'review' && role !== 'management'
             ? 'Waiting for management to approve.'
             : run.status === 'paid' && run.paid_at
               ? `Paid on ${formatDate(run.paid_at)}, reference ${run.payment_reference ?? '-'}`
@@ -411,6 +423,7 @@ export default function RunDetailPage() {
         }
         actions={
           <>
+            {run.kind && run.kind !== 'regular' && <Badge variant="info">{festival ? 'Festival bonus' : 'Final settlement'}</Badge>}
             <StatusBadge status={run.status} />
             {actions}
           </>
@@ -462,10 +475,11 @@ export default function RunDetailPage() {
               <Thead>
                 <Tr className="hover:bg-transparent">
                   <Th>Employee</Th>
-                  <Th numeric>Days</Th>
-                  <Th numeric>Absent / half</Th>
-                  <Th numeric>Paid / unpaid leave</Th>
-                  <Th numeric>Gross</Th>
+                  {!festival && <Th numeric>Days</Th>}
+                  {!festival && <Th numeric>Absent / half</Th>}
+                  {!festival && <Th numeric>Paid / unpaid leave</Th>}
+                  <Th numeric>{festival ? 'Bonus' : 'Gross'}</Th>
+                  {showEncash && <Th numeric>Leave encashment</Th>}
                   {showOt && <Th numeric>Overtime</Th>}
                   {showLop && <Th numeric>LOP</Th>}
                   {showLate && <Th numeric>Late penalty</Th>}
@@ -501,16 +515,25 @@ export default function RunDetailPage() {
                           </div>
                         )}
                       </Td>
-                      <Td numeric>{days(i.eligible_days)}</Td>
-                      <Td numeric className="whitespace-nowrap">
-                        {days(i.absent_days)} / {days(i.half_days)}
-                      </Td>
-                      <Td numeric className="whitespace-nowrap">
-                        {days(i.paid_leave_days)} / {days(i.unpaid_leave_days)}
-                      </Td>
+                      {!festival && <Td numeric>{days(i.eligible_days)}</Td>}
+                      {!festival && (
+                        <Td numeric className="whitespace-nowrap">
+                          {days(i.absent_days)} / {days(i.half_days)}
+                        </Td>
+                      )}
+                      {!festival && (
+                        <Td numeric className="whitespace-nowrap">
+                          {days(i.paid_leave_days)} / {days(i.unpaid_leave_days)}
+                        </Td>
+                      )}
                       <Td>
                         <MoneyCell amount={i.gross} />
                       </Td>
+                      {showEncash && (
+                        <Td>
+                          <MoneyCell amount={i.leave_encashment} />
+                        </Td>
+                      )}
                       {showOt && (
                         <Td>
                           <MoneyCell amount={i.overtime_pay} />

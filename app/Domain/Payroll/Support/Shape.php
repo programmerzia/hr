@@ -33,6 +33,7 @@ final class Shape
             'deductions' => (int) $items->sum(fn ($i) => $i->unpaid_deduction + $i->late_deduction + $i->tax + $i->pf) + $adj['deduction'],
             'net' => (int) $items->sum('net'),
             'pf_employer' => (int) $items->sum('pf_employer'),
+            'encashment' => (int) $items->sum('leave_encashment'),
             'held' => $held,
         ];
     }

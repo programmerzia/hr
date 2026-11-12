@@ -40,12 +40,14 @@ export default function PayslipPage() {
   const c = item.components
   const bonuses = adjustments.filter((a) => a.kind === 'bonus')
   const deductionAdj = adjustments.filter((a) => a.kind === 'deduction')
-  const totalEarnings = item.gross + item.overtime_pay + bonuses.reduce((t, a) => t + a.amount, 0)
+  const festival = run.kind === 'festival'
+  const settlement = run.kind === 'settlement'
+  const totalEarnings = item.gross + item.overtime_pay + item.leave_encashment + bonuses.reduce((t, a) => t + a.amount, 0)
   const totalDeductions = totalEarnings - item.net
-  const showTax = policy.tax_enabled || item.tax > 0
-  const showPf = policy.pf_enabled || item.pf > 0
-  const showLop = policy.lop_enabled || item.unpaid_deduction > 0
-  const showLate = policy.late_penalty_enabled || item.late_deduction > 0
+  const showTax = !festival && (policy.tax_enabled || item.tax > 0)
+  const showPf = !festival && (policy.pf_enabled || item.pf > 0)
+  const showLop = !festival && (policy.lop_enabled || item.unpaid_deduction > 0)
+  const showLate = !festival && (policy.late_penalty_enabled || item.late_deduction > 0)
   const label = monthLabel(run.year, run.month)
   const isDraft = run.status !== 'paid' && run.status !== 'approved'
 
@@ -54,7 +56,7 @@ export default function PayslipPage() {
       <style>{printCss}</style>
       <div className="print:hidden">
         <PageHeader
-          title={`Payslip, ${label}`}
+          title={festival ? `${run.label ?? 'Festival bonus'}, ${label}` : settlement ? `Final settlement, ${label}` : `Payslip, ${label}`}
           breadcrumb={staff ? [{ label: 'Payroll', to: '/payroll' }, { label, to: `/payroll/${run.id}` }, { label: 'Payslip' }] : [{ label: 'My payslips', to: '/payslips' }, { label }]}
           actions={
             <>
@@ -74,7 +76,9 @@ export default function PayslipPage() {
         <header className="flex items-start justify-between gap-4 border-b border-border pb-4">
           <div>
             <p className="text-xl font-semibold">Vivacom</p>
-            <p className="text-sm text-fg-muted">Payslip for {label}</p>
+            <p className="text-sm text-fg-muted">
+              {festival ? `Festival bonus: ${run.label ?? ''}` : settlement ? 'Final settlement' : 'Payslip'} for {label}
+            </p>
           </div>
           <div className="text-right text-sm text-fg-muted">
             <p>
@@ -91,11 +95,20 @@ export default function PayslipPage() {
           <p><span className="text-fg-muted">Designation </span>{emp.designation}</p>
           <p><span className="text-fg-muted">Department </span>{department ?? '-'}</p>
           <p><span className="text-fg-muted">Joined </span>{emp.joined_on ? formatDate(emp.joined_on) : '-'}</p>
-          <p>
-            <span className="text-fg-muted">Attendance </span>
-            {formatDuration(item.worked_minutes * 60)} of {formatDuration(item.standard_minutes * 60)}
-          </p>
-          <p><span className="text-fg-muted">Payable days </span>{days(item.eligible_days)}</p>
+          {festival ? (
+            <p>
+              <span className="text-fg-muted">Bonus </span>
+              {days(item.components?.bonus_percent ?? run.bonus_percent_of_basic ?? 0)}% of basic {formatMoney(item.components?.basic ?? 0)}
+            </p>
+          ) : (
+            <>
+              <p>
+                <span className="text-fg-muted">Attendance </span>
+                {formatDuration(item.worked_minutes * 60)} of {formatDuration(item.standard_minutes * 60)}
+              </p>
+              <p><span className="text-fg-muted">Payable days </span>{days(item.eligible_days)}</p>
+            </>
+          )}
           {item.paid_leave_days > 0 && <p><span className="text-fg-muted">Paid leave </span>{days(item.paid_leave_days)} days</p>}
           {(item.lop_days > 0 || item.absent_days + item.half_days + item.unpaid_leave_days > 0) && (
             <p className="col-span-2">
@@ -115,7 +128,9 @@ export default function PayslipPage() {
             <h2 className="mb-1 text-sm font-semibold">Earnings</h2>
             <table className="w-full text-sm">
               <tbody>
-                {c ? (
+                {festival ? (
+                  <Row label={run.label ?? 'Festival bonus'} value={formatMoney(item.gross)} />
+                ) : c ? (
                   <>
                     <Row label="Basic" value={formatMoney(c.basic)} />
                     <Row label="House rent" value={formatMoney(c.house_rent)} />
@@ -128,6 +143,7 @@ export default function PayslipPage() {
                 ) : (
                   <Row label="Gross salary" value={formatMoney(item.gross)} />
                 )}
+                {item.leave_encashment > 0 && <Row label={`Leave encashment (${days(c?.encashment_days ?? 0)} days)`} value={formatMoney(item.leave_encashment)} />}
                 {item.overtime_pay > 0 && <Row label="Overtime" value={formatMoney(item.overtime_pay)} />}
                 {bonuses.map((a) => (
                   <Row key={a.id} label={a.label} value={formatMoney(a.amount)} />
