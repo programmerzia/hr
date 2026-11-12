@@ -156,7 +156,7 @@ class DemoSeeder extends Seeder
                 ]);
             }
         }
-    
+
         // Module demo seeders (owned by module agents; skipped until the class exists).
         foreach (['Work', 'Leave', 'Payroll', 'Billing', 'Inbox'] as $module) {
             $class = "Database\\Seeders\\{$module}DemoSeeder";
@@ -354,6 +354,40 @@ class DemoSeeder extends Seeder
             if ($approved) {
                 $day->update(['is_regularized' => true]);
             }
+        }
+
+        // ----- graded days for Sadia this month: one unapproved absence and one auto-closed day (forgot to end).
+        $sadia = $this->emp[107];
+        foreach (['absent' => 1, 'auto_closed' => 3] as $kind => $ago) {
+            $date = $this->workdaysAgo($today, $ago);
+            if (substr($date, 0, 7) !== $today->format('Y-m')) {
+                continue;
+            }
+            $old = AttendanceDay::where('employee_id', $sadia->id)->whereDate('date', $date)->first();
+            if ($old) {
+                TimeSegment::where('attendance_day_id', $old->id)->delete();
+                $old->delete();
+            }
+            if ($kind === 'absent') {
+                AttendanceDay::create([
+                    'employee_id' => $sadia->id, 'date' => $date, 'status' => 'absent',
+                    'day_fraction' => 0, 'absence_kind' => 'unapproved', 'closed_at' => CarbonImmutable::parse($date)->addDay()->setTime(0, 10),
+                ]);
+
+                continue;
+            }
+            $in = CarbonImmutable::parse("{$date} 10:04");
+            $out = CarbonImmutable::parse("{$date} {$this->policy->shift_end}");
+            $day = AttendanceDay::create([
+                'employee_id' => $sadia->id, 'date' => $date, 'status' => 'ended',
+                'first_in_at' => $in, 'last_out_at' => $out,
+                'work_seconds' => $out->getTimestamp() - $in->getTimestamp(), 'break_seconds' => 0,
+                'auto_closed' => true, 'closed_at' => CarbonImmutable::parse($date)->addDay()->setTime(0, 10),
+            ]);
+            TimeSegment::create([
+                'attendance_day_id' => $day->id, 'type' => 'work', 'started_at' => $in, 'ended_at' => $out,
+                'source' => 'manual', 'note' => 'auto-closed',
+            ]);
         }
     }
 

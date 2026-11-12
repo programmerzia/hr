@@ -7,6 +7,7 @@ import { EmptyTable } from '../../components/shared/EmptyTable'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { PersonCell } from '../../components/shared/PersonCell'
 import { StatusBadge } from '../../components/shared/StatusBadge'
+import { GradeChip } from './GradeChip'
 import {
   Badge,
   Button,
@@ -158,7 +159,9 @@ export default function TeamHistoryPage() {
               <Th numeric>Break</Th>
               <Th numeric>Offline</Th>
               <Th numeric>Late (min)</Th>
+              <Th numeric>Early (min)</Th>
               <Th>Status</Th>
+              <Th>Grade</Th>
               <Th>Regularized</Th>
             </Tr>
           </Thead>
@@ -179,8 +182,12 @@ export default function TeamHistoryPage() {
                   <Td numeric>{d.first_in_at ? formatDuration(t.break_seconds) : '-'}</Td>
                   <Td numeric>{d.first_in_at && t.offline_seconds >= 60 ? formatDuration(t.offline_seconds) : '-'}</Td>
                   <Td numeric>{d.late_minutes > 0 ? d.late_minutes : '-'}</Td>
+                  <Td numeric>{d.early_minutes > 0 ? d.early_minutes : '-'}</Td>
                   <Td>
                     <StatusBadge status={d.status} />
+                  </Td>
+                  <Td>
+                    <GradeChip day={d} />
                   </Td>
                   <Td>
                     {reg === 'Approved' ? (

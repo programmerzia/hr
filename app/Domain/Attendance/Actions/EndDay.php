@@ -3,6 +3,7 @@
 namespace App\Domain\Attendance\Actions;
 
 use App\Domain\Attendance\Services\DayState;
+use App\Domain\Attendance\Services\Grading;
 use App\Models\Employee;
 use Illuminate\Support\Facades\DB;
 
@@ -20,6 +21,8 @@ class EndDay
             $day->status = 'ended';
             $day->last_out_at = $now;
             DayState::rollup($day, $now);
+            Grading::apply($day);
+            $day->save();
 
             return true;
         });

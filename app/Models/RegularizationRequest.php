@@ -22,6 +22,11 @@ class RegularizationRequest extends Model
         return $this->belongsTo(AttendanceDay::class, 'attendance_day_id');
     }
 
+    public function leaveType()
+    {
+        return $this->belongsTo(LeaveType::class);
+    }
+
     public function employee()
     {
         return $this->belongsTo(Employee::class);

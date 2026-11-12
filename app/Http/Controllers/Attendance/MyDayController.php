@@ -14,6 +14,7 @@ use App\Http\Resources\TimeSegmentResource;
 use App\Models\AttendanceDay;
 use App\Models\AttendancePolicy;
 use App\Models\Holiday;
+use App\Models\PayrollPolicy;
 use App\Models\RegularizationRequest;
 use App\Models\Task;
 use App\Models\TaskTimeEntry;
@@ -87,6 +88,34 @@ class MyDayController extends Controller
             'current_task_id' => $employee->current_task_id,
             'policy' => AttendancePolicyResource::make($policy)->resolve(),
             'regularizations' => RegularizationRequestResource::collection($regs)->resolve(),
+            'late_rule' => $this->lateRule($employee->id, $policy),
+            'recent_days' => $this->recentDays($employee->id, $regs),
         ]);
+    }
+
+    /** Late units this month (unregularised lates, plus early leaves when the policy counts them) vs the penalty rule. */
+    private function lateRule(string $employeeId, AttendancePolicy $policy): array
+    {
+        $pay = PayrollPolicy::current();
+        $days = AttendanceDay::where('employee_id', $employeeId)->where('is_regularized', false)
+            ->whereBetween('date', [now()->startOfMonth()->toDateString(), now()->toDateString()])->get();
+        $count = $days->where('late_minutes', '>', 0)->count()
+            + ($policy->early_counts_as_late ? $days->where('early_minutes', '>', 0)->count() : 0);
+
+        return ['enabled' => (bool) $pay->late_penalty_enabled, 'lates_per_penalty' => (int) $pay->lates_per_penalty, 'count_this_month' => $count];
+    }
+
+    /** Closed days this month that can still be regularised (absent, half day, auto-closed, early). */
+    private function recentDays(string $employeeId, $regs): array
+    {
+        return AttendanceDay::where('employee_id', $employeeId)->where('is_regularized', false)
+            ->whereBetween('date', [now()->startOfMonth()->toDateString(), now()->subDay()->toDateString()])
+            ->where(fn ($q) => $q->whereIn('absence_kind', ['unapproved', 'half_day'])->orWhere('auto_closed', true)->orWhere('early_minutes', '>', 0))
+            ->orderByDesc('date')->get()
+            ->map(fn ($d) => [
+                'day' => AttendanceDayResource::make($d)->resolve(),
+                'regularization' => $regs->where('attendance_day_id', $d->id)->contains('status', 'pending') ? 'pending'
+                    : ($regs->where('attendance_day_id', $d->id)->contains('status', 'rejected') ? 'rejected' : null),
+            ])->all();
     }
 }

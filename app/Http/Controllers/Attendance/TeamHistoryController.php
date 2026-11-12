@@ -45,7 +45,7 @@ class TeamHistoryController extends Controller
     {
         $f = $this->filters($request);
         $rows = $this->rows($this->members($request, $f), $f, null)['rows'];
-        $header = ['Date', 'Employee', 'Code', 'Team', 'In', 'Out', 'Work (min)', 'Break (min)', 'Offline (min)', 'Late (min)', 'Status', 'Regularized'];
+        $header = ['Date', 'Employee', 'Code', 'Team', 'In', 'Out', 'Work (min)', 'Break (min)', 'Offline (min)', 'Late (min)', 'Early (min)', 'Status', 'Day', 'Grade', 'Regularized'];
 
         return response()->streamDownload(function () use ($header, $rows) {
             $out = fopen('php://output', 'w');
@@ -56,7 +56,7 @@ class TeamHistoryController extends Controller
                     $r['day']['first_in_at'] ? date('H:i', strtotime($r['day']['first_in_at'])) : '',
                     $r['day']['last_out_at'] ? date('H:i', strtotime($r['day']['last_out_at'])) : '',
                     intdiv($r['totals']['work_seconds'], 60), intdiv($r['totals']['break_seconds'], 60), intdiv($r['totals']['offline_seconds'], 60),
-                    $r['day']['late_minutes'], $r['day']['status'], $r['regularization'] ?? '',
+                    $r['day']['late_minutes'], $r['day']['early_minutes'], $r['day']['status'], $r['day']['day_fraction'], $r['day']['absence_kind'], $r['regularization'] ?? '',
                 ]);
             }
             fclose($out);

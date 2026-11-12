@@ -58,3 +58,53 @@ export function breakLabel(seg: TimeSegment | undefined): string {
 export function dayStatus(day: AttendanceDay | null | undefined): AttendanceDayStatus {
   return day?.status ?? 'not_started'
 }
+
+export type GradeVariant = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
+
+/** Day grade chip: Full / Half day / Absent / Excused / Paid leave / Unpaid leave (null for weekends and holidays). */
+export function dayGrade(day: AttendanceDay | null | undefined): { label: string; variant: GradeVariant } | null {
+  if (!day) return null
+  switch (day.absence_kind) {
+    case 'weekend':
+    case 'holiday':
+      return null
+    case 'excused':
+      return { label: 'Excused', variant: 'info' }
+    case 'paid_leave':
+      return { label: day.day_fraction >= 1 ? 'Paid leave' : 'Half paid leave', variant: 'info' }
+    case 'unpaid_leave':
+      return { label: day.day_fraction > 0 ? 'Half unpaid' : 'Unpaid leave', variant: 'warning' }
+    case 'unapproved':
+      return { label: day.day_fraction > 0 ? 'Half day' : 'Absent', variant: 'danger' }
+    case 'half_day':
+      return { label: 'Half day', variant: 'warning' }
+    default:
+      return { label: 'Full', variant: 'success' }
+  }
+}
+
+export const regularizationKindLabels: Record<string, string> = {
+  late: 'Late arrival',
+  early: 'Early leave',
+  absent: 'Absence',
+  auto_closed: 'Auto-closed day',
+  overtime: 'Overtime',
+}
+
+export const resolutionLabels: Record<string, string> = {
+  excused: 'Excused (no deduction)',
+  paid_leave: 'Paid leave (uses balance)',
+  unpaid_leave: 'Unpaid leave',
+  keep: 'Keep as graded',
+}
+
+/** Regularisation kinds that apply to a closed or running day. */
+export function regularizableKinds(day: AttendanceDay): ('late' | 'early' | 'absent' | 'auto_closed')[] {
+  if (day.is_regularized) return []
+  const kinds: ('late' | 'early' | 'absent' | 'auto_closed')[] = []
+  if (day.late_minutes > 0) kinds.push('late')
+  if (day.early_minutes > 0) kinds.push('early')
+  if (day.absence_kind === 'unapproved' || day.absence_kind === 'half_day' || day.status === 'absent') kinds.push('absent')
+  if (day.auto_closed) kinds.push('auto_closed')
+  return kinds
+}

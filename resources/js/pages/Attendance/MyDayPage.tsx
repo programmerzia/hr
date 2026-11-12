@@ -17,6 +17,7 @@ import {
   Button,
   Card,
   CardBody,
+  Field,
   Select,
   Table,
   Tbody,
@@ -35,7 +36,16 @@ import type {
   TaskTimeEntry,
   TimeSegment,
 } from '../../types'
-import { EMPTY_TOTALS, liveTotals, useServerNow, type DayTotals } from './lib'
+import {
+  EMPTY_TOTALS,
+  dayGrade,
+  liveTotals,
+  regularizableKinds,
+  regularizationKindLabels,
+  useServerNow,
+  type DayTotals,
+} from './lib'
+import { GradeChip } from './GradeChip'
 import { ReasonDialog } from './RegularizeDialog'
 import { formatHours } from './useAttendanceSeries'
 
@@ -63,7 +73,11 @@ interface MyDayProps {
   current_task_id: string | null
   policy: AttendancePolicy
   regularizations: RegularizationRequest[]
+  late_rule: { enabled: boolean; lates_per_penalty: number; count_this_month: number }
+  recent_days: { day: AttendanceDay; regularization: 'pending' | 'rejected' | null }[]
 }
+
+type RegKind = 'late' | 'early' | 'absent' | 'auto_closed'
 
 export default function MyDayPage() {
   const p = useShared<MyDayProps>()
@@ -72,6 +86,11 @@ export default function MyDayPage() {
   const [endOpen, setEndOpen] = useState(false)
   const [overtimeOpen, setOvertimeOpen] = useState(false)
   const [regDay, setRegDay] = useState<AttendanceDay | null>(null)
+  const [regKind, setRegKind] = useState<RegKind>('late')
+  const openReg = (d: AttendanceDay) => {
+    setRegKind(regularizableKinds(d)[0] ?? 'late')
+    setRegDay(d)
+  }
 
   const day = p.day
   const status = day?.status ?? 'not_started'
@@ -88,6 +107,11 @@ export default function MyDayPage() {
   const floorHour = (d: Date) => new Date(new Date(d).setMinutes(0, 0, 0))
   const rangeStart = floorHour(firstIn && firstIn < shiftStart ? firstIn : shiftStart)
   const rangeEnd = new Date(Math.max(shiftEnd.getTime(), floorHour(new Date(now)).getTime() + 3_600_000))
+  const earlyCutoff = shiftEnd.getTime() - policy.early_leave_grace_minutes * 60_000
+  const wouldLeaveEarly = (status === 'working' || status === 'on_break') && now < earlyCutoff
+  const grade = status === 'ended' || (day && day.absence_kind !== 'none') ? dayGrade(day) : null
+  const lr = p.late_rule
+  const lateLeft = lr.enabled && lr.lates_per_penalty > 0 ? lr.count_this_month % lr.lates_per_penalty : 0
   const pct = Math.min(100, Math.round((totals.work_seconds / target) * 100))
 
   const weeklyData = p.week.map((w) => {
@@ -144,8 +168,17 @@ export default function MyDayPage() {
                 {day && day.late_minutes > 0 && (
                   <StatusBadge status="late" label={`Late ${day.late_minutes}m`} />
                 )}
+                {day && day.early_minutes > 0 && <Badge variant="warning">Left early {day.early_minutes}m</Badge>}
+                {grade && <Badge variant={grade.variant}>{grade.label}</Badge>}
                 {segs.some((s) => s.note === 'Overtime session') && <Badge variant="info">Overtime</Badge>}
               </div>
+              {lr.enabled && lr.count_this_month > 0 && (
+                <p className="mt-1 text-sm text-fg-muted">
+                  {lateLeft === 0
+                    ? `${lr.count_this_month} lates this month. ${lr.lates_per_penalty} lates cost half a day.`
+                    : `${lateLeft} of ${lr.lates_per_penalty} lates this month before a half-day deduction.`}
+                </p>
+              )}
               <div className="mt-2">
                 <Clock seconds={totals.work_seconds} />
               </div>
@@ -294,6 +327,7 @@ export default function MyDayPage() {
               <Th numeric>Offline</Th>
               <Th numeric>Late</Th>
               <Th>Status</Th>
+              <Th>Grade</Th>
               <Th>
                 <span className="sr-only">Actions</span>
               </Th>
@@ -324,8 +358,11 @@ export default function MyDayPage() {
                       <span className="text-fg-subtle">-</span>
                     )}
                   </Td>
+                  <Td>
+                    <GradeChip day={rec && key < today ? rec : null} />
+                  </Td>
                   <Td className="text-right">
-                    {rec && rec.late_minutes > 0 && (
+                    {rec && (rec.is_regularized || regularizableKinds(rec).length > 0) && (
                       <span className="inline-flex items-center gap-2">
                         {rec.is_regularized ? (
                           <Badge variant="success">Regularized</Badge>
@@ -334,8 +371,8 @@ export default function MyDayPage() {
                         ) : (
                           <>
                             {rejected && <StatusBadge status="rejected" label="Rejected" />}
-                            <Button size="sm" variant="ghost" onClick={() => setRegDay(rec)}>
-                              Request regularization
+                            <Button size="sm" variant="ghost" onClick={() => openReg(rec)}>
+                              Regularise
                             </Button>
                           </>
                         )}
@@ -349,6 +386,51 @@ export default function MyDayPage() {
         </Table>
       </section>
 
+      {p.recent_days.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-2 text-sm font-medium">Needs attention this month</h2>
+          <Table>
+            <Thead>
+              <Tr className="hover:bg-transparent">
+                <Th>Day</Th>
+                <Th>Grade</Th>
+                <Th>Issue</Th>
+                <Th>
+                  <span className="sr-only">Actions</span>
+                </Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {p.recent_days.map(({ day: d, regularization }) => {
+                return (
+                  <Tr key={d.id}>
+                    <Td className="whitespace-nowrap">{format(parseISO(d.date), 'EEE d MMM')}</Td>
+                    <Td>
+                      <GradeChip day={d} />
+                    </Td>
+                    <Td className="text-fg-muted">
+                      {regularizableKinds(d).map((k) => regularizationKindLabels[k]).join(', ')}
+                    </Td>
+                    <Td className="text-right">
+                      {regularization === 'pending' ? (
+                        <StatusBadge status="pending" label="Regularization pending" />
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          {regularization === 'rejected' && <StatusBadge status="rejected" label="Rejected" />}
+                          <Button size="sm" variant="ghost" onClick={() => openReg(d)}>
+                            Regularise
+                          </Button>
+                        </span>
+                      )}
+                    </Td>
+                  </Tr>
+                )
+              })}
+            </Tbody>
+          </Table>
+        </section>
+      )}
+
       <BreakDialog
         open={breakOpen}
         onOpenChange={setBreakOpen}
@@ -358,7 +440,7 @@ export default function MyDayPage() {
         open={endOpen}
         onOpenChange={setEndOpen}
         title="End your day?"
-        description={`You worked ${formatDuration(totals.work_seconds)} today. Signing in again later counts as overtime.`}
+        description={`You worked ${formatDuration(totals.work_seconds)} today.${wouldLeaveEarly ? ` Ending before ${formatTime(new Date(earlyCutoff).toISOString())} counts as an early leave.` : ''} Signing in again later counts as overtime.`}
         confirmLabel="End my day"
         onConfirm={() => {
           router.post(route('attendance.end-day'), {}, keep)
@@ -380,13 +462,31 @@ export default function MyDayPage() {
         open={regDay !== null}
         onOpenChange={(o) => !o && setRegDay(null)}
         title="Request regularization"
-        description={regDay ? `${formatDate(regDay.date)}, late by ${regDay.late_minutes} minutes. Your team lead will review it.` : undefined}
+        description={regDay ? `${formatDate(regDay.date)}. Your team lead will review it.` : undefined}
         label="Reason"
         confirmLabel="Send request"
         onConfirm={(reason) => {
-          if (regDay) router.post(route('attendance.regularizations.store'), { attendance_day_id: regDay.id, reason }, keep)
+          if (regDay) router.post(route('attendance.regularizations.store'), { attendance_day_id: regDay.id, reason, kind: regKind }, keep)
         }}
-      />
+      >
+        {regDay && (
+          <Field label="What to regularise">
+            <Select
+              value={regKind}
+              onValueChange={(v) => setRegKind(v as RegKind)}
+              options={regularizableKinds(regDay).map((k) => ({
+                value: k,
+                label:
+                  k === 'late'
+                    ? `${regularizationKindLabels[k]} (${regDay.late_minutes}m)`
+                    : k === 'early'
+                      ? `${regularizationKindLabels[k]} (${regDay.early_minutes}m)`
+                      : (regularizationKindLabels[k] ?? k),
+              }))}
+            />
+          </Field>
+        )}
+      </ReasonDialog>
     </>
   )
 }

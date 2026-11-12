@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Button, Dialog, Field, Textarea } from '../../components/ui'
 
 /** Reason dialog used for requesting, approving and rejecting regularizations. */
@@ -11,6 +11,8 @@ export function ReasonDialog({
   confirmLabel,
   required = true,
   destructive,
+  disabled,
+  children,
   onConfirm,
 }: {
   open: boolean
@@ -21,6 +23,10 @@ export function ReasonDialog({
   confirmLabel: string
   required?: boolean
   destructive?: boolean
+  /** Extra condition that blocks confirming (e.g. a required picker in `children`). */
+  disabled?: boolean
+  /** Extra fields shown above the reason (kind selector, resolution picker). */
+  children?: ReactNode
   onConfirm: (text: string) => void
 }) {
   const [text, setText] = useState('')
@@ -46,10 +52,10 @@ export function ReasonDialog({
           </Button>
           <Button
             variant={destructive ? 'danger' : 'primary'}
-            disabled={invalid}
+            disabled={invalid || disabled}
             onClick={() => {
               setTouched(true)
-              if (invalid) return
+              if (invalid || disabled) return
               onConfirm(text.trim())
               close(false)
             }}
@@ -59,7 +65,8 @@ export function ReasonDialog({
         </>
       }
     >
-      <div className="pb-2">
+      <div className="flex flex-col gap-4 pb-2">
+        {children}
         <Field label={label} required={required} error={touched && invalid ? 'Add a short reason.' : undefined}>
           <Textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={300} />
         </Field>

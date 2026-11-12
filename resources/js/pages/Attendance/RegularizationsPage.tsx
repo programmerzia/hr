@@ -5,10 +5,12 @@ import { EmptyTable } from '../../components/shared/EmptyTable'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { PersonCell } from '../../components/shared/PersonCell'
 import { StatusBadge } from '../../components/shared/StatusBadge'
-import { Button, SegmentedControl, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
+import { Button, Field, SegmentedControl, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { useShared } from '../../inertia/props'
 import { formatDate, formatTime } from '../../lib/format'
-import type { AttendanceDay, RegularizationRequest } from '../../types'
+import type { AttendanceDay, RegularizationRequest, RegularizationResolution } from '../../types'
+import { GradeChip } from './GradeChip'
+import { regularizationKindLabels, resolutionLabels } from './lib'
 import { ReasonDialog } from './RegularizeDialog'
 
 type Filter = 'pending' | 'all'
@@ -20,7 +22,14 @@ interface Row extends RegularizationRequest {
 }
 
 export default function RegularizationsPage() {
-  const { requests } = useShared<{ requests: Row[] }>()
+  const { requests, leave_types: leaveTypes } = useShared<{ requests: Row[]; leave_types: { id: string; name: string }[] }>()
+  const [resolution, setResolution] = useState<RegularizationResolution>('excused')
+  const [leaveType, setLeaveType] = useState<string>('')
+  const decide = (req: Row, decision: 'approved' | 'rejected') => {
+    setResolution('excused')
+    setLeaveType(leaveTypes[0]?.id ?? '')
+    setTarget({ req, decision })
+  }
   const [filter, setFilter] = useState<Filter>('pending')
   const [target, setTarget] = useState<{ req: Row; decision: 'approved' | 'rejected' } | null>(null)
   const rows = requests.filter((r) => (filter === 'pending' ? r.status === 'pending' : true))
@@ -32,7 +41,7 @@ export default function RegularizationsPage() {
     <>
       <PageHeader
         title="Regularizations"
-        description="Late arrivals your team asked you to excuse."
+        description="Late arrivals, early leaves and absences your team asked you to review."
         actions={
           <SegmentedControl
             aria-label="Filter"
@@ -49,7 +58,7 @@ export default function RegularizationsPage() {
         <EmptyTable
           icon={ClipboardCheck}
           title={filter === 'pending' ? 'Nothing to review' : 'No requests yet'}
-          description="Requests appear here when someone asks to excuse a late arrival."
+          description="Requests appear here when someone asks to regularise a day."
         />
       ) : (
         <Table>
@@ -58,7 +67,9 @@ export default function RegularizationsPage() {
               <Th>Person</Th>
               <Th>Date</Th>
               <Th numeric>In</Th>
+              <Th>Kind</Th>
               <Th numeric>Late (min)</Th>
+              <Th>Grade</Th>
               <Th>Reason</Th>
               <Th>Status</Th>
               <Th>
@@ -75,7 +86,11 @@ export default function RegularizationsPage() {
                   <Td>{e && <PersonCell name={e.name} subtitle={e.designation} />}</Td>
                   <Td>{d ? formatDate(d.date) : '-'}</Td>
                   <Td numeric>{d?.first_in_at ? formatTime(d.first_in_at) : '-'}</Td>
+                  <Td>{regularizationKindLabels[r.kind] ?? r.kind}</Td>
                   <Td numeric>{d ? d.late_minutes : '-'}</Td>
+                  <Td>
+                    <GradeChip day={d} />
+                  </Td>
                   <Td className="max-w-80">
                     <p className="truncate" title={r.reason}>
                       {r.reason}
@@ -88,14 +103,15 @@ export default function RegularizationsPage() {
                   </Td>
                   <Td>
                     <StatusBadge status={r.status} />
+                    {r.resolution && <p className="text-xs text-fg-muted">{resolutionLabels[r.resolution]}</p>}
                   </Td>
                   <Td className="text-right">
                     {r.status === 'pending' && (
                       <span className="inline-flex gap-2">
-                        <Button size="sm" onClick={() => setTarget({ req: r, decision: 'rejected' })}>
+                        <Button size="sm" onClick={() => decide(r, 'rejected')}>
                           Reject
                         </Button>
-                        <Button size="sm" variant="primary" onClick={() => setTarget({ req: r, decision: 'approved' })}>
+                        <Button size="sm" variant="primary" onClick={() => decide(r, 'approved')}>
                           Approve
                         </Button>
                       </span>
@@ -113,17 +129,49 @@ export default function RegularizationsPage() {
         title={target?.decision === 'approved' ? 'Approve regularization' : 'Reject regularization'}
         description={
           dlgPerson && dlgDay
-            ? `${dlgPerson.name}, ${formatDate(dlgDay.date)}, late by ${dlgDay.late_minutes} minutes.`
+            ? `${dlgPerson.name}, ${formatDate(dlgDay.date)}: ${(regularizationKindLabels[target.req.kind] ?? '').toLowerCase()}.`
             : undefined
         }
         label={target?.decision === 'approved' ? 'Note' : 'Reason for rejecting'}
         required={target?.decision === 'rejected'}
         confirmLabel={target?.decision === 'approved' ? 'Approve' : 'Reject'}
         destructive={target?.decision === 'rejected'}
+        disabled={target?.decision === 'approved' && resolution === 'paid_leave' && !leaveType}
         onConfirm={(note) => {
-          if (target) router.post(route('attendance.regularizations.decide'), { id: target.req.id, decision: target.decision, note }, { preserveScroll: true })
+          if (!target) return
+          const extra =
+            target.decision === 'approved'
+              ? { resolution, leave_type_id: resolution === 'paid_leave' ? leaveType : null }
+              : {}
+          router.post(
+            route('attendance.regularizations.decide'),
+            { id: target.req.id, decision: target.decision, note, ...extra },
+            { preserveScroll: true },
+          )
         }}
-      />
+      >
+        {target?.decision === 'approved' && (
+          <>
+            <Field label="Resolution">
+              <Select
+                value={resolution}
+                onValueChange={(v) => setResolution(v as RegularizationResolution)}
+                options={(['excused', 'paid_leave', 'unpaid_leave', 'keep'] as const).map((k) => ({ value: k, label: resolutionLabels[k] ?? k }))}
+              />
+            </Field>
+            {resolution === 'paid_leave' && (
+              <Field label="Leave type" required>
+                <Select
+                  value={leaveType || undefined}
+                  onValueChange={setLeaveType}
+                  placeholder="Pick a paid leave type"
+                  options={leaveTypes.map((t) => ({ value: t.id, label: t.name }))}
+                />
+              </Field>
+            )}
+          </>
+        )}
+      </ReasonDialog>
     </>
   )
 }

@@ -12,6 +12,7 @@ use App\Http\Resources\AttendanceDayResource;
 use App\Http\Resources\RegularizationRequestResource;
 use App\Models\AttendanceDay;
 use App\Models\Employee;
+use App\Models\LeaveType;
 use App\Models\RegularizationRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -35,6 +36,7 @@ class RegularizationController extends Controller
                 'day' => AttendanceDayResource::make($r->day)->resolve(),
                 'decider_name' => $deciders[$r->decided_by] ?? null,
             ])->all(),
+            'leave_types' => LeaveType::where('is_paid', true)->orderBy('name')->get(['id', 'name'])->all(),
         ]);
     }
 
@@ -42,7 +44,7 @@ class RegularizationController extends Controller
     {
         $day = AttendanceDay::findOrFail($request->validated('attendance_day_id'));
         Gate::authorize('request', $day);
-        $error = $action($day, $request->validated('reason'));
+        $error = $action($day, $request->validated('reason'), $request->validated('kind') ?? 'late');
 
         return $error ? back()->with('error', $error) : back()->with('success', 'Request sent.');
     }
@@ -51,7 +53,10 @@ class RegularizationController extends Controller
     {
         $req = RegularizationRequest::findOrFail($request->validated('id'));
         Gate::authorize('decide', $req);
-        $ok = $action($req, $request->validated('decision'), $request->validated('note'), $request->user()->employee);
+        $ok = $action(
+            $req, $request->validated('decision'), $request->validated('note'), $request->user()->employee,
+            $request->validated('resolution'), $request->validated('leave_type_id'),
+        );
 
         return $ok ? back()->with('success', 'Decision saved.') : back()->with('error', 'This request was already decided.');
     }

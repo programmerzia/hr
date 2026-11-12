@@ -2,6 +2,7 @@
 
 namespace App\Domain\Attendance\Actions;
 
+use App\Domain\Attendance\Services\DayGrader;
 use App\Domain\Attendance\Services\DayState;
 use App\Models\AttendancePolicy;
 use App\Models\Employee;
@@ -41,12 +42,13 @@ class StartWork
                 return self::OVERTIME_STARTED;
             }
             // not_started, on_leave, absent, holiday: first sign-in of the day
-            $policy = AttendancePolicy::current();
-            $start = $now->copy()->setTimeFromTimeString($policy->shift_start);
-            $lateBy = (int) round(($now->getTimestamp() - $start->getTimestamp()) / 60);
+            $date = $now->toDateString();
+            [$late, $halfDay] = DayGrader::late(AttendancePolicy::forDate($date), $date, $now);
             DayState::openWork($employee, $day, $now, null, [
                 'first_in_at' => $now,
-                'late_minutes' => $lateBy > $policy->grace_minutes ? $lateBy : 0,
+                'late_minutes' => $late,
+                // Login past the half-day threshold: the day counts as half unless regularised (re-graded at end of day).
+                ...($halfDay ? ['day_fraction' => 0.5, 'absence_kind' => 'half_day'] : []),
             ]);
 
             return self::STARTED;

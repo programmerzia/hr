@@ -155,7 +155,15 @@ export interface AttendanceDay {
   break_seconds: number
   late_minutes: number
   is_regularized: boolean
+  day_fraction: number
+  absence_kind: AbsenceKind
+  early_minutes: number
+  auto_closed: boolean
 }
+
+export type AbsenceKind = 'none' | 'unapproved' | 'half_day' | 'unpaid_leave' | 'paid_leave' | 'holiday' | 'weekend' | 'excused'
+export type RegularizationKind = 'late' | 'early' | 'absent' | 'auto_closed' | 'overtime'
+export type RegularizationResolution = 'excused' | 'paid_leave' | 'unpaid_leave' | 'keep'
 
 export type SegmentType = 'work' | 'break'
 export type BreakCategory = 'short' | 'tea' | 'lunch' | 'official' | 'idle' | 'signed_out' | 'offline'
@@ -188,6 +196,9 @@ export interface RegularizationRequest {
   attendance_day_id: Id
   employee_id: Id
   reason: string
+  kind: RegularizationKind
+  resolution: RegularizationResolution | null
+  leave_type_id: Id | null
   status: RegularizationStatus
   decided_by: Id | null
   decided_at: ISODateTime | null

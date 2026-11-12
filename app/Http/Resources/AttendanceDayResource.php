@@ -22,6 +22,10 @@ class AttendanceDayResource extends JsonResource
             'break_seconds' => (int) $this->break_seconds,
             'late_minutes' => (int) $this->late_minutes,
             'is_regularized' => (bool) $this->is_regularized,
+            'day_fraction' => (float) ($this->day_fraction ?? 1),
+            'absence_kind' => $this->absence_kind ?? 'none',
+            'early_minutes' => (int) $this->early_minutes,
+            'auto_closed' => (bool) $this->auto_closed,
         ];
     }
 }
