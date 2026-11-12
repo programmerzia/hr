@@ -55,6 +55,7 @@ function paidRun($t): PayrollRun
 {
     $run = PayrollRun::first() ?? draftRun($t);
     $t->actingAs($t->hr)->post(route('payroll.runs.submit', $run));
+    PayrollItem::where('run_id', $run->id)->where('variance_flag', true)->get()->each(fn ($i) => $t->actingAs($t->hr)->post(route('payroll.items.ack-variance', $i)));
     $t->actingAs($t->mgmt)->post(route('payroll.runs.approve', $run));
     $t->actingAs($t->hr)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'BEFTN-1']);
 
@@ -95,6 +96,7 @@ it('approves, locks adjustments and notifies HR', function () {
     $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['kind' => 'bonus', 'label' => 'Spot bonus', 'amount' => 5000]);
     expect($item->refresh()->net)->toBe(100000 + 5000 - 4000); // PF is off by default
     $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    PayrollItem::where('run_id', $run->id)->where('variance_flag', true)->get()->each(fn ($i) => $this->actingAs($this->hr)->post(route('payroll.items.ack-variance', $i)));
     $this->actingAs($this->mgmt)->post(route('payroll.runs.approve', $run))->assertSessionHas('success');
     $run->refresh();
     expect($run->status)->toBe('approved')->and($run->locked_at)->not->toBeNull()->and($run->approved_by)->toBe($this->mgmt->employee_id)
@@ -133,7 +135,7 @@ it('marks an approved run as paid and exposes payslips to the owner only', funct
     expect($mine->payslip_path)->not->toBeNull();
 
     $this->actingAs($this->emp)->get(route('payroll.payslip', $mine))
-        ->assertInertia(fn (Assert $p) => $p->component('Payroll/PayslipPage', false)->where('item.id', $mine->id)->where('staff', false)->has('salary')->has('bank'));
+        ->assertInertia(fn (Assert $p) => $p->component('Payroll/PayslipPage', false)->where('item.id', $mine->id)->where('staff', false)->missing('salary')->has('bank'));
     $this->actingAs($this->emp)->get(route('payroll.payslip', $theirs))->assertForbidden();
     $this->actingAs($this->hr)->get(route('payroll.payslip', $theirs))->assertOk();
     $this->actingAs($this->emp)->get(route('payroll.mine'))

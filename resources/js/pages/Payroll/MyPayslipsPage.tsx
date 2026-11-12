@@ -1,9 +1,9 @@
-import { FileText } from 'lucide-react'
+import { Download, FileText } from 'lucide-react'
 import { router } from '@inertiajs/react'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { MoneyCell } from '../../components/shared/MoneyCell'
 import { PageHeader } from '../../components/shared/PageHeader'
-import { Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
+import { buttonVariants, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { formatDate } from '../../lib/format'
 import { useShared } from '../../inertia/props'
 import type { PayrollItem, PayrollRun } from '../../types'
@@ -26,6 +26,9 @@ export default function MyPayslipsPage() {
               <Th>Paid on</Th>
               <Th numeric>Gross</Th>
               <Th numeric>Net pay</Th>
+              <Th>
+                <span className="sr-only">PDF</span>
+              </Th>
             </Tr>
           </Thead>
           <Tbody>
@@ -44,6 +47,11 @@ export default function MyPayslipsPage() {
                 </Td>
                 <Td>
                   <MoneyCell amount={item.net} className="font-semibold" />
+                </Td>
+                <Td onClick={(e) => e.stopPropagation()}>
+                  <a href={route('payroll.payslip.pdf', item.id)} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+                    <Download size={14} aria-hidden /> PDF
+                  </a>
                 </Td>
               </Tr>
             ))}

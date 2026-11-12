@@ -174,6 +174,7 @@ function puRun($t, int $m = 11): PayrollRun
 function puApprove($t, PayrollRun $run): PayrollRun
 {
     $t->actingAs($t->hr)->post(route('payroll.runs.submit', $run))->assertSessionDoesntHaveErrors();
+    PayrollItem::where('run_id', $run->id)->where('variance_flag', true)->get()->each(fn ($i) => $t->actingAs($t->hr)->post(route('payroll.items.ack-variance', $i)));
     $t->actingAs($t->mgmt)->post(route('payroll.runs.approve', $run))->assertSessionDoesntHaveErrors();
 
     return $run->refresh();

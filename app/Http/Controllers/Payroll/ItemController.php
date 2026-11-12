@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Payroll;
 
+use App\Domain\Payroll\Actions\AckVariance;
 use App\Domain\Payroll\Actions\HoldItem;
 use App\Http\Controllers\Controller;
 use App\Models\PayrollItem;
@@ -26,5 +27,13 @@ class ItemController extends Controller
         $action($item, false, null, $request->user()->employee);
 
         return back()->with('success', 'Salary released');
+    }
+
+    public function ackVariance(Request $request, PayrollItem $item, AckVariance $action): RedirectResponse
+    {
+        Gate::authorize('manage_payroll');
+        $action($item, $request->user()->employee);
+
+        return back()->with('success', 'Variance acknowledged');
     }
 }

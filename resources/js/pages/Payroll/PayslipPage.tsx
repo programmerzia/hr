@@ -1,6 +1,6 @@
-import { Printer } from 'lucide-react'
+import { Download, Printer } from 'lucide-react'
 import { PageHeader } from '../../components/shared/PageHeader'
-import { Button } from '../../components/ui'
+import { Button, buttonVariants } from '../../components/ui'
 import { useShared } from '../../inertia/props'
 import { formatDate, formatDuration, formatMoney } from '../../lib/format'
 import type { BankAccount, PayrollAdjustment, PayrollItem, PayrollPolicySwitches, PayrollRun } from '../../types'
@@ -36,12 +36,16 @@ interface PayslipProps {
 const days = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
 export default function PayslipPage() {
-  const { run, item, adjustments, employee: emp, department, bank, staff } = useShared<PayslipProps>()
+  const { run, item, adjustments, employee: emp, department, bank, staff, policy } = useShared<PayslipProps>()
   const c = item.components
   const bonuses = adjustments.filter((a) => a.kind === 'bonus')
   const deductionAdj = adjustments.filter((a) => a.kind === 'deduction')
   const totalEarnings = item.gross + item.overtime_pay + bonuses.reduce((t, a) => t + a.amount, 0)
   const totalDeductions = totalEarnings - item.net
+  const showTax = policy.tax_enabled || item.tax > 0
+  const showPf = policy.pf_enabled || item.pf > 0
+  const showLop = policy.lop_enabled || item.unpaid_deduction > 0
+  const showLate = policy.late_penalty_enabled || item.late_deduction > 0
   const label = monthLabel(run.year, run.month)
   const isDraft = run.status !== 'paid' && run.status !== 'approved'
 
@@ -53,9 +57,14 @@ export default function PayslipPage() {
           title={`Payslip, ${label}`}
           breadcrumb={staff ? [{ label: 'Payroll', to: '/payroll' }, { label, to: `/payroll/${run.id}` }, { label: 'Payslip' }] : [{ label: 'My payslips', to: '/payslips' }, { label }]}
           actions={
-            <Button icon={<Printer size={16} />} onClick={() => window.print()}>
-              Print or save as PDF
-            </Button>
+            <>
+              <a href={route('payroll.payslip.pdf', item.id)} className={buttonVariants({ variant: 'primary' })}>
+                <Download size={16} aria-hidden /> Download PDF
+              </a>
+              <Button icon={<Printer size={16} />} onClick={() => window.print()}>
+                Print
+              </Button>
+            </>
           }
         />
         {isDraft && <p className="mb-3 text-sm text-warning">This run is not approved yet. Figures can still change.</p>}
@@ -87,9 +96,17 @@ export default function PayslipPage() {
             {formatDuration(item.worked_minutes * 60)} of {formatDuration(item.standard_minutes * 60)}
           </p>
           <p><span className="text-fg-muted">Payable days </span>{days(item.eligible_days)}</p>
-          {item.absent_days + item.half_days > 0 && <p><span className="text-fg-muted">Absent / half days </span>{days(item.absent_days)} / {days(item.half_days)}</p>}
           {item.paid_leave_days > 0 && <p><span className="text-fg-muted">Paid leave </span>{days(item.paid_leave_days)} days</p>}
-          {item.unpaid_leave_days > 0 && <p><span className="text-fg-muted">Unpaid leave </span>{days(item.unpaid_leave_days)} days</p>}
+          {(item.lop_days > 0 || item.absent_days + item.half_days + item.unpaid_leave_days > 0) && (
+            <p className="col-span-2">
+              <span className="text-fg-muted">Loss of pay </span>
+              {days(item.lop_days)} days
+              <span className="text-fg-muted">
+                {' '}
+                (absent {days(item.absent_days)}, half days {days(item.half_days)}, unpaid leave {days(item.unpaid_leave_days)})
+              </span>
+            </p>
+          )}
           {item.late_count > 0 && <p><span className="text-fg-muted">Late arrivals </span>{item.late_count}</p>}
         </section>
 
@@ -123,10 +140,10 @@ export default function PayslipPage() {
             <h2 className="mb-1 text-sm font-semibold">Deductions</h2>
             <table className="w-full text-sm">
               <tbody>
-                {item.tax > 0 && <Row label="Income tax" value={formatMoney(item.tax)} />}
-                {item.pf > 0 && <Row label="Provident fund" value={formatMoney(item.pf)} />}
-                {item.unpaid_deduction > 0 && <Row label={`Loss of pay (${days(item.lop_days)} days)`} value={formatMoney(item.unpaid_deduction)} />}
-                {item.late_deduction > 0 && <Row label={`Late penalty (${days(item.late_penalty_days)} days)`} value={formatMoney(item.late_deduction)} />}
+                {showTax && <Row label="Income tax" value={formatMoney(item.tax)} />}
+                {showPf && <Row label="Provident fund" value={formatMoney(item.pf)} />}
+                {showLop && <Row label={`Loss of pay (${days(item.lop_days)} days)`} value={formatMoney(item.unpaid_deduction)} />}
+                {showLate && <Row label={`Late penalty (${days(item.late_penalty_days)} days)`} value={formatMoney(item.late_deduction)} />}
                 {deductionAdj.map((a) => (
                   <Row key={a.id} label={a.label} value={formatMoney(a.amount)} />
                 ))}

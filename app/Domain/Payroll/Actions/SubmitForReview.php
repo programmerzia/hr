@@ -4,6 +4,7 @@ namespace App\Domain\Payroll\Actions;
 
 use App\Domain\Payroll\Services\PayrollPeriod;
 use App\Domain\Payroll\Services\RunBuilder;
+use App\Domain\Payroll\Services\VarianceCheck;
 use App\Domain\Payroll\Support\Fail;
 use App\Domain\Payroll\Support\PayrollNotification;
 use App\Models\Employee;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 
 class SubmitForReview
 {
-    public function __construct(private RunBuilder $builder) {}
+    public function __construct(private RunBuilder $builder, private VarianceCheck $variance) {}
 
     public function __invoke(PayrollRun $run, Employee $by): PayrollRun
     {
@@ -27,6 +28,7 @@ class SubmitForReview
                 Fail::with('This run has no employees.');
             }
             $run->update(['status' => 'review']);
+            $this->variance->apply($run);
             $this->builder->log($run, $by, 'sent the run for review');
             $label = PayrollPeriod::label($run->year, $run->month);
             $n = new PayrollNotification("Payroll for {$label} is ready for review", "{$by->name} sent the run for approval.", "/payroll/{$run->id}");

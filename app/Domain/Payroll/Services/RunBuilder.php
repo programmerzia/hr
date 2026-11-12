@@ -89,6 +89,12 @@ class RunBuilder
             $keep[] = $item->id;
         }
         PayrollItem::where('run_id', $run->id)->whereNotIn('id', $keep)->get()->each->delete();
+        // Facts changed: acknowledgements are void. Runs already in review are re-checked straight away.
+        if ($run->status === 'review') {
+            app(VarianceCheck::class)->apply($run);
+        } else {
+            PayrollItem::where('run_id', $run->id)->update(['variance_flag' => false, 'variance_kind' => 'none', 'variance_pct' => null, 'variance_ack_by' => null, 'variance_ack_at' => null]);
+        }
     }
 
     public function adjustment(PayrollItem $item, string $kind, string $label, int $amount, ?string $note, Employee $by): PayrollAdjustment

@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { MoneyCell } from '../../components/shared/MoneyCell'
 import { PageHeader } from '../../components/shared/PageHeader'
+import { Badge } from '../../components/ui'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { Bars } from '../../components/charts/Bars'
 import { Button, Card, CardBody, CardHeader, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
@@ -70,6 +71,7 @@ export default function RunsPage() {
               <Th numeric>Gross</Th>
               <Th numeric>Net</Th>
               <Th>Status</Th>
+              <Th numeric>On hold</Th>
               <Th>Approved by</Th>
               <Th>Paid on</Th>
             </Tr>
@@ -84,7 +86,14 @@ export default function RunsPage() {
                   onClick={() => open(r.id)}
                   onKeyDown={(e) => e.key === 'Enter' && open(r.id)}
                 >
-                  <Td className="font-medium">{monthLabel(r.year, r.month)}</Td>
+                  <Td className="font-medium">
+                    {monthLabel(r.year, r.month)}
+                    {r.kind && r.kind !== 'regular' && (
+                      <Badge variant="info" className="ml-2 capitalize">
+                        {r.kind}
+                      </Badge>
+                    )}
+                  </Td>
                   <Td numeric>{r.totals.employees}</Td>
                   <Td>
                     <MoneyCell amount={r.totals.gross} />
@@ -95,6 +104,7 @@ export default function RunsPage() {
                   <Td>
                     <StatusBadge status={r.status} />
                   </Td>
+                  <Td numeric>{r.totals.held ? <span className="text-warning">{r.totals.held}</span> : <span className="text-fg-muted">0</span>}</Td>
                   <Td className="text-fg-muted">{r.approved_by ? (nameOf(r.approved_by) ?? '-') : '-'}</Td>
                   <Td className="text-fg-muted">{r.paid_at ? formatDate(r.paid_at) : '-'}</Td>
                 </Tr>

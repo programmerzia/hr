@@ -1,4 +1,4 @@
-import { Check, Download, FileText, Pause, Play, RefreshCw, RotateCcw, Send, Trash2, Users } from 'lucide-react'
+import { BadgeCheck, Check, Download, FileText, Flag, Pause, Play, RefreshCw, RotateCcw, Send, Trash2, Users } from 'lucide-react'
 import { Link, router, useForm } from '@inertiajs/react'
 import { useMemo, useState } from 'react'
 import { StackedBar } from '../../components/charts/StackedBar'
@@ -10,6 +10,7 @@ import { PageHeader } from '../../components/shared/PageHeader'
 import { PersonCell } from '../../components/shared/PersonCell'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import {
+  Badge,
   Button,
   buttonVariants,
   Card,
@@ -73,6 +74,20 @@ function ReasonDialog({ open, onOpenChange, title, description, url, confirm }: 
         <Textarea rows={3} value={form.data.reason} onChange={(e) => form.setData('reason', e.target.value)} />
       </Field>
     </Dialog>
+  )
+}
+
+/** Flag badge for one item: up / down / new against the last paid month. */
+function VarianceBadge({ item }: { item: PayrollItem }) {
+  if (!item.variance_flag) return null
+  const acked = Boolean(item.variance_ack_at)
+  const text =
+    item.variance_kind === 'new' ? 'New payee' : `${item.variance_kind === 'up' ? '+' : ''}${(item.variance_pct ?? 0).toFixed(1)}% vs last month`
+  return (
+    <Badge variant={acked ? 'neutral' : item.variance_kind === 'down' ? 'info' : 'warning'} title={acked ? 'Acknowledged' : 'Needs acknowledgement'}>
+      {acked ? <BadgeCheck aria-hidden /> : <Flag aria-hidden />}
+      {text}
+    </Badge>
   )
 }
 
@@ -181,6 +196,44 @@ function ItemSheet({
             {item.hold && <p className="mt-2 text-sm text-warning">On hold: {item.hold_reason}</p>}
           </section>
 
+          {item.variance_flag && (
+            <section>
+              <VarianceBadge item={item} />
+            </section>
+          )}
+
+          {(item.slices.length > 0 || item.components) && (
+            <section>
+              <h3 className="mb-1 text-sm font-semibold">Salary basis</h3>
+              {item.slices.map((sl) => (
+                <div key={sl.effective_from} className="flex justify-between py-1 text-sm">
+                  <span className="text-fg-muted">
+                    From {formatDate(sl.effective_from)}, {days(sl.days)} days of {formatMoney(sl.gross)}
+                  </span>
+                  <span className="font-mono tabular-nums">{formatMoney(sl.gross_share)}</span>
+                </div>
+              ))}
+              {item.components && (
+                <div className="mt-2 grid grid-cols-2 gap-x-4 text-sm">
+                  {(
+                    [
+                      ['Basic', item.components.basic],
+                      ['House rent', item.components.house_rent],
+                      ['Medical', item.components.medical],
+                      ['Conveyance', item.components.conveyance],
+                      ...item.components.other_allowances.map((o) => [o.label, o.amount] as const),
+                    ] as [string, number][]
+                  ).map(([k, v]) => (
+                    <p key={k} className="flex justify-between py-0.5">
+                      <span className="text-fg-muted">{k}</span>
+                      <span className="font-mono tabular-nums">{formatMoney(v)}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
           <section className="divide-y divide-border">
             {line('Gross salary', item.gross)}
             {item.overtime_pay > 0 && line('Overtime pay', item.overtime_pay, '+')}
@@ -281,7 +334,17 @@ export default function RunDetailPage() {
   const [holdId, setHoldId] = useState<string | null>(null)
 
   const items = rawItems
+  const [flaggedOnly, setFlaggedOnly] = useState(false)
   const showPf = policy.pf_enabled || items.some((i) => i.pf > 0)
+  const showLop = policy.lop_enabled || items.some((i) => i.unpaid_deduction > 0)
+  const showLate = policy.late_penalty_enabled || items.some((i) => i.late_deduction > 0)
+  const showOt = policy.overtime_enabled || items.some((i) => i.overtime_pay > 0)
+  const live = items.filter((i) => !i.hold)
+  const overtimeTotal = live.reduce((t, i) => t + i.overtime_pay, 0)
+  const employerCost = totals.gross + (totals.pf_employer ?? 0) + overtimeTotal
+  const flagged = items.filter((i) => i.variance_flag && !i.hold)
+  const pendingFlags = flagged.filter((i) => !i.variance_ack_at).length
+  const shown = flaggedOnly ? items.filter((i) => i.variance_flag) : items
   const canManage = role === 'hr' || role === 'management'
   const history = useMemo(
     () => events.map((e) => ({ at: e.created_at, actor: (e.actor_id && person(e.actor_id)?.name) || 'Someone', text: e.description })),
@@ -356,12 +419,13 @@ export default function RunDetailPage() {
 
       <Card className="mb-4">
         <CardBody className="space-y-5">
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-5">
             {[
               { label: 'Employees', value: String(totals.employees) },
               { label: 'Gross', value: formatMoney(totals.gross) },
               { label: 'Deductions', value: formatMoney(totals.deductions) },
               { label: 'Net payable', value: formatMoney(totals.net), strong: true },
+              { label: 'Employer cost', value: formatMoney(employerCost) },
             ].map((f) => (
               <div key={f.label}>
                 <dt className="text-sm text-fg-muted">{f.label}</dt>
@@ -369,6 +433,9 @@ export default function RunDetailPage() {
               </div>
             ))}
           </dl>
+          {run.status === 'review' && pendingFlags > 0 && (
+            <p className="text-sm text-warning">{pendingFlags} flagged for a large change since last month. HR must acknowledge each before approval.</p>
+          )}
           {(totals.held ?? 0) > 0 && <p className="text-sm text-warning">{totals.held} on hold, not included in the totals or the bank advice.</p>}
           {mix.some((m) => m.value > 0) && (
             <div className="border-t border-border pt-4">
@@ -381,6 +448,13 @@ export default function RunDetailPage() {
 
       <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[1fr_18rem]">
         <div className="min-w-0">
+          {flagged.length > 0 && (
+            <div className="mb-2 flex items-center justify-end">
+              <Button size="sm" variant={flaggedOnly ? 'primary' : 'secondary'} icon={<Flag size={14} />} onClick={() => setFlaggedOnly((v) => !v)} aria-pressed={flaggedOnly}>
+                Flagged only ({flagged.length})
+              </Button>
+            </div>
+          )}
           {items.length === 0 ? (
             <EmptyTable icon={Users} title="No employees in this run" description="Full-time employees with a salary structure appear after you recompute." />
           ) : (
@@ -392,8 +466,9 @@ export default function RunDetailPage() {
                   <Th numeric>Absent / half</Th>
                   <Th numeric>Paid / unpaid leave</Th>
                   <Th numeric>Gross</Th>
-                  <Th numeric>LOP</Th>
-                  <Th numeric>Late penalty</Th>
+                  {showOt && <Th numeric>Overtime</Th>}
+                  {showLop && <Th numeric>LOP</Th>}
+                  {showLate && <Th numeric>Late penalty</Th>}
                   {showPf && <Th numeric>PF</Th>}
                   <Th numeric>Adjustments</Th>
                   <Th numeric>Deductions</Th>
@@ -402,7 +477,7 @@ export default function RunDetailPage() {
                 </Tr>
               </Thead>
               <Tbody>
-                {items.map((i) => {
+                {shown.map((i) => {
                   const emp = person(i.employee_id)
                   const adj = adjFor(i.id)
                   return (
@@ -415,6 +490,16 @@ export default function RunDetailPage() {
                     >
                       <Td>
                         <PersonCell name={emp?.name ?? i.employee_id} subtitle={emp?.code} />
+                        {i.variance_flag && !i.hold && (
+                          <div className="mt-1 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <VarianceBadge item={i} />
+                            {run.status === 'review' && canManage && !i.variance_ack_at && (
+                              <Button size="sm" variant="secondary" onClick={() => act(route('payroll.items.ack-variance', i.id))}>
+                                Acknowledge
+                              </Button>
+                            )}
+                          </div>
+                        )}
                       </Td>
                       <Td numeric>{days(i.eligible_days)}</Td>
                       <Td numeric className="whitespace-nowrap">
@@ -426,12 +511,21 @@ export default function RunDetailPage() {
                       <Td>
                         <MoneyCell amount={i.gross} />
                       </Td>
-                      <Td>
-                        <MoneyCell amount={i.unpaid_deduction} />
-                      </Td>
-                      <Td>
-                        <MoneyCell amount={i.late_deduction} />
-                      </Td>
+                      {showOt && (
+                        <Td>
+                          <MoneyCell amount={i.overtime_pay} />
+                        </Td>
+                      )}
+                      {showLop && (
+                        <Td>
+                          <MoneyCell amount={i.unpaid_deduction} />
+                        </Td>
+                      )}
+                      {showLate && (
+                        <Td>
+                          <MoneyCell amount={i.late_deduction} />
+                        </Td>
+                      )}
                       {showPf && (
                         <Td>
                           <MoneyCell amount={i.pf} />

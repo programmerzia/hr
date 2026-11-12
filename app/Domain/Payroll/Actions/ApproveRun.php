@@ -25,6 +25,10 @@ class ApproveRun
             if ($run->status !== 'review') {
                 Fail::with('Only runs in review can be approved.');
             }
+            $unacked = PayrollItem::where('run_id', $run->id)->where('hold', false)->where('variance_flag', true)->whereNull('variance_ack_at')->exists();
+            if ($unacked) {
+                Fail::with('Acknowledge all flagged items before approving.');
+            }
             $at = now();
             $run->update(['status' => 'approved', 'approved_by' => $by->id, 'approved_at' => $at, 'locked_at' => $at]);
             $this->snapshot($run, $at);

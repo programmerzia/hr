@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers\Payroll;
 
+use App\Domain\Payroll\Services\PayslipPdf;
 use App\Domain\Payroll\Support\Shape;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BankAccountResource;
 use App\Http\Resources\PayrollRunResource;
-use App\Http\Resources\SalaryStructureResource;
 use App\Models\Department;
 use App\Models\PayrollAdjustment;
 use App\Models\PayrollItem;
@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PayslipController extends Controller
 {
@@ -30,10 +31,22 @@ class PayslipController extends Controller
             'adjustments' => Shape::adjustments(PayrollAdjustment::where('item_id', $item->id)->orderBy('created_at')->get()),
             'employee' => Shape::people([$emp->id])[0],
             'department' => $emp->department_id ? Department::whereKey($emp->department_id)->value('name') : null,
-            'salary' => $item->salaryStructure ? SalaryStructureResource::make($item->salaryStructure)->resolve() : null,
             'bank' => $item->bankAccount ? BankAccountResource::make($item->bankAccount)->resolve() : null,
             'policy' => Shape::policy($run, collect([$item])),
             'staff' => Gate::any(['manage_payroll', 'approve_payroll']),
+        ]);
+    }
+
+    public function pdf(PayrollItem $item): BinaryFileResponse
+    {
+        $run = PayrollRun::findOrFail($item->run_id);
+        Gate::authorize('viewPayslip', [$run, $item]);
+        $code = $item->employee()->value('code') ?? $item->employee_id;
+        $name = sprintf('payslip-%s-%d-%02d.pdf', $code, $run->year, $run->month);
+
+        return response()->file(PayslipPdf::ensure($item), [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => "inline; filename=\"{$name}\"",
         ]);
     }
 

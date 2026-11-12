@@ -13,6 +13,8 @@ Route::prefix('payroll')->name('payroll.')->group(function () {
     Route::post('/', [RunController::class, 'store'])->name('runs.store');
     Route::get('/items/{item}/payslip', [PayslipController::class, 'show'])->name('payslip');
     Route::post('/items/{item}/adjustments', [AdjustmentController::class, 'store'])->name('adjustments.store');
+    Route::get('/items/{item}/payslip.pdf', [PayslipController::class, 'pdf'])->name('payslip.pdf');
+    Route::post('/items/{item}/ack-variance', [ItemController::class, 'ackVariance'])->name('items.ack-variance');
     Route::post('/items/{item}/hold', [ItemController::class, 'hold'])->name('items.hold');
     Route::post('/items/{item}/unhold', [ItemController::class, 'unhold'])->name('items.unhold');
     Route::delete('/adjustments/{adjustment}', [AdjustmentController::class, 'destroy'])->name('adjustments.destroy');

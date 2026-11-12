@@ -40,6 +40,9 @@ class PayrollItem extends Model
             'day_fraction_total' => 'float',
             'pf_employer' => 'integer',
             'hold' => 'bool',
+            'variance_flag' => 'bool',
+            'variance_pct' => 'float',
+            'variance_ack_at' => 'datetime',
             'snapshot_at' => 'datetime',
         ];
     }
