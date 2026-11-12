@@ -3,12 +3,14 @@
 use App\Http\Controllers\Account\PasswordController;
 use App\Http\Controllers\Attendance\AttendanceController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\PasswordResetRequestController;
 use App\Http\Controllers\HomeController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'create'])->name('login');
     Route::post('/login', [LoginController::class, 'store'])->name('login.store');
+    Route::post('/password-reset', [PasswordResetRequestController::class, 'store'])->name('password.request');
 });
 
 Route::middleware('auth')->group(function () {

@@ -35,6 +35,14 @@ export default function LoginPage() {
     send({ ...form.data, confirm_overtime: false })
   }
 
+  const [forgot, setForgot] = useState(false)
+  const [sent, setSent] = useState(false)
+  const reset = useForm<{ email: string }>({ email: '' })
+  const sendReset = (e: FormEvent) => {
+    e.preventDefault()
+    reset.post(route('password.request'), { preserveScroll: true, onSuccess: () => setSent(true) })
+  }
+
   const errors = form.errors as Partial<Record<keyof LoginForm | 'needs_overtime_confirm', string>>
   const credentialsError = errors.email ?? errors.password
 
@@ -65,6 +73,29 @@ export default function LoginPage() {
           Sign in
         </Button>
       </form>
+
+      <div className="-mt-2">
+        {!forgot ? (
+          <button
+            type="button"
+            onClick={() => setForgot(true)}
+            className="text-sm text-fg-muted underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            Forgot password?
+          </button>
+        ) : sent ? (
+          <p className="text-sm text-fg-muted">If that account exists, management has been asked to reset it.</p>
+        ) : (
+          <form onSubmit={sendReset} className="flex flex-col gap-3" noValidate>
+            <Field label="Your email" error={reset.errors.email} hint="Management will be asked to issue a temporary password.">
+              <Input type="email" autoComplete="username" value={reset.data.email} onChange={(e) => reset.setData('email', e.target.value)} />
+            </Field>
+            <Button type="submit" className="w-full" disabled={reset.processing}>
+              Send request
+            </Button>
+          </form>
+        )}
+      </div>
 
       {demo && demo.length > 0 && (
         <section aria-labelledby="demo-accounts" className="border-t border-border pt-4">

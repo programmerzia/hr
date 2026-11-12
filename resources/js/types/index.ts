@@ -584,6 +584,7 @@ export type NotificationKind =
   | 'payroll'
   | 'invoice'
   | 'mention'
+  | 'password_reset'
 
 export interface Notification {
   id: Id

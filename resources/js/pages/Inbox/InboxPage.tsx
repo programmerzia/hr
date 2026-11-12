@@ -1,8 +1,9 @@
 import { router } from '@inertiajs/react'
-import { AtSign, CalendarDays, CheckCheck, ClipboardCheck, FileText, Receipt, Wallet, type LucideIcon } from 'lucide-react'
+import { AtSign, CalendarDays, CheckCheck, ClipboardCheck, FileText, KeyRound, Receipt, Wallet, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
+import { Credentials } from '../../components/shared/Credentials'
 import { PageHeader } from '../../components/shared/PageHeader'
-import { Button, Card, EmptyState, SegmentedControl } from '../../components/ui'
+import { Button, Card, Dialog, EmptyState, SegmentedControl } from '../../components/ui'
 import { useShared } from '../../inertia/props'
 import { relativeTime } from '../../lib/format'
 import type { Notification, NotificationKind } from '../../types'
@@ -16,6 +17,7 @@ const icons: Record<NotificationKind, LucideIcon> = {
   payroll: Wallet,
   invoice: FileText,
   mention: AtSign,
+  password_reset: KeyRound,
 }
 
 const kindLabels: Record<NotificationKind, string> = {
@@ -25,6 +27,7 @@ const kindLabels: Record<NotificationKind, string> = {
   payroll: 'Payroll',
   invoice: 'Invoice',
   mention: 'Mention',
+  password_reset: 'Password reset',
 }
 
 const empty: Record<Filter, { title: string; description: string }> = {
@@ -32,8 +35,37 @@ const empty: Record<Filter, { title: string; description: string }> = {
   unread: { title: 'Nothing unread', description: 'New notifications will appear here.' },
 }
 
+interface ResetRequest {
+  id: string
+  name: string
+  email: string
+  role: string
+  requested_at: string
+}
+
+interface Creds {
+  email: string
+  temporary_password: string
+}
+
 export default function InboxPage() {
-  const { notifications, unread } = useShared<{ notifications: Notification[]; unread: number }>()
+  const { notifications, unread, password_resets: resets, credentials } = useShared<{
+    notifications: Notification[]
+    unread: number
+    password_resets: ResetRequest[]
+    credentials: Creds | null
+  }>()
+  const [closed, setClosed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const approve = (id: string) =>
+    router.post(route('people.password-resets.approve', id), {}, {
+      preserveScroll: true,
+      onStart: () => { setBusy(true); setClosed(false) },
+      onFinish: () => setBusy(false),
+    })
+  const reject = (id: string) =>
+    router.post(route('people.password-resets.reject', id), {}, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => setBusy(false) })
+  const shownCreds = closed ? null : credentials
   const [filter, setFilter] = useState<Filter>('all')
   const shown = notifications.filter((n) => filter === 'all' || n.read_at === null)
 
@@ -69,6 +101,38 @@ export default function InboxPage() {
           </div>
         }
       />
+      {resets.length > 0 && (
+        <Card className="mb-4">
+          <ul>
+            {resets.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 last:border-b-0">
+                <span className="inline-flex size-8 shrink-0 items-center justify-center rounded bg-surface-2 text-fg-muted">
+                  <KeyRound size={16} aria-hidden />
+                </span>
+                <div className="min-w-0 flex-1 basis-64">
+                  <p className="text-base font-medium">{r.name} asked for a password reset</p>
+                  <p className="text-sm text-fg-muted">{r.email} · {relativeTime(r.requested_at)}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" disabled={busy} onClick={() => reject(r.id)}>Reject</Button>
+                  <Button size="sm" variant="primary" disabled={busy} onClick={() => approve(r.id)}>Approve</Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      <Dialog
+        open={shownCreds !== null}
+        onOpenChange={(o) => { if (!o) setClosed(true) }}
+        title="Password reset"
+        description="Give these sign-in details to the person."
+        footer={<Button variant="primary" onClick={() => setClosed(true)}>Done</Button>}
+      >
+        <div className="pb-2">
+          {shownCreds && <Credentials email={shownCreds.email} password={shownCreds.temporary_password} />}
+        </div>
+      </Dialog>
       <Card>
         {shown.length === 0 ? (
           <EmptyState icon={CheckCheck} {...empty[filter]} />
