@@ -14,7 +14,7 @@ class AttendancePolicy extends Model
 
     protected function casts(): array
     {
-        return ['late_penalty_rule' => 'array', 'weekend_days' => 'array'];
+        return ['weekend_days' => 'array', 'effective_from' => 'date', 'early_counts_as_late' => 'bool'];
     }
 
     public const DEFAULTS = [
@@ -24,13 +24,25 @@ class AttendancePolicy extends Model
         'standard_minutes' => 480,
         'idle_timeout_minutes' => 10,
         'lunch_cap_minutes' => 60,
-        'late_penalty_rule' => ['lates_per_penalty' => 3, 'penalty_days' => 0.5],
+        'effective_from' => '2000-01-01',
+        'half_day_after_minutes' => 120,
+        'early_leave_grace_minutes' => 30,
+        'early_counts_as_late' => true,
+        'half_day_min_minutes' => 240,
+        'absent_below_minutes' => 60,
         'weekend_days' => [5, 6],
     ];
 
-    /** Singleton row; created with defaults when missing. */
+    /** Policy in force on a date (latest effective_from <= date); created with defaults when none exists. */
+    public static function forDate(string $date): self
+    {
+        return static::whereDate('effective_from', '<=', $date)->orderByDesc('effective_from')->first()
+            ?? static::orderBy('effective_from')->first()
+            ?? static::create(self::DEFAULTS);
+    }
+
     public static function current(): self
     {
-        return once(fn () => static::query()->first() ?? static::create(self::DEFAULTS));
+        return once(fn () => static::forDate(now()->toDateString()));
     }
 }

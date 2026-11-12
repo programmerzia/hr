@@ -121,7 +121,11 @@ export interface AttendancePolicy {
   standard_minutes: number
   idle_timeout_minutes: number
   lunch_cap_minutes: number
-  late_penalty_rule: { lates_per_penalty: number; penalty_days: number }
+  half_day_after_minutes: number
+  early_leave_grace_minutes: number
+  early_counts_as_late: boolean
+  half_day_min_minutes: number
+  absent_below_minutes: number
   weekend_days: number[] // 0 = Sunday
 }
 

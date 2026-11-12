@@ -25,7 +25,25 @@ shared props.
 
 The last three rows in the first block are the ones a real HR team will hit in month one. They go first.
 
-## 2. Target rules (defaults; all editable by HR in Settings, versioned by effective date)
+## 2. Target rules (all editable by HR in Settings, versioned by effective date)
+
+Owner decisions 2026-11-12: salary is a **monthly** amount; the daily rate exists only to price deductions. Every
+deduction is a switch in Settings, nothing is deducted because of a hard-coded default. **PF is off by default.**
+Time rules live in `attendance_policies`; money rules live in a new `payroll_policies` table (singleton, versioned):
+
+```
+payroll_policies  id, effective_from,
+                  daily_rate_basis enum(working_days, calendar_days, fixed_30, fixed_26) default working_days,
+                  lop_enabled bool default true,                 -- absent / half-day / unpaid-leave deduction
+                  late_penalty_enabled bool default false, lates_per_penalty 3, penalty_days 0.5, max_penalty_days_per_month 3,
+                  pf_enabled bool default false, pf_employee_percent 0, pf_employer_percent 0,  -- structure may override %
+                  tax_enabled bool default true,                 -- deduct structure.tax_monthly (HR-entered TDS)
+                  overtime_enabled bool default false, overtime_multiplier 1.5, overtime_requires_approval true,
+                  overtime_min_block_minutes 30, overtime_daily_cap_minutes 240
+```
+`PayrollCalculator` receives the policy and skips any block whose switch is off. The run snapshot stores `payroll_policy_id`.
+`attendance_policies.late_penalty_rule` is migrated into `payroll_policies` and dropped.
+
 
 ### Attendance policy (`attendance_policies` becomes versioned: add `effective_from`, keep `current()` = latest ≤ today)
 - Shift 10:00–19:00, standard 480 min, grace 15 min, weekend Fri/Sat, holidays table.
@@ -38,7 +56,7 @@ The last three rows in the first block are the ones a real HR team will hit in m
 
 ### Loss of pay (LOP)
 - `lop_days = Σ(1 − day_fraction)` over working dates in the month where the day is not covered by paid leave or holiday, **plus** approved unpaid leave days (already there), **plus** late penalty days (capped).
-- Daily rate = `gross / working_days_in_month` (calendar working days, not 30). Keep: it is what the mock did and HR confirmed.
+- Daily rate = `gross / divisor` where divisor follows `daily_rate_basis` (working days of the month by default; 30, 26 or calendar days selectable). Used only to price LOP, late penalty and encashment; the monthly gross itself is never rebuilt from days.
 - An unapproved absence can be converted after the fact by HR: mark as paid leave (deducts balance), unpaid leave, or "excused" (no deduction) with a note. This is the `regularization_requests` flow extended with a `resolution` enum.
 
 ### Proration
@@ -56,7 +74,7 @@ The last three rows in the first block are the ones a real HR team will hit in m
 - Encashment at exit: `encashable` per type; final settlement run item adds `leave_encashment = unused × daily_rate`.
 
 ### Statutory and fixed items
-- PF: employee % (exists) **and** employer % (new, default equal). Both snapshot on the item. New `pf_ledger` table: one row per item (employee, employer, cumulative) so a PF statement can be printed.
+- PF: **off unless `pf_enabled`**. Employee % and employer % from the policy, overridable per salary structure. Both snapshot on the item. New `pf_ledger` table: one row per item (employee, employer, cumulative) so a PF statement can be printed.
 - Tax: keep `tax_monthly` per structure (HR enters the TDS figure), add a per-employee **tax year** view (Jul–Jun) that sums gross and TDS for the challan. Automatic slab calculation is out of scope until the company confirms it wants the app to be the source of truth.
 - Festival bonus: run-level `bonus_run` flag with `bonus_percent_of_basic`; HR creates a separate run (`kind = festival`) in the same month. One `payroll_runs` row per (year, month, kind).
 - Final settlement: `kind = settlement` run for one employee on exit: prorated salary, encashment, pending adjustments, asset deductions.
@@ -139,12 +157,12 @@ Estimated agent cost: P0 2 Opus sessions, P1–P2 5 Sonnet sessions, P3 1 Haiku 
 
 ## 6. Decisions needed from the owner (defaults in bold; proceed with defaults if no answer)
 
-1. Daily rate base: **calendar working days of the month** vs fixed 30 vs 26.
+1. Daily rate base: working days of the month (default, switchable in Settings). Decided.
 2. Late penalty: **3 lates = half day, cap 3 days/month**; or per-minute deduction instead.
 3. Half-day threshold: **login later than 2 h after shift start**, **fewer than 4 h worked**.
 4. Early leave counts as a late unit: **yes**.
 5. Overtime: **off**; if on, 1.5× hourly, approval required.
-6. Employer PF %: **same as employee %**.
+6. PF: off by default, HR switches on and sets both percents. Decided.
 7. Annual leave carry-forward cap: **7 days**; sick/casual reset.
 8. Interns: **excluded from payroll** (stipend tracked as a fixed-amount structure later if wanted).
 9. Tax: **HR enters monthly TDS**; no automatic slab.

@@ -3,6 +3,7 @@
 namespace App\Domain\Payroll\Services;
 
 use App\Models\AttendancePolicy;
+use App\Models\PayrollPolicy;
 
 /**
  * Pure payroll maths, ported from calcItem() in resources/js/mock/db/payroll.ts.
@@ -22,12 +23,15 @@ final class PayrollCalculator
 
     public static function fromPolicy(AttendancePolicy $policy): self
     {
-        $rule = $policy->late_penalty_rule ?? [];
+        // Bridge until PayrollFacts/new calculator land (docs/07 P0.2): money switches come from PayrollPolicy.
+        $money = PayrollPolicy::current();
 
         return new self(
             (int) $policy->standard_minutes,
-            (int) ($rule['lates_per_penalty'] ?? 0),
-            (float) ($rule['penalty_days'] ?? 0),
+            $money->late_penalty_enabled ? (int) $money->lates_per_penalty : 0,
+            (float) $money->penalty_days,
+            (bool) $money->overtime_enabled,
+            (float) $money->overtime_multiplier,
         );
     }
 
