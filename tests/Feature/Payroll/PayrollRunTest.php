@@ -156,3 +156,22 @@ it('badges runs awaiting the viewer', function () {
     $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
     expect(Badges::for($this->mgmt)['payroll'])->toBe(1);
 });
+
+it('refuses to draft a regular run for a future month', function () {
+    $this->actingAs($this->hr)->post(route('payroll.runs.store'), ['year' => 2026, 'month' => 12])
+        ->assertSessionHasErrors('payroll');
+    expect(PayrollRun::count())->toBe(0);
+    $this->actingAs($this->hr)->post(route('payroll.runs.store'), ['year' => 2026, 'month' => 11])->assertSessionDoesntHaveErrors();
+});
+
+it('lets HR discard a draft run but not a reviewed one', function () {
+    $run = draftRun($this);
+    $this->actingAs($this->emp)->delete(route('payroll.runs.destroy', $run))->assertForbidden();
+    $this->actingAs($this->hr)->delete(route('payroll.runs.destroy', $run))->assertRedirect(route('payroll.runs'));
+    expect(PayrollRun::count())->toBe(0)->and(PayrollItem::count())->toBe(0);
+
+    $run = draftRun($this);
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    $this->actingAs($this->hr)->delete(route('payroll.runs.destroy', $run))->assertSessionHasErrors('payroll');
+    expect(PayrollRun::count())->toBe(1);
+});

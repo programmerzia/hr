@@ -28,6 +28,9 @@ class DraftRun
     private function regular(int $year, int $month, Employee $by): PayrollRun
     {
         $exists = 'A run for '.PayrollPeriod::label($year, $month).' already exists.';
+        if ($year * 100 + $month > (int) now()->format('Ym')) {
+            Fail::with('Payroll for '.PayrollPeriod::label($year, $month).' cannot be drafted before the month starts.');
+        }
 
         return DB::transaction(function () use ($year, $month, $by, $exists) {
             if (PayrollRun::where('year', $year)->where('month', $month)->where('kind', 'regular')->lockForUpdate()->exists()) {

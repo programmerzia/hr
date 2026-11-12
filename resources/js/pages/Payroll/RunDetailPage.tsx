@@ -334,6 +334,7 @@ export default function RunDetailPage() {
   const [payOpen, setPayOpen] = useState(false)
   const [approveOpen, setApproveOpen] = useState(false)
   const [reopenOpen, setReopenOpen] = useState(false)
+  const [discardOpen, setDiscardOpen] = useState(false)
   const [holdId, setHoldId] = useState<string | null>(null)
 
   const items = rawItems
@@ -374,6 +375,11 @@ export default function RunDetailPage() {
       {run.status === 'draft' && (
         <Button variant="primary" icon={<Send size={16} />} onClick={() => act(route('payroll.runs.submit', run.id))}>
           Send for review
+        </Button>
+      )}
+      {run.status === 'draft' && canManage && (
+        <Button variant="ghost" icon={<Trash2 size={16} />} onClick={() => setDiscardOpen(true)}>
+          Discard draft
         </Button>
       )}
       {run.status === 'review' && role === 'management' && (
@@ -610,6 +616,17 @@ export default function RunDetailPage() {
         description="The run goes back to review and can be recomputed or adjusted before approving again."
         url={route('payroll.runs.reopen', run.id)}
         confirm="Reopen"
+      />
+      <ConfirmDialog
+        open={discardOpen}
+        onOpenChange={setDiscardOpen}
+        title={`Discard ${label}`}
+        description="Deletes this draft run and its adjustments. Nothing has been paid; you can start the month again later."
+        confirmLabel="Discard draft"
+        onConfirm={() => {
+          setDiscardOpen(false)
+          router.delete(route('payroll.runs.destroy', run.id))
+        }}
       />
       <MarkPaidDialog key={String(payOpen)} open={payOpen} onOpenChange={setPayOpen} runId={run.id} label={label} />
       <ConfirmDialog

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Payroll;
 
 use App\Domain\Payroll\Actions\ApproveRun;
+use App\Domain\Payroll\Actions\DiscardRun;
 use App\Domain\Payroll\Actions\DraftRun;
 use App\Domain\Payroll\Actions\MarkPaid;
 use App\Domain\Payroll\Actions\Recompute;
@@ -92,6 +93,14 @@ class RunController extends Controller
         $action($run, $request->user()->employee);
 
         return back()->with('success', 'Recomputed from attendance and leave');
+    }
+
+    public function destroy(Request $request, PayrollRun $run, DiscardRun $action): RedirectResponse
+    {
+        Gate::authorize('manage', $run);
+        $action($run, $request->user()->employee);
+
+        return redirect()->route('payroll.runs')->with('success', 'Draft run discarded');
     }
 
     public function submit(Request $request, PayrollRun $run, SubmitForReview $action): RedirectResponse

@@ -19,6 +19,7 @@ Route::prefix('payroll')->name('payroll.')->group(function () {
     Route::post('/items/{item}/unhold', [ItemController::class, 'unhold'])->name('items.unhold');
     Route::delete('/adjustments/{adjustment}', [AdjustmentController::class, 'destroy'])->name('adjustments.destroy');
     Route::get('/{run}', [RunController::class, 'show'])->name('runs.show');
+    Route::delete('/{run}', [RunController::class, 'destroy'])->name('runs.destroy');
     Route::post('/{run}/recompute', [RunController::class, 'recompute'])->name('runs.recompute');
     Route::post('/{run}/submit', [RunController::class, 'submit'])->name('runs.submit');
     Route::post('/{run}/approve', [RunController::class, 'approve'])->name('runs.approve');

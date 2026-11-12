@@ -131,17 +131,19 @@ export default function RunsPage() {
   const nameOf = (id: string) => people.find((p) => p.id === id)?.name
 
   const sorted = useMemo(() => [...runs].sort((a, b) => b.year * 100 + b.month - (a.year * 100 + a.month)), [runs])
+  // Next regular run: the month after the latest one, but never beyond the current month (payroll runs after the month, not before).
   const next = useMemo(() => {
-    const last = sorted.find((r) => (r.kind ?? 'regular') === 'regular')
-    if (!last) {
-      const d = new Date()
-      return { year: d.getFullYear(), month: d.getMonth() + 1 }
-    }
-    return last.month === 12 ? { year: last.year + 1, month: 1 } : { year: last.year, month: last.month + 1 }
+    const d = new Date()
+    const current = { year: d.getFullYear(), month: d.getMonth() + 1 }
+    const regular = sorted.filter((r) => (r.kind ?? 'regular') === 'regular')
+    const last = regular.find((r) => r.year * 100 + r.month <= current.year * 100 + current.month)
+    if (!last) return current
+    const after = last.month === 12 ? { year: last.year + 1, month: 1 } : { year: last.year, month: last.month + 1 }
+    return after.year * 100 + after.month <= current.year * 100 + current.month ? after : null
   }, [sorted])
 
   const open = (id: string) => router.get(route('payroll.runs.show', id))
-  const start = () => act(route('payroll.runs.store'), next)
+  const start = () => next && act(route('payroll.runs.store'), next)
 
   return (
     <div className="mx-auto max-w-content">
@@ -156,7 +158,11 @@ export default function RunsPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={start}>Regular, {monthLabel(next.year, next.month)}</DropdownMenuItem>
+              {next ? (
+                <DropdownMenuItem onSelect={start}>Regular, {monthLabel(next.year, next.month)}</DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem disabled>Regular run for this month already exists</DropdownMenuItem>
+              )}
               <DropdownMenuItem onSelect={() => setDialog('festival')}>Festival bonus</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setDialog('settlement')}>Final settlement</DropdownMenuItem>
             </DropdownMenuContent>
