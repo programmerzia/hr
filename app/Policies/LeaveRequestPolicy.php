@@ -15,7 +15,8 @@ class LeaveRequestPolicy
     /** Team lead over the requester's team. Own requests are refused by the action with the mock's message. */
     public function approveLead(User $user, LeaveRequest $request): bool
     {
-        return $user->role === 'team_lead' && (bool) $user->employee?->leads($request->employee()->first());
+        return (bool) $user->employee?->leads($request->employee()->first())
+            || in_array($user->role, ['hr', 'management'], true);
     }
 
     public function approveHr(User $user, LeaveRequest $request): bool

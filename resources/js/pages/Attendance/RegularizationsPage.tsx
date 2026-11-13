@@ -91,7 +91,7 @@ export default function RegularizationsPage() {
                   <Td>
                     <GradeChip day={d} />
                   </Td>
-                  <Td className="max-w-80">
+                  <Td className="min-w-48 max-w-72 whitespace-normal">
                     <p className="truncate" title={r.reason}>
                       {r.reason}
                     </p>

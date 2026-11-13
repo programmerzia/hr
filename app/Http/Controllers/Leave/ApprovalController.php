@@ -54,7 +54,7 @@ class ApprovalController extends Controller
             'items' => $items,
             'people' => Shape::people($ids),
             'leave_types' => Shape::types(),
-            'scope' => $request->user()->role === 'team_lead' ? 'lead' : 'hr',
+            'scope' => in_array($request->user()->role, ['hr', 'management'], true) ? 'hr' : 'lead',
         ]);
     }
 
@@ -64,7 +64,10 @@ class ApprovalController extends Controller
         Gate::authorize('decide', $leaveRequest);
         $note = $form->validated('note');
         match ($leaveRequest->status) {
-            'pending_lead' => $lead($leaveRequest, $user->employee, $note),
+            // HR/management stepping in for a lead approves straight through.
+            'pending_lead' => in_array($user->role, ['hr', 'management'], true) && ! $user->employee?->leads($leaveRequest->employee()->first())
+                ? $hr($lead($leaveRequest, $user->employee, $note), $user->employee, $note)
+                : $lead($leaveRequest, $user->employee, $note),
             'pending_hr' => $hr($leaveRequest, $user->employee, $note),
             default => Fail::with('This request is not waiting for a decision'),
         };

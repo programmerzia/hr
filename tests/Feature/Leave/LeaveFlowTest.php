@@ -6,6 +6,7 @@ use App\Models\LeaveBalance;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\Team;
+use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
@@ -137,4 +138,23 @@ it('renders the calendar in viewer scope', function () {
     $this->actingAs($this->lead)->get(route('leave.calendar', ['month' => '2026-11']))
         ->assertInertia(fn (Assert $p) => $p->component('Leave/CalendarPage', false)->has('events', 1)->where('month', '2026-11'));
     $this->actingAs($this->emp)->get(route('leave.calendar'))->assertForbidden();
+});
+
+it('shows waiting requests to management without an employee profile, who can approve straight through', function () {
+    $boss = User::factory()->role('management')->create();
+    leaveSubmit($this);
+    $r = LeaveRequest::firstOrFail();
+    expect($r->status)->toBe('pending_lead');
+
+    $this->actingAs($boss)->get('/leave/approvals')
+        ->assertInertia(fn (Assert $p) => $p->component('Leave/ApprovalsPage', false)->has('items', 1));
+    $this->actingAs($boss)->post("/leave/{$r->id}/approve", ['note' => 'ok'])->assertSessionHas('success');
+    expect($r->fresh()->status)->toBe('approved');
+});
+
+it('shows pending_lead to HR so a request is never stuck', function () {
+    $this->lead->update(['role' => 'employee']);
+    leaveSubmit($this);
+    $this->actingAs($this->hr)->get('/leave/approvals')
+        ->assertInertia(fn (Assert $p) => $p->has('items', 1));
 });

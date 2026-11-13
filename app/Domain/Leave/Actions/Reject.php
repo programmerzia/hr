@@ -14,14 +14,14 @@ class Reject
     public function __construct(private BalanceService $balances, private LeaveNotifier $notifier) {}
 
     /** The stage is the request's current pending stage. */
-    public function __invoke(LeaveRequest $request, Employee $decider, ?string $note): LeaveRequest
+    public function __invoke(LeaveRequest $request, ?Employee $decider, ?string $note): LeaveRequest
     {
         return DB::transaction(function () use ($request, $decider, $note) {
             $r = LeaveRequest::lockForUpdate()->findOrFail($request->id);
             if (! in_array($r->status, ['pending_lead', 'pending_hr'], true)) {
                 Fail::with('This request is not at that stage');
             }
-            if ($r->employee_id === $decider->id) {
+            if ($r->employee_id === $decider?->id) {
                 Fail::with('You cannot reject your own request');
             }
             $note = trim((string) $note);
@@ -30,7 +30,7 @@ class Reject
             }
             LeaveApproval::create([
                 'leave_request_id' => $r->id, 'stage' => $r->status === 'pending_lead' ? 'lead' : 'hr',
-                'decided_by' => $decider->id, 'decision' => 'rejected', 'note' => $note, 'decided_at' => now(),
+                'decided_by' => $decider?->id, 'decision' => 'rejected', 'note' => $note, 'decided_at' => now(),
             ]);
             $r->update(['status' => 'rejected']);
             $this->balances->adjust($r, pending: -(float) $r->days);
