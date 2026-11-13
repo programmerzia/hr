@@ -12,7 +12,7 @@ export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>)
 }
 
 export function Thead({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className={cn('sticky top-[var(--sticky-top,0px)] z-10 bg-surface-2', className)} {...props} />
+  return <thead className={cn('bg-surface-2', className)} {...props} />
 }
 
 export function Tbody(props: HTMLAttributes<HTMLTableSectionElement>) {

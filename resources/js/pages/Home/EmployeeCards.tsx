@@ -41,8 +41,8 @@ export function MyTasksCard() {
               className="flex items-center gap-3 border-b border-border px-4 py-2.5 transition-colors duration-150 last:border-b-0 hover:bg-surface-2"
             >
               <PriorityIcon priority={t.priority} />
-              <TaskKey taskKey={t.key} className="w-20 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{t.title}</span>
+              <TaskKey taskKey={t.key} className="hidden w-20 shrink-0 sm:inline-flex" />
+              <span className="min-w-0 flex-1 line-clamp-2 sm:truncate">{t.title}</span>
               {t.due_on && (
                 <Badge variant={t.due_on < today ? 'danger' : 'neutral'} className="shrink-0">
                   {t.due_on < today ? 'Overdue ' : 'Due '}

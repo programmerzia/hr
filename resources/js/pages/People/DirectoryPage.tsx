@@ -24,7 +24,7 @@ function FilterSelect({
 }) {
   return (
     <NativeSelect aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className="w-40">
-      <option value="all">{`All ${label.toLowerCase()}s`}</option>
+      <option value="all">{`All ${label.toLowerCase()}${label.endsWith('s') ? 'es' : 's'}`}</option>
       {options.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}

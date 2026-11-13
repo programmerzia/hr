@@ -83,7 +83,7 @@ export default function RegularizationsPage() {
               const d = r.day
               return (
                 <Tr key={r.id}>
-                  <Td>{e && <PersonCell name={e.name} subtitle={e.designation} />}</Td>
+                  <Td>{e && <PersonCell stacked name={e.name} subtitle={e.designation} />}</Td>
                   <Td>{d ? formatDate(d.date) : '-'}</Td>
                   <Td numeric>{d?.first_in_at ? formatTime(d.first_in_at) : '-'}</Td>
                   <Td>{regularizationKindLabels[r.kind] ?? r.kind}</Td>
@@ -91,12 +91,12 @@ export default function RegularizationsPage() {
                   <Td>
                     <GradeChip day={d} />
                   </Td>
-                  <Td className="min-w-48 max-w-72 whitespace-normal">
-                    <p className="truncate" title={r.reason}>
+                  <Td className="min-w-40 max-w-60 whitespace-normal">
+                    <p className="line-clamp-2" title={r.reason}>
                       {r.reason}
                     </p>
                     {r.note && (
-                      <p className="truncate text-xs text-fg-muted" title={r.note}>
+                      <p className="line-clamp-2 text-xs text-fg-muted" title={r.note}>
                         {r.decider_name}: {r.note}
                       </p>
                     )}
