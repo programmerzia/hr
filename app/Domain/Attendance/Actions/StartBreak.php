@@ -9,9 +9,9 @@ use Illuminate\Support\Facades\DB;
 
 class StartBreak
 {
-    public function __invoke(Employee $employee, string $category, ?string $note = null): bool
+    public function __invoke(Employee $employee, string $category, ?string $note = null, string $source = 'manual'): bool
     {
-        return DB::transaction(function () use ($employee, $category, $note) {
+        return DB::transaction(function () use ($employee, $category, $note, $source) {
             $day = DayState::findForUpdate($employee);
             if (! $day || $day->status !== 'working') {
                 return false;
@@ -24,9 +24,10 @@ class StartBreak
                 'break_category' => $category,
                 'started_at' => $now,
                 'note' => $note !== null && trim($note) !== '' ? trim($note) : null,
-                'source' => 'logout',
+                'source' => $source,
             ]);
             $day->status = 'on_break';
+            $day->last_activity_at = $now;
             DayState::rollup($day, $now);
 
             return true;

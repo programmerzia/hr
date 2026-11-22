@@ -21,7 +21,7 @@ class StoreLeaveRequest extends FormRequest
             'ends_on' => ['nullable', 'date_format:Y-m-d'],
             'half_day' => ['nullable', Rule::in(['none', 'first_half', 'second_half'])],
             'reason' => ['nullable', 'string', 'max:2000'],
-            'attachment_name' => ['nullable', 'string', 'max:200'],
+            'attachment' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ];
     }
 }

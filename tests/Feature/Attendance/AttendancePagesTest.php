@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Attendance\Actions\EndDay;
 use App\Domain\Attendance\Actions\StartWork;
 use App\Domain\Attendance\Support\Badges;
 use App\Models\AttendanceDay;
@@ -85,6 +86,9 @@ it('regularization request then approval clears the late mark', function () {
 
     $this->actingAs($lead)->post(route('attendance.regularizations.store'), ['attendance_day_id' => $day->id, 'reason' => 'x'])->assertForbidden();
     $this->actingAs($member)->post(route('attendance.regularizations.store'), ['attendance_day_id' => $day->id, 'reason' => ''])->assertSessionHasErrors('reason');
+    // today's day is still running: not yet
+    $this->actingAs($member)->post(route('attendance.regularizations.store'), ['attendance_day_id' => $day->id, 'reason' => 'Bus strike'])->assertSessionHas('error');
+    app(EndDay::class)($member->employee);
     $this->actingAs($member)->post(route('attendance.regularizations.store'), ['attendance_day_id' => $day->id, 'reason' => 'Bus strike'])->assertRedirect();
     $req = RegularizationRequest::firstOrFail();
     expect($req->status)->toBe('pending');

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Leave;
 
+use App\Domain\Leave\Actions\ReprorateBalances;
 use App\Domain\Leave\Support\Shape;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Leave\UpdateLeaveTypeRequest;
@@ -20,9 +21,13 @@ class PolicyController extends Controller
         return Inertia::render('Leave/PolicyPage', ['leave_types' => Shape::types()]);
     }
 
-    public function update(UpdateLeaveTypeRequest $request, LeaveType $leaveType): RedirectResponse
+    public function update(UpdateLeaveTypeRequest $request, LeaveType $leaveType, ReprorateBalances $reprorate): RedirectResponse
     {
+        $oldQuota = (float) $leaveType->annual_quota;
         $leaveType->update($request->validated());
+        if ((float) $leaveType->annual_quota !== $oldQuota) {
+            $reprorate($leaveType, $oldQuota);
+        }
 
         return back()->with('success', 'Leave policy updated');
     }

@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Domain\Attendance\Services\Grading;
 use App\Domain\Settings\SettingsLog;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\AttendancePolicyRequest;
+use App\Models\AttendanceDay;
 use App\Models\AttendancePolicy;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -36,6 +38,7 @@ class AttendancePolicyController extends Controller
     public function store(AttendancePolicyRequest $request): RedirectResponse
     {
         $policy = AttendancePolicy::create($request->validated());
+        $this->regradeToday();
         SettingsLog::record($request->user(), 'attendance', 'created attendance policy effective '.$policy->effective_from->format('j M Y'), subjectId: $policy->id);
 
         return back()->with('success', 'New attendance policy takes effect from '.$policy->effective_from->format('j M Y'));
@@ -44,10 +47,11 @@ class AttendancePolicyController extends Controller
     public function update(AttendancePolicyRequest $request, AttendancePolicy $policy): RedirectResponse
     {
         if (! $this->editable($policy)) {
-            return back()->with('error', 'This version is already in force and cannot be changed. Create a new version instead.');
+            return back()->with('error', 'This version started before today and cannot be changed. Create a new version instead.');
         }
         $policy->update($request->validated());
-        SettingsLog::record($request->user(), 'attendance', 'edited upcoming attendance policy effective '.$policy->effective_from->format('j M Y'), subjectId: $policy->id);
+        $this->regradeToday();
+        SettingsLog::record($request->user(), 'attendance', 'edited attendance policy effective '.$policy->effective_from->format('j M Y'), subjectId: $policy->id);
 
         return back()->with('success', 'Attendance policy updated');
     }
@@ -55,17 +59,27 @@ class AttendancePolicyController extends Controller
     public function destroy(Request $request, AttendancePolicy $policy): RedirectResponse
     {
         if (! $this->editable($policy)) {
-            return back()->with('error', 'Only an upcoming version can be removed.');
+            return back()->with('error', 'Only a version that starts today or later can be removed.');
         }
         $policy->delete();
-        SettingsLog::record($request->user(), 'attendance', 'removed upcoming attendance policy effective '.$policy->effective_from->format('j M Y'), subjectId: $policy->id);
+        $this->regradeToday();
+        SettingsLog::record($request->user(), 'attendance', 'removed attendance policy effective '.$policy->effective_from->format('j M Y'), subjectId: $policy->id);
 
         return back()->with('success', 'Upcoming version removed');
     }
 
-    /** History is never rewritten: only a version that has not started yet can change. */
+    /** History is never rewritten: a version can change until the day after it starts (today's rule is still correctable). */
     private function editable(AttendancePolicy $p): bool
     {
-        return $p->effective_from->toDateString() > now()->toDateString();
+        return $p->effective_from->toDateString() >= now()->toDateString();
+    }
+
+    /** Today's already-ended days were graded under the old rule; grade them again under the one in force now. */
+    private function regradeToday(): void
+    {
+        AttendanceDay::whereDate('date', now()->toDateString())->where('status', 'ended')->get()->each(function (AttendanceDay $d) {
+            Grading::apply($d);
+            $d->save();
+        });
     }
 }

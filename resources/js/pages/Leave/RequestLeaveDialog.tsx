@@ -23,7 +23,7 @@ export function RequestLeaveDialog({ open, onOpenChange, leaveTypes: allTypes, o
     ends_on: todayIso(),
     half_day: 'none' as HalfDay,
     reason: '',
-    attachment_name: '',
+    attachment: null as File | null,
   })
   const [touched, setTouched] = useState(false)
   const { data } = form
@@ -38,6 +38,10 @@ export function RequestLeaveDialog({ open, onOpenChange, leaveTypes: allTypes, o
   const year = Number(data.starts_on.slice(0, 4) || new Date().getFullYear())
   const balance = balances.find((b) => b.leave_type_id === data.leave_type_id && b.year === year)
 
+  const reversed = !!data.starts_on && !!data.ends_on && data.ends_on < data.starts_on
+  const noHolidayYears = [...new Set([data.starts_on, data.ends_on].filter(Boolean).map((d) => d.slice(0, 4)))].filter(
+    (y) => !holidays.some((h) => h.startsWith(y)),
+  )
   const reasonError = touched && !data.reason.trim() ? 'Add a reason' : undefined
   const change = <K extends keyof typeof data>(key: K, value: (typeof data)[K]) => {
     form.clearErrors()
@@ -49,9 +53,10 @@ export function RequestLeaveDialog({ open, onOpenChange, leaveTypes: allTypes, o
     if (!data.reason.trim()) return
     form.transform((d) => ({ ...d, half_day: effectiveHalf }))
     form.post(route('leave.store'), {
+      forceFormData: true,
       preserveScroll: true,
       onSuccess: () => {
-        form.reset('reason', 'attachment_name', 'half_day')
+        form.reset('reason', 'attachment', 'half_day')
         setTouched(false)
         onOpenChange(false)
       },
@@ -72,7 +77,7 @@ export function RequestLeaveDialog({ open, onOpenChange, leaveTypes: allTypes, o
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit} disabled={!data.reason.trim() || !data.starts_on || !data.ends_on || form.processing}>
+          <Button variant="primary" onClick={submit} disabled={!data.reason.trim() || !data.starts_on || !data.ends_on || reversed || form.processing}>
             Submit request
           </Button>
         </>
@@ -114,14 +119,28 @@ export function RequestLeaveDialog({ open, onOpenChange, leaveTypes: allTypes, o
           </Field>
         )}
         <p className="text-sm text-fg-muted">
-          {days > 0 ? `${formatDays(days)} excluding weekends and holidays.` : 'No working days in this range.'}
+          {reversed
+            ? 'End date is before the start date.'
+            : days > 0
+              ? `${formatDays(days)} excluding weekends and holidays.`
+              : 'No working days in this range.'}
           {balance && !balance.unlimited && ` ${balance.available} available in ${balance.year}.`}
         </p>
+        {noHolidayYears.length > 0 && !reversed && (
+          <p className="text-xs text-fg-muted">
+            No public holidays are configured for {noHolidayYears.join(' and ')}, so holidays are counted as working days here.
+          </p>
+        )}
         <Field label="Reason" error={reasonError} required>
           <Textarea value={data.reason} onChange={(e) => change('reason', e.target.value)} />
         </Field>
-        <Field label="Attachment" hint="File name of a sick note or other document. Optional.">
-          <Input value={data.attachment_name} onChange={(e) => change('attachment_name', e.target.value)} placeholder="medical-certificate.pdf" />
+        <Field label="Attachment" hint="Sick note or other document. PDF, JPG or PNG, up to 5 MB. Optional.">
+          <Input
+            key={data.attachment ? 'file' : 'empty'}
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+            onChange={(e) => change('attachment', e.target.files?.[0] ?? null)}
+          />
         </Field>
         {error && (
           <p role="alert" className="text-sm text-danger">

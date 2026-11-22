@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Domain\Attendance\Actions\EndDay;
 use App\Domain\Attendance\Actions\StartBreak;
 use App\Domain\Attendance\Actions\StartWork;
+use App\Domain\Attendance\Services\Reconciler;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -57,6 +58,7 @@ class LoginController extends Controller
             throw ValidationException::withMessages(['email' => 'This account cannot sign in']);
         }
 
+        app(Reconciler::class)($user, now(), null, false);
         $result = $startWork($employee, (bool) ($data['confirm_overtime'] ?? false));
         if ($result === StartWork::NEEDS_OVERTIME_CONFIRM) {
             return back()->withErrors(['needs_overtime_confirm' => 'You ended your day already. Start an overtime session?'])
@@ -80,7 +82,7 @@ class LoginController extends Controller
         $employee = $request->user()->employee;
         if ($employee) {
             if ($data['mode'] === 'break') {
-                $startBreak($employee, $data['break_category'] ?? 'signed_out', $data['note'] ?? null);
+                $startBreak($employee, $data['break_category'] ?? 'signed_out', $data['note'] ?? null, 'logout');
             } else {
                 $endDay($employee);
             }

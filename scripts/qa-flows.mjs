@@ -864,7 +864,7 @@ try {
   await step('J.2', 'Delete the upcoming attendance version; it is gone', async () => {
     const ok0 = await page.evaluate(() => {
       const tr = [...document.querySelectorAll('tr')].find((r) => /Upcoming/.test(r.textContent) && /5 min/.test(r.textContent))
-      const b = tr?.querySelector('[aria-label="Remove upcoming version"]')
+      const b = tr?.querySelector('[aria-label="Remove version"]')
       if (!b) return false
       b.click()
       return true

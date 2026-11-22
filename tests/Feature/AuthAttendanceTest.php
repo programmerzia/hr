@@ -83,7 +83,7 @@ it('heartbeat after an idle gap records an offline segment and resumes work', fu
         ->and($day->openSegment()->type)->toBe('work');
 });
 
-it('sweep opens an idle break and the next heartbeat converts it to offline', function () {
+it('sweep opens an idle break and the next heartbeat resumes work, keeping the break idle', function () {
     $u = makeUser();
     $this->post(route('login.store'), ['email' => $u->email, 'password' => 'password']);
     $this->travel(12)->minutes();
@@ -94,8 +94,8 @@ it('sweep opens an idle break and the next heartbeat converts it to offline', fu
     $this->post(route('heartbeat'));
     $day->refresh();
     expect($day->status)->toBe('working')
-        ->and(TimeSegment::where('attendance_day_id', $day->id)->where('break_category', 'offline')->count())->toBe(1)
-        ->and(TimeSegment::where('attendance_day_id', $day->id)->where('break_category', 'idle')->count())->toBe(0);
+        ->and(TimeSegment::where('attendance_day_id', $day->id)->where('break_category', 'offline')->count())->toBe(0)
+        ->and(TimeSegment::where('attendance_day_id', $day->id)->where('break_category', 'idle')->count())->toBe(1);
 });
 
 it('attendance actions move the day between states', function () {

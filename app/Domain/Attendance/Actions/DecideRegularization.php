@@ -3,11 +3,13 @@
 namespace App\Domain\Attendance\Actions;
 
 use App\Domain\Attendance\Services\Grading;
+use App\Domain\Attendance\Support\AttendanceNotification;
 use App\Domain\Leave\Services\BalanceService;
 use App\Models\Employee;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\RegularizationRequest;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -44,10 +46,23 @@ class DecideRegularization
                 $day->is_regularized = true;
                 Grading::apply($day);
                 $day->save();
+                if ($resolution === 'paid_leave') {
+                    $date = $day->date->format('Y-m-d');
+                    app(RegradeDays::class)($day->employee_id, $date, $date);
+                }
             }
         });
+        $this->notifyRequester($req, $decision, trim((string) $note));
 
         return true;
+    }
+
+    private function notifyRequester(RegularizationRequest $req, string $decision, string $note): void
+    {
+        $label = $req->day->date->format('D, M j');
+        $title = "Your regularisation for {$label} was ".($decision === 'approved' ? 'approved' : 'rejected');
+        User::where('employee_id', $req->employee_id)->first()
+            ?->notify(new AttendanceNotification($title, $note !== '' ? $note : null, '/my-day'));
     }
 
     private function bookPaidLeave(RegularizationRequest $req, $day, ?string $leaveTypeId): void

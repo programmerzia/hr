@@ -5,7 +5,7 @@ import { cn } from '../../lib/cn'
 /** Wrapper provides border and horizontal scroll on every screen size. Cells do not wrap; opt in with whitespace-normal. Rows are 32px. */
 export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="overflow-x-auto rounded-md border border-border bg-surface shadow-xs">
+    <div className="relative overflow-x-auto rounded-md border border-border bg-surface shadow-xs">
       <table className={cn('w-full border-collapse text-sm', className)} {...props} />
     </div>
   )

@@ -74,20 +74,82 @@ class BalanceService
         return null;
     }
 
-    /** Applies a delta to the stored balance row of the request (created from the type quota when missing). */
+    /**
+     * Working days of a range per calendar year (all years with leave in them).
+     *
+     * @return array<int, float>
+     */
+    public function daysByYear(string $start, string $end, string $half): array
+    {
+        return LeaveDays::splitByYear($start, $end, $half, $this->holidayDates(), array_map('intval', AttendancePolicy::current()->weekend_days ?? [5, 6]));
+    }
+
+    /**
+     * The request's stored `days` split per calendar year. A single-year request is all in that year; a cross-year
+     * one uses the split stored at submit (older rows: split from the current holidays, with any drift put on the first year), so
+     * submit, approve, reject and cancel always move the same amounts.
+     *
+     * @return array<int, float>
+     */
+    public function slices(LeaveRequest $r): array
+    {
+        $start = $r->starts_on->format('Y-m-d');
+        $end = $r->ends_on->format('Y-m-d');
+        $total = (float) $r->days;
+        if ($r->starts_on->format('Y') === $r->ends_on->format('Y')) {
+            return [(int) $r->starts_on->format('Y') => $total];
+        }
+        if (is_array($r->year_split) && $r->year_split !== []) {
+            $stored = [];
+            foreach ($r->year_split as $year => $d) {
+                $stored[(int) $year] = (float) $d;
+            }
+
+            return $stored;
+        }
+        $split = $this->daysByYear($start, $end, (string) $r->half_day ?: 'none');
+        if ($split === []) {
+            return [(int) $r->starts_on->format('Y') => $total];
+        }
+        $drift = $total - array_sum($split);
+        if (abs($drift) > 0.001) {
+            $first = array_key_first($split);
+            $split[$first] = max(0.0, $split[$first] + $drift);
+        }
+
+        return $split;
+    }
+
+    /** The stored balance row, created like ProvisionBalances does (pro-rated, contractors 0). */
+    public function ensureRow(string $employeeId, string $typeId, int $year): LeaveBalance
+    {
+        $row = LeaveBalance::where(['employee_id' => $employeeId, 'leave_type_id' => $typeId, 'year' => $year])->lockForUpdate()->first();
+        if ($row) {
+            return $row;
+        }
+        $emp = Employee::find($employeeId);
+        $type = LeaveType::find($typeId);
+        $entitled = ! $type ? 0.0
+            : ($emp ? ($emp->employment_type === 'contractor' ? 0.0 : Entitlement::prorated($type, $emp->joined_on, $year)) : (float) $type->annual_quota);
+
+        return LeaveBalance::create([
+            'employee_id' => $employeeId, 'leave_type_id' => $typeId, 'year' => $year,
+            'entitled' => $entitled, 'used' => 0, 'pending' => 0,
+        ]);
+    }
+
+    /** Applies a delta (total days) to the stored balance rows of the request, each year taking its own share. */
     public function adjust(LeaveRequest $r, float $used = 0, float $pending = 0): void
     {
-        $year = (int) $r->starts_on->format('Y');
-        $row = LeaveBalance::where(['employee_id' => $r->employee_id, 'leave_type_id' => $r->leave_type_id, 'year' => $year])->lockForUpdate()->first();
-        if (! $row) {
-            $row = LeaveBalance::create([
-                'employee_id' => $r->employee_id, 'leave_type_id' => $r->leave_type_id, 'year' => $year,
-                'entitled' => LeaveType::find($r->leave_type_id)?->annual_quota ?? 0, 'used' => 0, 'pending' => 0,
+        $slices = $this->slices($r);
+        $total = (float) $r->days;
+        foreach ($slices as $year => $days) {
+            $share = $total > 0 ? $days / $total : 1.0;
+            $row = $this->ensureRow($r->employee_id, $r->leave_type_id, $year);
+            $row->update([
+                'used' => max(0, (float) $row->used + round($used * $share, 2)),
+                'pending' => max(0, (float) $row->pending + round($pending * $share, 2)),
             ]);
         }
-        $row->update([
-            'used' => max(0, (float) $row->used + $used),
-            'pending' => max(0, (float) $row->pending + $pending),
-        ]);
     }
 }

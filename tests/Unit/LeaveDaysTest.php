@@ -23,3 +23,7 @@ it('counts a half day as 0.5 only on a single working day', function () {
 it('returns 0 when the range is reversed', function () {
     expect(LeaveDays::count('2026-11-10', '2026-11-09'))->toBe(0.0);
 });
+
+it('splits a range by calendar year', function () {
+    expect(LeaveDays::splitByYear('2026-12-29', '2027-01-04'))->toBe([2026 => 3.0, 2027 => 2.0]);
+});

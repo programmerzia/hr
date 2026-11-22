@@ -4,9 +4,12 @@ namespace App\Domain\Leave\Actions;
 
 use App\Domain\Leave\Services\BalanceService;
 use App\Domain\Leave\Services\LeaveNotifier;
+use App\Domain\Leave\Services\PayrollGuard;
+use App\Models\Attachment;
 use App\Models\Employee;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 
 class SubmitLeave
@@ -15,7 +18,7 @@ class SubmitLeave
 
     public function __construct(private BalanceService $balances, private LeaveNotifier $notifier) {}
 
-    public function __invoke(Employee $employee, ?string $typeId, ?string $startsOn, ?string $endsOn, string $half, ?string $reason, ?string $attachmentName = null): LeaveRequest
+    public function __invoke(Employee $employee, ?string $typeId, ?string $startsOn, ?string $endsOn, string $half, ?string $reason, ?UploadedFile $attachment = null): LeaveRequest
     {
         $type = $typeId ? LeaveType::find($typeId) : null;
         if (! $type) {
@@ -42,12 +45,14 @@ class SubmitLeave
                 Fail::with('A half day needs a single date');
             }
         }
+        PayrollGuard::assertOpen($startsOn, $endsOn);
+        $byYear = $this->balances->daysByYear($startsOn, $endsOn, $half);
         $days = $this->balances->daysFor($startsOn, $endsOn, $half);
         if ($days <= 0) {
             Fail::with('The selected dates are all weekends or holidays');
         }
 
-        return DB::transaction(function () use ($employee, $type, $startsOn, $endsOn, $half, $reason, $days) {
+        return DB::transaction(function () use ($employee, $type, $startsOn, $endsOn, $half, $reason, $days, $byYear, $attachment) {
             $clash = LeaveRequest::where('employee_id', $employee->id)
                 ->whereIn('status', self::ACTIVE)
                 ->whereDate('starts_on', '<=', $endsOn)->whereDate('ends_on', '>=', $startsOn)
@@ -55,10 +60,12 @@ class SubmitLeave
             if ($clash) {
                 Fail::with('You already have leave on some of these dates');
             }
-            $bal = $this->balances->find($employee->id, $type->id, (int) substr($startsOn, 0, 4));
-            if ($bal && ! $bal['unlimited'] && $days > $bal['available']) {
-                $a = $bal['available'];
-                Fail::with('Only '.$this->num($a).' '.($a == 1 ? 'day' : 'days').' of '.mb_strtolower(preg_replace('/\s+leave$/i', '', $type->name)).' leave available');
+            foreach ($byYear as $year => $yearDays) {
+                $bal = $this->balances->find($employee->id, $type->id, $year);
+                if ($bal && ! $bal['unlimited'] && $yearDays > $bal['available']) {
+                    $a = $bal['available'];
+                    Fail::with('Only '.$this->num($a).' '.($a == 1 ? 'day' : 'days').' of '.mb_strtolower(preg_replace('/\s+leave$/i', '', $type->name)).' leave available'.(count($byYear) > 1 ? " in {$year}" : ''));
+                }
             }
             $request = LeaveRequest::create([
                 'employee_id' => $employee->id,
@@ -67,10 +74,19 @@ class SubmitLeave
                 'ends_on' => $endsOn,
                 'half_day' => $half,
                 'days' => $days,
+                'year_split' => count($byYear) > 1 ? array_map('floatval', $byYear) : null,
                 'reason' => $reason,
-                'attachment_path' => null, // no upload control yet; never store a made-up path
                 'status' => LeaveNotifier::leadOf($employee) ? 'pending_lead' : 'pending_hr',
             ]);
+            if ($attachment) {
+                $path = $attachment->store("leave-attachments/{$request->id}", 'local');
+                Attachment::create([
+                    'attachable_type' => 'leave_request', 'attachable_id' => $request->id,
+                    'name' => $attachment->getClientOriginalName(), 'mime' => (string) $attachment->getMimeType(),
+                    'size' => (int) $attachment->getSize(), 'path' => $path,
+                ]);
+                $request->update(['attachment_path' => $path]);
+            }
             $this->balances->adjust($request, pending: $days);
             $this->notifier->toNextDecider($request);
 

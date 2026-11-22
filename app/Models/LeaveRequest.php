@@ -19,6 +19,7 @@ class LeaveRequest extends Model
             'starts_on' => 'date',
             'ends_on' => 'date',
             'days' => 'float',
+            'year_split' => 'array',
         ];
     }
 

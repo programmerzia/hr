@@ -22,6 +22,7 @@ class AttendancePolicyRequest extends FormRequest
             'grace_minutes' => ['required', 'integer', 'min:0', 'max:120'],
             'standard_minutes' => ['required', 'integer', 'min:60', 'max:960'],
             'idle_timeout_minutes' => ['required', 'integer', 'min:1', 'max:120'],
+            'idle_by_input' => ['sometimes', 'boolean'],
             'lunch_cap_minutes' => ['required', 'integer', 'min:0', 'max:240'],
             'weekend_days' => ['present', 'array', 'max:6'],
             'weekend_days.*' => ['integer', 'between:0,6', 'distinct'],

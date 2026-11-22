@@ -60,7 +60,7 @@ export default function MyLeavePage() {
             value={b.unlimited ? 'Unlimited' : `${b.available} of ${b.entitled + b.carried_in}`}
             delta={{
               value: `${b.used} used, ${b.pending} pending${b.carried_in > 0 ? `, carried in ${b.carried_in}` : ''}${
-                !b.unlimited && (typeById(b.leave_type_id)?.annual_quota ?? 0) > b.entitled ? ', prorated' : ''
+                b.prorated ? ', prorated' : ''
               }`,
               tone: 'neutral',
             }}

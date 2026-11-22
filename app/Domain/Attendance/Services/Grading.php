@@ -36,6 +36,13 @@ final class Grading
         ];
     }
 
+    /** True when an approved first-half leave covers the date (the person is not expected in the morning). */
+    public static function hasFirstHalfLeave(string $employeeId, string $date): bool
+    {
+        return LeaveRequest::where('employee_id', $employeeId)->where('status', 'approved')->where('half_day', 'first_half')
+            ->whereDate('starts_on', '<=', $date)->whereDate('ends_on', '>=', $date)->exists();
+    }
+
     /** Grades the day and fills day_fraction/absence_kind/late_minutes/early_minutes (does not save). */
     public static function apply(AttendanceDay $day): array
     {

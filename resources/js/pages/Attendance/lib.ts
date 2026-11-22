@@ -59,11 +59,16 @@ export function dayStatus(day: AttendanceDay | null | undefined): AttendanceDayS
   return day?.status ?? 'not_started'
 }
 
+/** A day still in progress: only provisional facts (Late) may be shown for it. */
+export function isRunning(day: AttendanceDay | null | undefined): boolean {
+  return day?.status === 'working' || day?.status === 'on_break'
+}
+
 export type GradeVariant = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
 
 /** Day grade chip: Full / Half day / Absent / Excused / Paid leave / Unpaid leave (null for weekends and holidays). */
 export function dayGrade(day: AttendanceDay | null | undefined): { label: string; variant: GradeVariant } | null {
-  if (!day) return null
+  if (!day || isRunning(day)) return null // final grades only once the day is over
   switch (day.absence_kind) {
     case 'weekend':
     case 'holiday':
@@ -107,4 +112,9 @@ export function regularizableKinds(day: AttendanceDay): ('late' | 'early' | 'abs
   if (day.absence_kind === 'unapproved' || day.absence_kind === 'half_day' || day.status === 'absent') kinds.push('absent')
   if (day.auto_closed) kinds.push('auto_closed')
   return kinds
+}
+
+/** A day can be regularised once it is over: any past day, or today after it has ended. */
+export function canRegularise(day: AttendanceDay, today: string): boolean {
+  return day.date < today || (day.date === today && day.status === 'ended')
 }

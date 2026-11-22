@@ -20,6 +20,7 @@ class EndDay
             DayState::leaveWork($employee, $day, $now);
             $day->status = 'ended';
             $day->last_out_at = $now;
+            $day->last_activity_at = $now;
             DayState::rollup($day, $now);
             Grading::apply($day);
             $day->save();

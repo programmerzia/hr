@@ -12,6 +12,14 @@ class LeaveRequestPolicy
         return $user->employee_id === $request->employee_id;
     }
 
+    /** Supporting document: the requester, HR/management and the requester's lead. */
+    public function viewAttachment(User $user, LeaveRequest $request): bool
+    {
+        return $user->employee_id === $request->employee_id
+            || in_array($user->role, ['hr', 'management'], true)
+            || (bool) $user->employee?->leads($request->employee()->first());
+    }
+
     /** Team lead over the requester's team. Own requests are refused by the action with the mock's message. */
     public function approveLead(User $user, LeaveRequest $request): bool
     {

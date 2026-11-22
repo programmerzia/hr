@@ -27,6 +27,7 @@ const pick = (v: AttendancePolicyVersion | FormData, effective_from: string): Fo
   grace_minutes: v.grace_minutes,
   standard_minutes: v.standard_minutes,
   idle_timeout_minutes: v.idle_timeout_minutes,
+  idle_by_input: v.idle_by_input,
   lunch_cap_minutes: v.lunch_cap_minutes,
   half_day_after_minutes: v.half_day_after_minutes,
   early_leave_grace_minutes: v.early_leave_grace_minutes,
@@ -73,8 +74,8 @@ export default function AttendancePolicyPage() {
         description="Working hours and the rules that grade each day. A change never rewrites past days; it applies from the date you pick."
         tabs={<SettingsTabs />}
       />
-      <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-        <div className="flex flex-col gap-4">
+      <div className="grid gap-4 [&>*]:min-w-0 lg:grid-cols-[1fr_360px]">
+        <div className="flex min-w-0 flex-col gap-4">
           <Card>
             <CardHeader
               title="Versions"
@@ -109,10 +110,10 @@ export default function AttendancePolicyPage() {
                       <div className="flex justify-end">
                         {v.editable ? (
                           <>
-                            <IconButton label="Edit upcoming version" size="sm" onClick={() => startEdit(v)}>
+                            <IconButton label="Edit version" size="sm" onClick={() => startEdit(v)}>
                               <Pencil size={16} />
                             </IconButton>
-                            <IconButton label="Remove upcoming version" size="sm" onClick={() => setRemoving(v)}>
+                            <IconButton label="Remove version" size="sm" onClick={() => setRemoving(v)}>
                               <Trash2 size={16} />
                             </IconButton>
                           </>
@@ -140,7 +141,7 @@ export default function AttendancePolicyPage() {
         </div>
 
         <Card className="h-fit">
-          <CardHeader title={editing ? 'Edit upcoming version' : 'New version'} />
+          <CardHeader title={editing ? 'Edit version' : 'New version'} />
           <CardBody>
             <form onSubmit={submit} className="flex flex-col gap-4">
               <Field label="Takes effect from" required error={form.errors.effective_from} hint={`Must be ${formatDate(today)} or later.`}>
@@ -191,6 +192,10 @@ export default function AttendancePolicyPage() {
                   <Input type="number" min={0} max={480} value={form.data.absent_below_minutes} onChange={num('absent_below_minutes')} />
                 </Field>
               </div>
+              <div>
+                <Switch label="Idle detection by keyboard and mouse" checked={form.data.idle_by_input} onCheckedChange={(v) => form.setData('idle_by_input', v)} />
+                <p className="mt-1 text-xs text-fg-muted">Count time as idle when there is no keyboard or mouse input in this app. Off: idle only when the app is closed or offline.</p>
+              </div>
               <Switch
                 label="Leaving early counts toward the late penalty"
                 checked={form.data.early_counts_as_late}
@@ -218,8 +223,10 @@ export default function AttendancePolicyPage() {
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(o) => !o && setRemoving(null)}
-        title="Remove upcoming version"
-        description={removing ? `The version starting ${formatDate(removing.effective_from)} will be deleted. The current rules stay in force.` : ''}
+        title="Remove version"
+        description={removing ? (removing.is_current
+                ? `The version in force now (from ${formatDate(removing.effective_from)}) will be deleted. The previous rules apply again and today's ended days are graded again.`
+                : `The version starting ${formatDate(removing.effective_from)} will be deleted. The current rules stay in force.`) : ''}
         confirmLabel="Remove"
         destructive
         onConfirm={() => {

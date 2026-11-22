@@ -39,7 +39,9 @@ import type {
 import {
   EMPTY_TOTALS,
   dayGrade,
+  isRunning,
   liveTotals,
+  canRegularise,
   regularizableKinds,
   regularizationKindLabels,
   useServerNow,
@@ -58,6 +60,7 @@ interface WeekRow {
   totals: DayTotals
   off: 'Weekend' | 'Holiday' | null
   regularization: 'pending' | 'rejected' | null
+  last_note: string | null
 }
 
 interface MyDayProps {
@@ -74,7 +77,7 @@ interface MyDayProps {
   policy: AttendancePolicy
   regularizations: RegularizationRequest[]
   late_rule: { enabled: boolean; lates_per_penalty: number; count_this_month: number }
-  recent_days: { day: AttendanceDay; regularization: 'pending' | 'rejected' | null }[]
+  recent_days: { day: AttendanceDay; regularization: 'pending' | 'rejected' | null; last_note: string | null }[]
 }
 
 type RegKind = 'late' | 'early' | 'absent' | 'auto_closed'
@@ -168,9 +171,9 @@ export default function MyDayPage() {
                 {day && day.late_minutes > 0 && (
                   <StatusBadge status="late" label={`Late ${day.late_minutes}m`} />
                 )}
-                {day && day.early_minutes > 0 && <Badge variant="warning">Left early {day.early_minutes}m</Badge>}
+                {day && !isRunning(day) && day.early_minutes > 0 && <Badge variant="warning">Left early {day.early_minutes}m</Badge>}
                 {grade && <Badge variant={grade.variant}>{grade.label}</Badge>}
-                {segs.some((s) => s.note === 'Overtime session') && <Badge variant="info">Overtime</Badge>}
+                {!isRunning(day) && segs.some((s) => s.note === 'Overtime session') && <Badge variant="info">Overtime</Badge>}
               </div>
               {lr.enabled && lr.count_this_month > 0 && (
                 <p className="mt-1 text-sm text-fg-muted">
@@ -270,7 +273,7 @@ export default function MyDayPage() {
         </CardBody>
       </Card>
 
-      <section className="mt-6" aria-labelledby="today-h">
+      <section className="mt-6 min-w-0" aria-labelledby="today-h">
         <h2 id="today-h" className="mb-2 text-lg font-semibold">
           Today
         </h2>
@@ -286,7 +289,7 @@ export default function MyDayPage() {
         )}
       </section>
 
-      <section className="mt-6" aria-labelledby="week-h">
+      <section className="mt-6 min-w-0" aria-labelledby="week-h">
         <h2 id="week-h" className="mb-3 text-lg font-semibold">
           This week
         </h2>
@@ -362,7 +365,7 @@ export default function MyDayPage() {
                     <GradeChip day={rec && key < today ? rec : null} />
                   </Td>
                   <Td className="text-right">
-                    {rec && (rec.is_regularized || regularizableKinds(rec).length > 0) && (
+                    {rec && (rec.is_regularized || (canRegularise(rec, today) && regularizableKinds(rec).length > 0)) && (
                       <span className="inline-flex items-center gap-2">
                         {rec.is_regularized ? (
                           <Badge variant="success">Regularized</Badge>
@@ -371,6 +374,7 @@ export default function MyDayPage() {
                         ) : (
                           <>
                             {rejected && <StatusBadge status="rejected" label="Rejected" />}
+                            {rejected && w.last_note && <span className="max-w-48 truncate text-xs text-fg-muted" title={w.last_note}>{w.last_note}</span>}
                             <Button size="sm" variant="ghost" onClick={() => openReg(rec)}>
                               Regularise
                             </Button>
@@ -401,7 +405,7 @@ export default function MyDayPage() {
               </Tr>
             </Thead>
             <Tbody>
-              {p.recent_days.map(({ day: d, regularization }) => {
+              {p.recent_days.map(({ day: d, regularization, last_note }) => {
                 return (
                   <Tr key={d.id}>
                     <Td className="whitespace-nowrap">{format(parseISO(d.date), 'EEE d MMM')}</Td>
@@ -417,6 +421,7 @@ export default function MyDayPage() {
                       ) : (
                         <span className="inline-flex items-center gap-2">
                           {regularization === 'rejected' && <StatusBadge status="rejected" label="Rejected" />}
+                          {regularization === 'rejected' && last_note && <span className="max-w-48 truncate text-xs text-fg-muted" title={last_note}>{last_note}</span>}
                           <Button size="sm" variant="ghost" onClick={() => openReg(d)}>
                             Regularise
                           </Button>

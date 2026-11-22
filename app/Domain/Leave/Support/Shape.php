@@ -2,6 +2,7 @@
 
 namespace App\Domain\Leave\Support;
 
+use App\Domain\Leave\Services\Entitlement;
 use App\Http\Resources\LeaveBalanceResource;
 use App\Http\Resources\LeaveTypeResource;
 use App\Models\Employee;
@@ -24,7 +25,25 @@ final class Shape
             ...LeaveBalanceResource::make($row['balance'])->resolve(),
             'unlimited' => $row['unlimited'],
             'available' => $row['available'],
+            'prorated' => self::isProrated($row),
         ];
+    }
+
+    /** Entitled is below the full quota because of the joining date (not because it was edited by hand). */
+    private static function isProrated(array $row): bool
+    {
+        if ($row['unlimited']) {
+            return false;
+        }
+        $b = $row['balance'];
+        static $employees = [];
+        $emp = $employees[$b->employee_id] ??= Employee::find($b->employee_id);
+        if (! $emp || $emp->employment_type === 'contractor') {
+            return false;
+        }
+        $computed = Entitlement::prorated($row['type'], $emp->joined_on, (int) $b->year);
+
+        return $computed < (float) $row['type']->annual_quota && abs($computed - (float) $b->entitled) < 0.001;
     }
 
     /** Names for lists: id, name, designation, team_id. */

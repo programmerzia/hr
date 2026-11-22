@@ -92,7 +92,7 @@ it('auto-closed + keep leaves the grade unchanged', function () {
     [$lead, $member] = teamOfOne();
     $this->travelTo(now()->setDate(2026, 11, 11)->setTime(10, 0));
     app(StartWork::class)($member->employee);
-    $member->forceFill(['last_seen_at' => now()->setTime(13, 0)])->save();
+    AttendanceDay::firstOrFail()->update(['last_activity_at' => now()->setTime(13, 0)]);
     $this->travelTo(now()->setDate(2026, 11, 12)->setTime(0, 10));
     app(CloseDay::class)();
     $day = AttendanceDay::where('employee_id', $member->employee_id)->whereDate('date', '2026-11-11')->firstOrFail();

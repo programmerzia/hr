@@ -30,12 +30,10 @@ export function ReasonDialog({
   onConfirm: (text: string) => void
 }) {
   const [text, setText] = useState('')
-  const [touched, setTouched] = useState(false)
   const invalid = required && !text.trim()
   const close = (o: boolean) => {
     if (!o) {
       setText('')
-      setTouched(false)
     }
     onOpenChange(o)
   }
@@ -54,7 +52,6 @@ export function ReasonDialog({
             variant={destructive ? 'danger' : 'primary'}
             disabled={invalid || disabled}
             onClick={() => {
-              setTouched(true)
               if (invalid || disabled) return
               onConfirm(text.trim())
               close(false)
@@ -67,7 +64,7 @@ export function ReasonDialog({
     >
       <div className="flex flex-col gap-4 pb-2">
         {children}
-        <Field label={label} required={required} error={touched && invalid ? 'Add a short reason.' : undefined}>
+        <Field label={label} required={required} hint={required && invalid ? 'Add a short reason.' : undefined}>
           <Textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={300} />
         </Field>
       </div>

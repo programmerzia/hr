@@ -35,6 +35,8 @@ export interface LeavePerson {
 export interface BalanceRow extends LeaveBalance {
   unlimited: boolean
   available: number | null
+  /** Entitled is below the quota because of the joining date. */
+  prorated?: boolean
 }
 
 export const isUnlimited = (t: LeaveType) => !t.is_paid && t.annual_quota === 0

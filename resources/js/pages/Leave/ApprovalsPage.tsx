@@ -74,6 +74,37 @@ export default function ApprovalsPage() {
       {items.length === 0 ? (
         <EmptyTable icon={CalendarCheck} title="Nothing to approve" description="New leave requests will appear here as they come in." />
       ) : (
+        <>
+        <ul className="flex flex-col gap-2 md:hidden">
+          {items.map(({ request: r, overlaps }) => {
+            const e = personOf(r.employee_id)
+            return (
+              <li key={r.id} className="rounded-md border border-border bg-surface p-3 shadow-xs">
+                <button type="button" className="block w-full text-left" onClick={() => setSelectedId(r.id)}>
+                  <div className="flex items-start justify-between gap-2">
+                    <PersonCell name={e?.name ?? r.employee_id} subtitle={e?.designation} />
+                    <StatusBadge status={r.status} />
+                  </div>
+                  <p className="mt-2 text-sm">
+                    {typeOf(r.leave_type_id)?.name}, {formatRange(r.starts_on, r.ends_on)} ({formatDays(r.days)})
+                    {overlaps.length > 0 && <TriangleAlert size={14} className="ml-1.5 inline text-warning" aria-label="Overlaps with teammates" />}
+                  </p>
+                  <p className="mt-0.5 line-clamp-2 text-sm text-fg-muted">{r.reason}</p>
+                </button>
+                <div className="mt-3 flex items-center justify-end gap-1">
+                  {r.attachment_path && (
+                    <a href={route('leave.attachment', r.id)} className="mr-auto text-sm text-accent underline-offset-2 hover:underline">
+                      Attachment
+                    </a>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => { setError(undefined); setRejecting(r) }}>Reject</Button>
+                  <Button size="sm" variant="primary" onClick={() => approve(r)}>Approve</Button>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+        <div className="hidden md:block">
         <Table>
           <Thead>
             <tr>
@@ -112,6 +143,8 @@ export default function ApprovalsPage() {
             })}
           </Tbody>
         </Table>
+        </div>
+        </>
       )}
       {error && !rejecting && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
 
@@ -140,7 +173,7 @@ export default function ApprovalsPage() {
         footer={
           <>
             <Button variant="ghost" onClick={() => setRejecting(null)}>Cancel</Button>
-            <Button variant="danger" onClick={confirmReject}>Reject request</Button>
+            <Button variant="danger" onClick={confirmReject} disabled={!note.trim()}>Reject request</Button>
           </>
         }
       >
@@ -166,7 +199,6 @@ function RequestDetail({ item, people, types }: { item: QueueItem; people: Leave
     ['Duration', r.half_day === 'none' ? formatDays(r.days) : `${formatDays(r.days)} (${halfDayLabels[r.half_day].toLowerCase()})`],
     ['Requested', formatDate(r.created_at)],
     ['Reason', r.reason],
-    ['Attachment', r.attachment_path ? r.attachment_path.split('/').pop() ?? '' : 'None'],
   ]
 
   return (
@@ -179,6 +211,18 @@ function RequestDetail({ item, people, types }: { item: QueueItem; people: Leave
             <dd>{v}</dd>
           </div>
         ))}
+        <div className="contents">
+          <dt className="text-fg-muted">Attachment</dt>
+          <dd>
+            {r.attachment_path ? (
+              <a href={route('leave.attachment', r.id)} className="text-accent underline-offset-2 hover:underline">
+                Download
+              </a>
+            ) : (
+              'None'
+            )}
+          </dd>
+        </div>
       </dl>
 
       <section>

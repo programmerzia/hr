@@ -17,6 +17,7 @@ class AttendancePolicyResource extends JsonResource
             'grace_minutes' => (int) $this->grace_minutes,
             'standard_minutes' => (int) $this->standard_minutes,
             'idle_timeout_minutes' => (int) $this->idle_timeout_minutes,
+            'idle_by_input' => (bool) $this->idle_by_input,
             'lunch_cap_minutes' => (int) $this->lunch_cap_minutes,
             'half_day_after_minutes' => (int) $this->half_day_after_minutes,
             'early_leave_grace_minutes' => (int) $this->early_leave_grace_minutes,

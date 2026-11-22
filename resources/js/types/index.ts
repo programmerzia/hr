@@ -129,6 +129,7 @@ export interface AttendancePolicy {
   grace_minutes: number
   standard_minutes: number
   idle_timeout_minutes: number
+  idle_by_input: boolean
   lunch_cap_minutes: number
   half_day_after_minutes: number
   early_leave_grace_minutes: number
@@ -176,7 +177,7 @@ export type RegularizationResolution = 'excused' | 'paid_leave' | 'unpaid_leave'
 
 export type SegmentType = 'work' | 'break'
 export type BreakCategory = 'short' | 'tea' | 'lunch' | 'official' | 'idle' | 'signed_out' | 'offline'
-export type SegmentSource = 'login' | 'logout' | 'idle_sweep' | 'offline' | 'manual'
+export type SegmentSource = 'login' | 'logout' | 'idle_sweep' | 'idle' | 'offline' | 'manual'
 
 export interface TimeSegment {
   id: Id

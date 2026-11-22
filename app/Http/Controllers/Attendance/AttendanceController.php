@@ -11,6 +11,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Task;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
@@ -18,7 +19,8 @@ class AttendanceController extends Controller
 {
     public function heartbeat(Request $request, Heartbeat $heartbeat): RedirectResponse
     {
-        $heartbeat($request->user());
+        $data = $request->validate(['last_activity_at' => ['nullable', 'date']]);
+        $heartbeat($request->user(), isset($data['last_activity_at']) ? Carbon::parse($data['last_activity_at'])->setTimezone(config('app.timezone')) : null);
 
         return back();
     }

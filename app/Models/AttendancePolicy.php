@@ -14,7 +14,7 @@ class AttendancePolicy extends Model
 
     protected function casts(): array
     {
-        return ['weekend_days' => 'array', 'effective_from' => 'date', 'early_counts_as_late' => 'bool'];
+        return ['weekend_days' => 'array', 'effective_from' => 'date', 'early_counts_as_late' => 'bool', 'idle_by_input' => 'bool'];
     }
 
     public const DEFAULTS = [
@@ -23,6 +23,7 @@ class AttendancePolicy extends Model
         'grace_minutes' => 15,
         'standard_minutes' => 480,
         'idle_timeout_minutes' => 10,
+        'idle_by_input' => true,
         'lunch_cap_minutes' => 60,
         'effective_from' => '2000-01-01',
         'half_day_after_minutes' => 120,

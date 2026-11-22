@@ -4,6 +4,7 @@ namespace App\Domain\Attendance\Actions;
 
 use App\Domain\Attendance\Services\DayGrader;
 use App\Domain\Attendance\Services\DayState;
+use App\Domain\Attendance\Services\Grading;
 use App\Models\AttendancePolicy;
 use App\Models\Employee;
 use Illuminate\Support\Facades\DB;
@@ -43,7 +44,10 @@ class StartWork
             }
             // not_started, on_leave, absent, holiday: first sign-in of the day
             $date = $now->toDateString();
-            [$late, $halfDay] = DayGrader::late(AttendancePolicy::forDate($date), $date, $now);
+            // Lateness only means something on a working day: not a weekend, a holiday, or a day off on leave.
+            $cal = Grading::calendar($employee->id, $date);
+            $offDay = $cal['is_weekend'] || $cal['is_holiday'] || $cal['leave_weight'] >= 1 || Grading::hasFirstHalfLeave($employee->id, $date);
+            [$late, $halfDay] = $offDay ? [0, false] : DayGrader::late(AttendancePolicy::forDate($date), $date, $now);
             DayState::openWork($employee, $day, $now, null, [
                 'first_in_at' => $now,
                 'late_minutes' => $late,

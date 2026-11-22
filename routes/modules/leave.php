@@ -13,6 +13,7 @@ Route::prefix('leave')->name('leave.')->group(function () {
     Route::post('/', [MyLeaveController::class, 'store'])->name('store');
     Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar');
     Route::get('/policy', [PolicyController::class, 'index'])->name('policy');
+    Route::get('/{leaveRequest}/attachment', [MyLeaveController::class, 'attachment'])->name('attachment');
     Route::post('/{leaveRequest}/cancel', [MyLeaveController::class, 'cancel'])->name('cancel');
     Route::middleware('can:leave_approver')->group(function () {
         Route::get('/approvals', [ApprovalController::class, 'index'])->name('approvals');

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Domain\Attendance\Actions\RegradeDays;
 use App\Domain\Settings\SettingsLog;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\BulkHolidaysRequest;
@@ -34,6 +35,7 @@ class HolidayController extends Controller
     public function store(HolidayRequest $request): RedirectResponse
     {
         $h = Holiday::create($request->validated());
+        app(RegradeDays::class)->forDate($h->date->toDateString());
         SettingsLog::record($request->user(), 'holidays', "added holiday {$h->name} on ".$h->date->format('j M Y'), subjectId: $h->id);
 
         return back()->with('success', 'Holiday added');
@@ -59,6 +61,7 @@ class HolidayController extends Controller
                 continue;
             }
             Holiday::create(['date' => $m[1], 'name' => mb_substr(trim($m[2]), 0, 80)]);
+            app(RegradeDays::class)->forDate($m[1]);
             $added++;
         }
         if ($added > 0) {
@@ -78,6 +81,7 @@ class HolidayController extends Controller
             return back()->with('error', 'Payroll for '.$holiday->date->format('F Y').' is already paid, so this holiday cannot be removed.');
         }
         $holiday->delete();
+        app(RegradeDays::class)->forDate($holiday->date->toDateString());
         SettingsLog::record($request->user(), 'holidays', "removed holiday {$holiday->name} on ".$holiday->date->format('j M Y'), subjectId: $holiday->id);
 
         return back()->with('success', 'Holiday removed');

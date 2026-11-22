@@ -31,7 +31,7 @@ import {
 import { useAuth, useShared } from '../../inertia/props'
 import { formatDate, formatDuration, formatTime } from '../../lib/format'
 import type { AttendanceDay, Employee, Team } from '../../types'
-import type { DayTotals } from './lib'
+import { isRunning, type DayTotals } from './lib'
 import { heatCells, type HeatDay } from './useAttendanceSeries'
 
 interface HistoryRow {
@@ -183,7 +183,9 @@ export default function TeamHistoryPage() {
           </ul>
         </Card>
       )}
-      {rows.length === 0 ? (
+      {filters.from > filters.to ? (
+        <EmptyTable icon={CalendarDays} title="From is after To" description="Pick a start date that is on or before the end date." />
+      ) : rows.length === 0 ? (
         <EmptyTable icon={CalendarDays} title="No records" description="Nothing was recorded for this range and filter." />
       ) : (
         <Table>
@@ -221,7 +223,7 @@ export default function TeamHistoryPage() {
                   <Td numeric>{d.first_in_at ? formatDuration(t.break_seconds) : '-'}</Td>
                   <Td numeric>{d.first_in_at && t.offline_seconds >= 60 ? formatDuration(t.offline_seconds) : '-'}</Td>
                   <Td numeric>{d.late_minutes > 0 ? d.late_minutes : '-'}</Td>
-                  <Td numeric>{d.early_minutes > 0 ? d.early_minutes : '-'}</Td>
+                  <Td numeric>{d.early_minutes > 0 && !isRunning(d) ? d.early_minutes : '-'}</Td>
                   <Td>
                     <StatusBadge status={d.status} />
                   </Td>

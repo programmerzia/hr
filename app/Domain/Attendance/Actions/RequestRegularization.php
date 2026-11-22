@@ -2,8 +2,11 @@
 
 namespace App\Domain\Attendance\Actions;
 
+use App\Domain\Attendance\Support\AttendanceNotification;
+use App\Domain\Leave\Services\LeaveNotifier;
 use App\Models\AttendanceDay;
 use App\Models\RegularizationRequest;
+use App\Models\User;
 
 /** Port of requestRegularization(), extended with kinds (late, early, absent, auto_closed). Returns an error message, or null on success. */
 class RequestRegularization
@@ -16,6 +19,11 @@ class RequestRegularization
         if ($day->is_regularized || $reason === '' || ! $this->applies($day, $kind)) {
             return 'Could not send the request.';
         }
+        // Past days, or today once it has ended: a running day is still changing.
+        $date = $day->date->format('Y-m-d');
+        if ($date > now()->toDateString() || ($date === now()->toDateString() && $day->status !== 'ended')) {
+            return 'You can regularise a day once it has ended.';
+        }
         if (RegularizationRequest::where('attendance_day_id', $day->id)->where('status', 'pending')->exists()) {
             return 'A request for this day is already pending.';
         }
@@ -26,8 +34,28 @@ class RequestRegularization
             'kind' => $kind,
             'status' => 'pending',
         ]);
+        $this->notifyDeciders($day);
 
         return null;
+    }
+
+    /** The lead; HR (management when there is no HR user) when the person has no lead. Never the requester. */
+    private function notifyDeciders(AttendanceDay $day): void
+    {
+        $employee = $day->employee;
+        $lead = LeaveNotifier::leadOf($employee);
+        if ($lead) {
+            $users = User::where('employee_id', $lead->id)->get();
+        } else {
+            $users = User::where('role', 'hr')->where('employee_id', '!=', $employee->id)->get();
+            if ($users->isEmpty()) {
+                $users = User::where('role', 'management')->where('employee_id', '!=', $employee->id)->get();
+            }
+        }
+        $label = $day->date->format('D, M j');
+        foreach ($users as $u) {
+            $u->notify(new AttendanceNotification("{$employee->name} asked to regularise {$label}", null, '/team/regularizations'));
+        }
     }
 
     private function applies(AttendanceDay $day, string $kind): bool

@@ -2,6 +2,7 @@
 
 namespace App\Domain\Attendance\Actions;
 
+use App\Domain\Attendance\Services\CloseTime;
 use App\Domain\Attendance\Services\DayCalculator;
 use App\Domain\Attendance\Services\DayState;
 use App\Domain\Attendance\Services\Grading;
@@ -28,31 +29,43 @@ class CloseDay
         $policy = AttendancePolicy::forDate($date);
         $count = 0;
 
+        // Contractors are included only so a running day of theirs gets closed; no rows are created for them.
         $employees = Employee::whereIn('status', ['active', 'probation'])
-            ->where('employment_type', '!=', 'contractor')
             ->whereDate('joined_on', '<=', $date)
             ->where(fn ($q) => $q->whereNull('exited_on')->orWhereDate('exited_on', '>=', $date))
             ->get();
 
         foreach ($employees as $employee) {
-            $notify = DB::transaction(fn () => $this->closeOne($employee, $date, $policy));
-            if ($notify === false) {
-                continue;
-            }
-            $count++;
-            if ($notify) {
-                $this->notify($employee, $date, $notify);
+            if ($this->forEmployee($employee, $date, $policy) !== false) {
+                $count++;
             }
         }
 
         return $count;
     }
 
+    /** Closes one employee's day (notifying as the nightly run does). False when nothing needed closing. */
+    public function forEmployee(Employee $employee, string $date, ?AttendancePolicy $policy = null): bool
+    {
+        $notify = DB::transaction(fn () => $this->closeOne($employee, $date, $policy ?? AttendancePolicy::forDate($date)));
+        if ($notify === false) {
+            return false;
+        }
+        if ($notify) {
+            $this->notify($employee, $date, $notify);
+        }
+
+        return true;
+    }
+
     /** @return false|string|null false = already closed; a string = notification reason */
-    private function closeOne(Employee $employee, string $date, AttendancePolicy $policy): false|string|null
+    public function closeOne(Employee $employee, string $date, AttendancePolicy $policy): false|string|null
     {
         $day = AttendanceDay::where('employee_id', $employee->id)->whereDate('date', $date)->lockForUpdate()->first();
         if ($day?->closed_at) {
+            return false;
+        }
+        if ($employee->employment_type === 'contractor' && ! in_array($day?->status, ['working', 'on_break'], true)) {
             return false;
         }
         $cal = Grading::calendar($employee->id, $date);
@@ -66,10 +79,10 @@ class CloseDay
 
         $autoClosed = false;
         if (in_array($day->status, ['working', 'on_break'], true)) {
-            $end = $this->closeAt($employee, $day, $date, $policy);
+            $end = $this->closeAt($day, $date, $policy);
             $open = TimeSegment::where('attendance_day_id', $day->id)->whereNull('ended_at')->get();
             foreach ($open as $seg) {
-                $seg->update(['ended_at' => $end->max($seg->started_at), 'source' => 'manual', 'note' => 'auto-closed']);
+                $seg->update(['ended_at' => $end->max($seg->started_at), 'note' => 'auto-closed']);
             }
             DayState::closeEntries($employee, $end);
             $t = DayCalculator::totals($day->segments()->get(), $end, $policy->lunch_cap_minutes);
@@ -89,30 +102,20 @@ class CloseDay
         $day->closed_at = now();
         $day->save();
 
+        $workingDay = ! $cal['is_weekend'] && ! $cal['is_holiday'] && $cal['leave_weight'] < 1;
         if ($autoClosed) {
-            return 'auto_closed';
+            return $workingDay ? 'auto_closed' : null;
+        }
+        if ($employee->employment_type === 'contractor') {
+            return null;
         }
 
         return $g['absence_kind'] === 'unapproved' ? 'absent' : null;
     }
 
-    /** min(shift end, last heartbeat, now), never before the open segment started and never past the date's midnight. */
-    private function closeAt(Employee $employee, AttendanceDay $day, string $date, AttendancePolicy $policy): CarbonImmutable
+    private function closeAt(AttendanceDay $day, string $date, AttendancePolicy $policy): CarbonImmutable
     {
-        $tz = config('app.timezone');
-        $now = CarbonImmutable::now($tz);
-        $shiftEnd = CarbonImmutable::parse("{$date} {$policy->shift_end}", $tz);
-        $midnight = CarbonImmutable::parse($date, $tz)->endOfDay();
-        $seen = User::where('employee_id', $employee->id)->value('last_seen_at');
-        $seen = $seen ? CarbonImmutable::parse($seen, $tz) : $now;
-        $openStart = $day->openSegment()?->started_at;
-        $end = $now->min($seen);
-        if (! $openStart || $openStart->lt($shiftEnd)) {
-            $end = $end->min($shiftEnd);
-        }
-        $end = $end->min($midnight);
-
-        return $openStart ? $end->max(CarbonImmutable::instance($openStart)) : $end;
+        return CloseTime::at($date, $day->openSegment()?->started_at, $day->last_activity_at, $policy, null, CloseTime::legacySeen($day));
     }
 
     private function notify(Employee $employee, string $date, string $reason): void

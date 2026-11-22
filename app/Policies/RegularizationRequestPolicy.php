@@ -8,9 +8,9 @@ use App\Models\User;
 
 class RegularizationRequestPolicy
 {
-    /** Lead scope or HR/management, never the requester, never a plain employee. */
+    /** Lead scope or HR/management, never the requester, never a plain employee. An already decided request is the action's message, not a 403. */
     public function decide(User $user, RegularizationRequest $req): bool
     {
-        return $req->status === 'pending' && in_array($req->employee_id, Scope::decideIds($user), true);
+        return in_array($req->employee_id, Scope::decideIds($user), true);
     }
 }

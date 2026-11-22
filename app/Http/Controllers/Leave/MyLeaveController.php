@@ -11,14 +11,17 @@ use App\Http\Requests\Leave\StoreLeaveRequest;
 use App\Http\Resources\AttendancePolicyResource;
 use App\Http\Resources\HolidayResource;
 use App\Http\Resources\LeaveRequestResource;
+use App\Models\Attachment;
 use App\Models\AttendancePolicy;
 use App\Models\Holiday;
 use App\Models\LeaveRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MyLeaveController extends Controller
 {
@@ -46,10 +49,19 @@ class MyLeaveController extends Controller
         $d = $request->validated();
         $submit(
             $request->user()->employee, $d['leave_type_id'] ?? null, $d['starts_on'] ?? null, $d['ends_on'] ?? null,
-            $d['half_day'] ?? 'none', $d['reason'] ?? null, $d['attachment_name'] ?? null,
+            $d['half_day'] ?? 'none', $d['reason'] ?? null, $request->file('attachment'),
         );
 
         return back()->with('success', 'Leave request submitted');
+    }
+
+    public function attachment(LeaveRequest $leaveRequest): StreamedResponse
+    {
+        Gate::authorize('viewAttachment', $leaveRequest);
+        $file = Attachment::where(['attachable_type' => 'leave_request', 'attachable_id' => $leaveRequest->id])->first();
+        abort_unless($file && Storage::disk('local')->exists($file->path), 404);
+
+        return Storage::disk('local')->download($file->path, $file->name);
     }
 
     public function cancel(Request $request, LeaveRequest $leaveRequest, Cancel $cancel): RedirectResponse

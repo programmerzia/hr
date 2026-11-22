@@ -18,9 +18,13 @@ final class Series
     {
         $policy = AttendancePolicy::current();
         $out = [];
-        $segs = TimeSegment::whereIn('attendance_day_id', collect($dayIds)->all())->get()->groupBy('attendance_day_id');
+        $ids = collect($dayIds)->all();
+        $segs = TimeSegment::whereIn('attendance_day_id', $ids)->get()->groupBy('attendance_day_id');
+        $days = AttendanceDay::whereIn('id', $ids)->get()->keyBy('id');
         foreach ($segs as $id => $list) {
-            $out[$id] = DayCalculator::totals($list, $now, $policy->lunch_cap_minutes)['work_seconds'];
+            // A past day left running counts only up to when it is deemed to have ended.
+            $asOf = isset($days[$id]) ? CloseTime::asOf($days[$id], $list, $now) : $now;
+            $out[$id] = DayCalculator::totals($list, $asOf, $policy->lunch_cap_minutes)['work_seconds'];
         }
 
         return $out;

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Domain\Leave\Actions\ReprorateBalances;
 use App\Domain\Settings\SettingsLog;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\LeaveTypeRequest;
@@ -42,9 +43,13 @@ class LeaveTypeController extends Controller
         return back()->with('success', 'Leave type added');
     }
 
-    public function update(LeaveTypeRequest $request, LeaveType $leaveType): RedirectResponse
+    public function update(LeaveTypeRequest $request, LeaveType $leaveType, ReprorateBalances $reprorate): RedirectResponse
     {
+        $oldQuota = (float) $leaveType->annual_quota;
         $leaveType->update($request->validated());
+        if ((float) $leaveType->annual_quota !== $oldQuota) {
+            $reprorate($leaveType, $oldQuota);
+        }
         SettingsLog::record($request->user(), 'leave-types', "updated leave type {$leaveType->name}", subjectId: $leaveType->id);
 
         return back()->with('success', 'Leave type updated');

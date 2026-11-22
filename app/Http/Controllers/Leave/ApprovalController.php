@@ -66,7 +66,7 @@ class ApprovalController extends Controller
         match ($leaveRequest->status) {
             // HR/management stepping in for a lead approves straight through.
             'pending_lead' => in_array($user->role, ['hr', 'management'], true) && ! $user->employee?->leads($leaveRequest->employee()->first())
-                ? $hr($lead($leaveRequest, $user->employee, $note), $user->employee, $note)
+                ? $hr($leaveRequest, $user->employee, $note, onBehalfOfLead: true)
                 : $lead($leaveRequest, $user->employee, $note),
             'pending_hr' => $hr($leaveRequest, $user->employee, $note),
             default => Fail::with('This request is not waiting for a decision'),

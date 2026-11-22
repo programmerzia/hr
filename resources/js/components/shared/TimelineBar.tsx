@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { formatDuration, formatTime } from '../../lib/format'
 import { breakCategoryLabels } from '../../lib/status'
 import { cn } from '../../lib/cn'
@@ -62,7 +63,21 @@ export function TimelineBar({ segments, rangeStart, rangeEnd, now, targetAt, cla
   const span = Math.max(end - start, 1)
   const clock = now ?? end
   const pct = (t: number) => Math.min(100, Math.max(0, ((t - start) / span) * 100))
-  const ticks = hourTicks(start, end)
+  const axis = useRef<HTMLDivElement>(null)
+  const [axisWidth, setAxisWidth] = useState(0)
+  useEffect(() => {
+    const el = axis.current
+    if (!el) return
+    setAxisWidth(el.clientWidth)
+    const ro = new ResizeObserver(() => setAxisWidth(el.clientWidth))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  // Keep every Nth tick so labels (about 44px wide plus a gap) never collide on narrow screens.
+  const all = hourTicks(start, end)
+  const perTick = all.length > 1 ? (axisWidth * 3_600_000 * 2) / span : axisWidth
+  const step = axisWidth > 0 ? Math.max(1, Math.ceil(56 / Math.max(perTick, 1))) : 1
+  const ticks = all.filter((_, i) => i % step === 0)
   const target = targetAt ? pct(new Date(targetAt).getTime()) : null
 
   return (
@@ -111,7 +126,7 @@ export function TimelineBar({ segments, rangeStart, rangeEnd, now, targetAt, cla
           />
         )}
       </div>
-      <div className="relative mt-1 h-4 text-xs tabular-nums text-fg-subtle" aria-hidden>
+      <div ref={axis} className="relative mt-1 h-4 text-xs tabular-nums text-fg-subtle" aria-hidden>
         {ticks.map((t) => {
           const left = pct(t)
           return (

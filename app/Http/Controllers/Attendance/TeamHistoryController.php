@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Attendance;
 
+use App\Domain\Attendance\Services\CloseTime;
 use App\Domain\Attendance\Services\DayCalculator;
 use App\Domain\Attendance\Services\Overtime;
 use App\Domain\Attendance\Services\Scope;
@@ -120,7 +121,7 @@ class TeamHistoryController extends Controller
                 'day' => AttendanceDayResource::make($d)->resolve(),
                 'employee' => ['id' => $e->id, 'name' => $e->name, 'code' => $e->code],
                 'team' => $teams[$e->team_id] ?? null,
-                'totals' => DayCalculator::totals($segs[$d->id] ?? [], $now, $cap),
+                'totals' => DayCalculator::totals($segs[$d->id] ?? [], CloseTime::asOf($d, $segs[$d->id] ?? [], $now), $cap),
                 'regularization' => $reg,
                 'overtime' => $approval ? ['raw' => $d->work_seconds > 0 ? Overtime::raw($d) : 0, 'approved' => (int) $d->approved_overtime_minutes] : null,
             ];

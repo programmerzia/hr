@@ -35,6 +35,7 @@ class OvertimeController extends Controller
     public function revoke(Request $request, AttendanceDay $day): RedirectResponse
     {
         $this->authorizeDay($request, $day);
+        $this->requireApprovalMode($day);
         $this->record($request, $day, 0, 'rejected', 'Overtime approval revoked');
 
         return back()->with('success', 'Overtime approval removed');

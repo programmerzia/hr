@@ -36,11 +36,13 @@ class LeaveNotifier
             $lead = self::leadOf($r->employee);
             $users = $lead ? User::where('employee_id', $lead->id)->get() : collect();
         } else {
-            $users = User::where('role', 'hr')->get();
+            // Everyone who can decide at this stage except the requester; management when no other HR user exists.
+            $others = fn (string $role) => User::where('role', $role)
+                ->where(fn ($q) => $q->whereNull('employee_id')->orWhere('employee_id', '!=', $r->employee_id))->get();
+            $users = $others('hr');
             if ($users->isEmpty()) {
-                $users = User::where('role', 'management')->get();
+                $users = $others('management');
             }
-            $users = $users->where('employee_id', '!=', $r->employee_id);
         }
         $n = new LeaveRequestNotification(
             'Leave request from '.$r->employee->name, $this->label($r), '/leave/approvals',

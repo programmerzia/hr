@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Attendance;
 
+use App\Domain\Attendance\Services\CloseTime;
 use App\Domain\Attendance\Services\DayCalculator;
 use App\Domain\Attendance\Services\DayState;
 use App\Http\Controllers\Controller;
@@ -53,7 +54,9 @@ class MyDayController extends Controller
             $d = $start->copy()->addDays($i);
             $key = $d->toDateString();
             $rec = $weekDays[$key] ?? null;
-            $t = DayCalculator::totals($rec ? ($weekSegs[$rec->id] ?? []) : [], $now, $cap);
+            $recSegs = $rec ? ($weekSegs[$rec->id] ?? collect()) : collect();
+            // A past day left running is counted up to when it is deemed to have ended, not up to now.
+            $t = DayCalculator::totals($recSegs, $rec ? CloseTime::asOf($rec, $recSegs, $now) : $now, $cap);
             $dayRegs = $rec ? $regs->where('attendance_day_id', $rec->id) : collect();
             $week[] = [
                 'date' => $key,
@@ -61,6 +64,7 @@ class MyDayController extends Controller
                 'totals' => $t,
                 'off' => in_array($d->dayOfWeek, $policy->weekend_days ?? [], true) ? 'Weekend' : (isset($holidays[$key]) ? 'Holiday' : null),
                 'regularization' => $dayRegs->contains('status', 'pending') ? 'pending' : ($dayRegs->contains('status', 'rejected') ? 'rejected' : null),
+                'last_note' => $dayRegs->whereIn('status', ['approved', 'rejected'])->whereNotNull('note')->sortByDesc('decided_at')->first()?->note,
             ];
         }
 
@@ -109,11 +113,14 @@ class MyDayController extends Controller
     private function recentDays(string $employeeId, $regs): array
     {
         return AttendanceDay::where('employee_id', $employeeId)->where('is_regularized', false)
-            ->whereBetween('date', [now()->startOfMonth()->toDateString(), now()->subDay()->toDateString()])
+            ->whereBetween('date', [now()->startOfMonth()->toDateString(), now()->toDateString()])
+            ->where(fn ($q) => $q->whereDate('date', '<', now()->toDateString())->orWhere('status', 'ended'))
             ->where(fn ($q) => $q->whereIn('absence_kind', ['unapproved', 'half_day'])->orWhere('auto_closed', true)->orWhere('early_minutes', '>', 0))
             ->orderByDesc('date')->get()
             ->map(fn ($d) => [
                 'day' => AttendanceDayResource::make($d)->resolve(),
+                'last_note' => $regs->where('attendance_day_id', $d->id)->whereIn('status', ['approved', 'rejected'])->whereNotNull('note')
+                    ->sortByDesc('decided_at')->first()?->note,
                 'regularization' => $regs->where('attendance_day_id', $d->id)->contains('status', 'pending') ? 'pending'
                     : ($regs->where('attendance_day_id', $d->id)->contains('status', 'rejected') ? 'rejected' : null),
             ])->all();

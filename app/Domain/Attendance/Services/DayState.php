@@ -88,7 +88,7 @@ final class DayState
         if ($employee->current_task_id) {
             self::openEntry($employee, $seg, $employee->current_task_id, $at);
         }
-        $day->fill(['status' => 'working', 'last_out_at' => null, ...$patch]);
+        $day->fill(['status' => 'working', 'last_out_at' => null, 'last_activity_at' => $at, ...$patch]);
         self::rollup($day, $at);
 
         return $seg;
