@@ -446,3 +446,21 @@ it('C1 booking paid leave through a regularization re-grades the day', function 
     $ok = app(DecideRegularization::class)($req, 'approved', null, $lead->employee, 'paid_leave', $type->id);
     expect($ok)->toBeTrue()->and($day->refresh())->day_fraction->toBe(1.0)->absence_kind->toBe('paid_leave');
 });
+
+it('starts the work week on the first working day after the weekend', function (array $weekend, int $start) {
+    expect((new AttendancePolicy(['weekend_days' => $weekend]))->weekStartsOn())->toBe($start);
+})->with([
+    'Fri+Sat -> Sun' => [[5, 6], 0],
+    'Sat+Sun -> Mon' => [[0, 6], 1],
+    'Fri only -> Sat' => [[5], 6],
+    'none -> Mon' => [[], 1],
+]);
+
+it('my day week starts on Monday under a Sat+Sun weekend', function () {
+    AttendancePolicy::forDate('2026-11-23')->update(['weekend_days' => [0, 6]]);
+    Once::flush();
+    $u = makeUser();
+    $this->travelTo(now()->setDate(2026, 11, 23)->setTime(11, 0)); // Monday
+    $this->actingAs($u)->get('/my-day')->assertInertia(fn ($page) => $page
+        ->where('week.0.date', '2026-11-23')->where('week.6.date', '2026-11-29')->etc());
+});

@@ -1,5 +1,6 @@
 import { endOfMonth, format, startOfMonth, startOfWeek, endOfWeek, subDays, subMonths } from 'date-fns'
 import { cn } from '../../lib/cn'
+import { useWeekStartsOn } from '../../lib/week'
 import { Button } from './Button'
 import { Input } from './Input'
 
@@ -19,8 +20,9 @@ interface DateRangePickerProps {
 /** Two date inputs plus quick presets. */
 export function DateRangePicker({ value, onChange, className }: DateRangePickerProps) {
   const now = new Date()
+  const weekStartsOn = useWeekStartsOn()
   const presets: { label: string; range: DateRange }[] = [
-    { label: 'This week', range: { from: iso(startOfWeek(now)), to: iso(endOfWeek(now)) } },
+    { label: 'This week', range: { from: iso(startOfWeek(now, { weekStartsOn })), to: iso(endOfWeek(now, { weekStartsOn })) } },
     { label: 'Last 7 days', range: { from: iso(subDays(now, 6)), to: iso(now) } },
     { label: 'This month', range: { from: iso(startOfMonth(now)), to: iso(endOfMonth(now)) } },
     {

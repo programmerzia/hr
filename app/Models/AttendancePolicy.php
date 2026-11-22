@@ -42,6 +42,25 @@ class AttendancePolicy extends Model
             ?? static::create(self::DEFAULTS);
     }
 
+    /**
+     * First day of the work week (0 = Sun .. 6 = Sat): the first working day after the weekend, so a Fri+Sat weekend
+     * starts the week on Sunday and a Sat+Sun weekend on Monday. Monday when there is no weekend configured.
+     */
+    public function weekStartsOn(): int
+    {
+        $weekend = array_map('intval', $this->weekend_days ?? []);
+        if ($weekend === [] || count(array_unique($weekend)) >= 7) {
+            return 1;
+        }
+        for ($d = 0; $d < 7; $d++) {
+            if (! in_array($d, $weekend, true) && in_array(($d + 6) % 7, $weekend, true)) {
+                return $d;
+            }
+        }
+
+        return 1;
+    }
+
     public static function current(): self
     {
         return once(fn () => static::forDate(now()->toDateString()));

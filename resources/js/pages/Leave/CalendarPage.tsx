@@ -6,11 +6,12 @@ import { PageHeader } from '../../components/shared/PageHeader'
 import { Avatar, Button, IconButton, NativeSelect } from '../../components/ui'
 import { cn } from '../../lib/cn'
 import { useShared } from '../../inertia/props'
+import { useWeekStartsOn } from '../../lib/week'
 import type { LeaveRequest, LeaveType } from '../../types'
 import { isWeekend, shortTypeName, todayIso, toIso, type LeavePerson } from './helpers'
 
 const MAX_CHIPS = 3
-const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 interface CalendarProps {
   /** YYYY-MM */
@@ -23,7 +24,8 @@ interface CalendarProps {
 }
 
 export default function CalendarPage() {
-  const { month, wide, events, people, teams, leave_types } = useShared<CalendarProps>()
+  const { month, wide, events, people, teams, leave_types, attendance } = useShared<CalendarProps>()
+  const weekendDays = attendance?.policy?.weekend_days ?? [5, 6]
   const [teamId, setTeamId] = useState('all')
   const cursor = startOfMonth(parseISO(`${month}-01`))
   const goTo = (d: Date) =>
@@ -34,7 +36,12 @@ export default function CalendarPage() {
   const personName = (id: string) => people.find((p) => p.id === id)?.name ?? ''
   const approvedOn = (date: string) => events.filter((r) => r.starts_on <= date && r.ends_on >= date)
 
-  const days = eachDayOfInterval({ start: startOfWeek(cursor), end: endOfWeek(endOfMonth(cursor)) })
+  const weekStart = useWeekStartsOn()
+  const weekdays = [...dayNames.slice(weekStart), ...dayNames.slice(0, weekStart)]
+  const days = eachDayOfInterval({
+    start: startOfWeek(cursor, { weekStartsOn: weekStart }),
+    end: endOfWeek(endOfMonth(cursor), { weekStartsOn: weekStart }),
+  })
   const today = todayIso()
   const typeName = (id: string) => leave_types.find((t) => t.id === id)?.name ?? ''
 
@@ -68,15 +75,18 @@ export default function CalendarPage() {
       <h2 className="mb-2 text-lg font-semibold" aria-live="polite">{format(cursor, 'MMMM yyyy')}</h2>
       <div className="overflow-x-auto rounded-md border border-border bg-surface">
         <div className="grid min-w-[720px] grid-cols-7">
-          {weekdays.map((d, i) => (
-            <div key={d} className={cn('h-8 border-b border-border px-2 text-xs font-medium leading-8 text-fg-muted', i >= 5 && 'bg-surface-2')}>
+          {weekdays.map((d) => (
+            <div
+              key={d}
+              className={cn('h-8 border-b border-border px-2 text-xs font-medium leading-8 text-fg-muted', weekendDays.includes(dayNames.indexOf(d)) && 'bg-surface-2')}
+            >
               {d}
             </div>
           ))}
           {days.map((day) => {
             const iso = toIso(day)
             const away = approvedOn(iso).filter((r) => scopeIds.has(r.employee_id))
-            const weekend = isWeekend(day)
+            const weekend = isWeekend(day, weekendDays)
             const inMonth = isSameMonth(day, cursor)
             return (
               <div

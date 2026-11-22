@@ -20,7 +20,6 @@ use App\Models\RegularizationRequest;
 use App\Models\Task;
 use App\Models\TaskTimeEntry;
 use App\Models\TimeSegment;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -39,7 +38,7 @@ class MyDayController extends Controller
         $segments = $day ? $day->segments()->get() : collect();
         $totals = DayCalculator::totals($segments, $now, $cap);
 
-        $start = $now->copy()->startOfWeek(Carbon::SUNDAY)->startOfDay();
+        $start = $now->copy()->startOfWeek($policy->weekStartsOn())->startOfDay();
         $end = $start->copy()->addDays(6);
         $weekDays = AttendanceDay::where('employee_id', $employee->id)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])->get()
