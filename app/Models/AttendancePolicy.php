@@ -24,6 +24,7 @@ class AttendancePolicy extends Model
         'standard_minutes' => 480,
         'idle_timeout_minutes' => 10,
         'idle_by_input' => false,
+        'offline_after_minutes' => 3,
         'lunch_cap_minutes' => 60,
         'effective_from' => '2000-01-01',
         'half_day_after_minutes' => 120,

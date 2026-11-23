@@ -130,6 +130,7 @@ export interface AttendancePolicy {
   standard_minutes: number
   idle_timeout_minutes: number
   idle_by_input: boolean
+  offline_after_minutes: number
   lunch_cap_minutes: number
   half_day_after_minutes: number
   early_leave_grace_minutes: number

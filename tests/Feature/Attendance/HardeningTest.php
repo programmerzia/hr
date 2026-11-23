@@ -69,8 +69,7 @@ it('A1 login after a lost session credits the gap as offline, not work', functio
     $u = makeUser();
     at('2026-11-12 10:00');
     signIn($this, $u);
-    at('2026-11-12 10:05');
-    $this->post(route('heartbeat'));
+    beats($this, '2026-11-12 10:01', '2026-11-12 10:05', null);
     auth()->logout();
     at('2026-11-12 10:25');
     signIn($this, $u);
@@ -288,19 +287,92 @@ it('A9 by default an open background tab counts as working however old the last 
         ->and($day->last_activity_at->format('H:i'))->toBe('12:00');
 });
 
-it('A9 by default a gap without heartbeats over the timeout is offline, under it is work', function () {
+it('A9 a missed beat or two is still work; a 5-minute drop is offline from the last beat', function () {
     $u = makeUser();
     at('2026-11-12 10:00');
     signIn($this, $u);
-    at('2026-11-12 10:09');
-    $this->post(route('heartbeat'), ['last_activity_at' => '2026-11-12 10:00:00']);
+    at('2026-11-12 10:01');
+    $this->post(route('heartbeat'));
+    at('2026-11-12 10:03'); // background-tab throttling: 2 min between beats
+    $this->post(route('heartbeat'));
     expect(TimeSegment::where('attendance_day_id', rowOf($u->employee, '2026-11-12')->id)->where('type', 'break')->exists())->toBeFalse();
-    at('2026-11-12 10:25');
-    $this->post(route('heartbeat'), ['last_activity_at' => '2026-11-12 10:00:00']);
+    at('2026-11-12 10:08'); // internet gone for 5 min
+    $this->post(route('heartbeat'));
     $day = rowOf($u->employee, '2026-11-12');
     $off = TimeSegment::where('attendance_day_id', $day->id)->where('break_category', 'offline')->sole();
-    expect($day->status)->toBe('working')->and($off->started_at->format('H:i'))->toBe('10:09')
-        ->and($off->ended_at->format('H:i'))->toBe('10:25');
+    expect($day->status)->toBe('working')->and($off->started_at->format('H:i'))->toBe('10:03')
+        ->and($off->ended_at->format('H:i'))->toBe('10:08')->and($day->work_seconds)->toBe(180);
+});
+
+it('A9 the client offline time starts the gap, at most the threshold after the last beat', function () {
+    $u = makeUser();
+    at('2026-11-12 10:00');
+    signIn($this, $u);
+    at('2026-11-12 10:01');
+    $this->post(route('heartbeat'));
+    at('2026-11-12 10:07');
+    $this->post(route('heartbeat'), ['offline_since' => '2026-11-12 10:01:40']);
+    $off = TimeSegment::where('attendance_day_id', rowOf($u->employee, '2026-11-12')->id)->where('break_category', 'offline')->sole();
+    expect($off->started_at->format('H:i:s'))->toBe('10:01:40')->and($off->ended_at->format('H:i'))->toBe('10:07');
+
+    $v = makeUser();
+    auth()->logout();
+    at('2026-11-12 11:00');
+    signIn($this, $v);
+    at('2026-11-12 11:30');
+    $this->post(route('heartbeat'), ['offline_since' => '2026-11-12 11:29:00']); // claims online until 11:29: capped at +3 min
+    $off = TimeSegment::where('attendance_day_id', rowOf($v->employee, '2026-11-12')->id)->where('break_category', 'offline')->sole();
+    expect($off->started_at->format('H:i'))->toBe('11:03');
+});
+
+it('A10 a server outage (everyone silent) is work; the person\'s own silence around it is offline', function () {
+    $a = makeUser();
+    $b = makeUser();
+    $c = makeUser();
+    foreach ([$a, $b, $c] as $u) {
+        at('2026-11-12 10:00');
+        signIn($this, $u);
+        auth()->logout();
+    }
+    // Everyone beats every minute until 10:10, nobody reaches the server 10:11-10:16, all are back at 10:17.
+    for ($m = 1; $m <= 10; $m++) {
+        foreach ([$a, $b, $c] as $u) {
+            at(sprintf('2026-11-12 10:%02d', $m));
+            $this->actingAs($u)->post(route('heartbeat'));
+        }
+    }
+    at('2026-11-12 10:13');
+    $this->artisan('attendance:sweep')->assertSuccessful();
+    expect(rowOf($a->employee, '2026-11-12')->status)->toBe('working'); // no sweep during the server's own outage
+    at('2026-11-12 10:17');
+    foreach ([$b, $c, $a] as $u) {
+        $this->actingAs($u)->post(route('heartbeat'));
+    }
+    $day = rowOf($a->employee, '2026-11-12');
+    expect($day->status)->toBe('working')
+        ->and(TimeSegment::where('attendance_day_id', $day->id)->where('break_category', 'offline')->exists())->toBeFalse()
+        ->and(TimeSegment::where('attendance_day_id', $day->id)->where('source', 'outage')->count())->toBe(1);
+});
+
+it('A10 one person dropping while others keep beating is offline', function () {
+    $a = makeUser();
+    $b = makeUser();
+    $c = makeUser();
+    foreach ([$a, $b, $c] as $u) {
+        at('2026-11-12 10:00');
+        signIn($this, $u);
+        auth()->logout();
+    }
+    for ($m = 1; $m <= 16; $m++) {
+        foreach ($m <= 10 ? [$a, $b, $c] : [$b, $c] as $u) {
+            at(sprintf('2026-11-12 10:%02d', $m));
+            $this->actingAs($u)->post(route('heartbeat'));
+        }
+    }
+    at('2026-11-12 10:17');
+    $this->actingAs($a)->post(route('heartbeat'));
+    $off = TimeSegment::where('attendance_day_id', rowOf($a->employee, '2026-11-12')->id)->where('break_category', 'offline')->sole();
+    expect($off->started_at->format('H:i'))->toBe('10:10')->and($off->ended_at->format('H:i'))->toBe('10:17');
 });
 
 // ---- A8

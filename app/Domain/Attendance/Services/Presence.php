@@ -6,7 +6,7 @@ use App\Models\AttendanceDay;
 use App\Models\AttendancePolicy;
 use Carbon\CarbonInterface;
 
-/** Presence for team views: a working person whose last heartbeat is older than the idle timeout is offline. */
+/** Presence for team views: a working person whose last heartbeat is older than offline_after_minutes is offline. */
 final class Presence
 {
     /** @return array{state:string, offline_since:?CarbonInterface} */
@@ -21,7 +21,7 @@ final class Presence
             default => 'not_started',
         };
         if ($state === 'working' && $lastSeen
-            && $now->getTimestamp() - $lastSeen->getTimestamp() > AttendancePolicy::current()->idle_timeout_minutes * 60) {
+            && $now->getTimestamp() - $lastSeen->getTimestamp() > AttendancePolicy::current()->offline_after_minutes * 60) {
             return ['state' => 'offline', 'offline_since' => $lastSeen];
         }
 

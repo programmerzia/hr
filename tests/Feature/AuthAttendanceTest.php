@@ -70,7 +70,7 @@ it('logout with end_day ends the day', function () {
 it('heartbeat after an idle gap records an offline segment and resumes work', function () {
     $u = makeUser();
     $this->post(route('login.store'), ['email' => $u->email, 'password' => 'password']);
-    $this->travel(5)->minutes();
+    $this->travel(2)->minutes();
     $this->post(route('heartbeat'))->assertRedirect();
     $this->travel(25)->minutes();
     $this->from('/')->post(route('heartbeat'))->assertRedirect('/');

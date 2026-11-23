@@ -28,6 +28,7 @@ const pick = (v: AttendancePolicyVersion | FormData, effective_from: string): Fo
   standard_minutes: v.standard_minutes,
   idle_timeout_minutes: v.idle_timeout_minutes,
   idle_by_input: v.idle_by_input,
+  offline_after_minutes: v.offline_after_minutes,
   lunch_cap_minutes: v.lunch_cap_minutes,
   half_day_after_minutes: v.half_day_after_minutes,
   early_leave_grace_minutes: v.early_leave_grace_minutes,
@@ -162,7 +163,14 @@ export default function AttendancePolicyPage() {
                 <Field label="Full day (min)" error={form.errors.standard_minutes} hint="Expected work per day.">
                   <Input type="number" min={60} max={960} value={form.data.standard_minutes} onChange={num('standard_minutes')} />
                 </Field>
-                <Field label="Idle timeout (min)" error={form.errors.idle_timeout_minutes} hint="No activity for this long marks the person offline.">
+                <Field
+                  label="Offline after (min)"
+                  error={form.errors.offline_after_minutes}
+                  hint="No signal from the HR tab for this long (closed, asleep, no internet) is offline from the last signal."
+                >
+                  <Input type="number" min={2} max={60} value={form.data.offline_after_minutes} onChange={num('offline_after_minutes')} />
+                </Field>
+                <Field label="Strict idle timeout (min)" error={form.errors.idle_timeout_minutes} hint="Only with strict idle on: no input in the HR tab for this long.">
                   <Input type="number" min={1} max={120} value={form.data.idle_timeout_minutes} onChange={num('idle_timeout_minutes')} />
                 </Field>
                 <Field label="Lunch cap (min)" error={form.errors.lunch_cap_minutes} hint="Longest lunch break that is not flagged.">
@@ -196,8 +204,8 @@ export default function AttendancePolicyPage() {
                 <Switch label="Strict idle: require keyboard or mouse input in the HR tab" checked={form.data.idle_by_input} onCheckedChange={(v) => form.setData('idle_by_input', v)} />
                 <p className="mt-1 text-xs text-fg-muted">
                   Off (default): people count as working while the HR tab is open, even in the background (other apps, meetings). Time is offline
-                  only after the idle timeout with the tab closed, the device asleep or no internet. On: also idle after the timeout with no input
-                  in the HR tab, which flags work done in other apps.
+                  when the tab sends no signal for the "Offline after" minutes (closed, asleep, no internet). On: also idle after the strict idle
+                  timeout with no input in the HR tab, which flags work done in other apps.
                 </p>
               </div>
               <Switch

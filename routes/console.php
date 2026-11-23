@@ -2,6 +2,7 @@
 
 use App\Domain\Attendance\Actions\CloseDay;
 use App\Domain\Attendance\Actions\SweepIdle;
+use App\Domain\Attendance\Services\Outage;
 use App\Domain\Leave\Actions\RolloverYear;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -12,6 +13,7 @@ Artisan::command('attendance:sweep', function (SweepIdle $sweep) {
 })->purpose('Open idle breaks for working days without a recent heartbeat');
 
 Schedule::command('attendance:sweep')->everyMinute()->withoutOverlapping();
+Schedule::call(fn () => Outage::prune(now()))->name('heartbeat-ticks:prune')->daily();
 
 Schedule::command('billing:sweep-overdue')->daily();
 

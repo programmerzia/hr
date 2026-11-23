@@ -20,11 +20,13 @@ final class Reconciler
 {
     public const OFFLINE_NOTE = 'App closed, device asleep or no connection';
 
+    public const OUTAGE_NOTE = 'Server unreachable for everyone, counted as work';
+
     /**
      * @param  bool  $live  false at sign-in: only the stale-day and offline-gap steps run (StartWork does the rest)
      * @return bool whether the day changed
      */
-    public function __invoke(User $user, CarbonInterface $now, ?CarbonInterface $activityAt = null, bool $live = true): bool
+    public function __invoke(User $user, CarbonInterface $now, ?CarbonInterface $activityAt = null, bool $live = true, ?CarbonInterface $offlineSince = null): bool
     {
         $employee = $user->employee;
         if (! $employee) {
@@ -37,11 +39,11 @@ final class Reconciler
             $activityAt = $activityAt ? $now : null;
         }
         $lastSeen = $user->last_seen_at;
-        $continuous = $lastSeen && $now->getTimestamp() - $lastSeen->getTimestamp() <= $idle;
+        $continuous = $lastSeen && $now->getTimestamp() - $lastSeen->getTimestamp() <= $policy->offline_after_minutes * 60;
 
         $healed = $this->closeStalePastDays($user, $now);
         $changed = $healed;
-        if ($lastSeen && $this->offlineGap($user, $now)) {
+        if ($lastSeen && $this->offlineGap($user, $now, $offlineSince)) {
             $changed = true;
         }
         if (! $live) {
@@ -111,47 +113,80 @@ final class Reconciler
         return AttendanceDay::where('employee_id', $user->employee_id)->whereDate('date', $now->copy()->subDay()->toDateString())->where('auto_closed', true)->exists();
     }
 
-    /** A gap with no heartbeat at all becomes an offline break; an idle break already open stays idle. */
-    private function offlineGap(User $user, CarbonInterface $now): bool
+    /**
+     * A gap between heartbeats longer than offline_after_minutes becomes offline from the last beat, except stretches in
+     * which the server heard from nobody (its own outage: counted as work). $offlineSince is the client's own record
+     * of losing the connection; it may only move the start later, by at most the threshold after the last beat.
+     */
+    private function offlineGap(User $user, CarbonInterface $now, ?CarbonInterface $offlineSince = null): bool
     {
         $employee = $user->employee;
-        $idle = AttendancePolicy::current()->idle_timeout_minutes * 60;
+        $limit = AttendancePolicy::current()->offline_after_minutes * 60;
         $lastSeen = $user->last_seen_at->copy();
-        if ($now->getTimestamp() - $lastSeen->getTimestamp() <= $idle) {
+        if ($now->getTimestamp() - $lastSeen->getTimestamp() <= $limit) {
             return false;
         }
         $day = DayState::find($employee);
         $open = $day?->openSegment();
         if ($day && $open && $day->status === 'on_break' && $open->break_category === 'idle' && $open->source === 'idle_sweep') {
-            // The sweep saw no heartbeat at all: on return that time was offline, not idle at the desk. Resume work.
-            $open->update(['break_category' => 'offline', 'ended_at' => $now, 'note' => self::OFFLINE_NOTE, 'source' => 'offline']);
-            DayState::closeEntries($employee, $open->started_at);
-            DayState::openWork($employee, $day, $now, null);
-
-            return true;
-        }
-        if (! $day || ! $open || $day->status !== 'working' || $open->type !== 'work') {
+            // The sweep saw no heartbeat at all: on return that time is offline, not idle at the desk.
+            $from = $open->started_at->copy();
+            $open->delete();
+        } elseif ($day && $open && $day->status === 'working' && $open->type === 'work') {
+            // A heartbeat from before this work segment started says nothing about it.
+            $from = $open->started_at->gt($lastSeen) ? $open->started_at->copy() : $lastSeen;
+            if ($now->getTimestamp() - $from->getTimestamp() <= $limit) {
+                return false;
+            }
+            if ($from->getTimestamp() <= $open->started_at->getTimestamp()) {
+                $open->delete();
+            } else {
+                $open->update(['ended_at' => $from]);
+            }
+        } else {
             return false; // a break the person chose, an input-idle break, or a day that is not running: no extra lost time
         }
-        // A heartbeat from before this work segment started says nothing about it.
-        if ($open->started_at->gt($lastSeen)) {
-            $lastSeen = $open->started_at->copy();
-        }
-        if ($now->getTimestamp() - $lastSeen->getTimestamp() <= $idle) {
-            return false;
-        }
-        if ($lastSeen->getTimestamp() <= $open->started_at->getTimestamp()) {
-            $open->delete();
-        } else {
-            $open->update(['ended_at' => $lastSeen]);
-        }
-        TimeSegment::create([
-            'attendance_day_id' => $day->id, 'type' => 'break', 'break_category' => 'offline',
-            'started_at' => $lastSeen, 'ended_at' => $now, 'note' => self::OFFLINE_NOTE, 'source' => 'offline',
-        ]);
-        DayState::closeEntries($employee, $lastSeen);
+
+        $this->fillGap($user, $day, $from, $now, $offlineSince, $limit);
+        DayState::closeEntries($employee, $from);
         DayState::openWork($employee, $day, $now, null);
 
         return true;
+    }
+
+    /** Writes the closed segments for ($from, $now): offline, with work for a server outage or before the client dropped. */
+    private function fillGap(User $user, AttendanceDay $day, CarbonInterface $from, CarbonInterface $now, ?CarbonInterface $offlineSince, int $limit): void
+    {
+        $pieces = [];
+        if ($offlineSince && $offlineSince->gt($from) && $offlineSince->lt($now)) {
+            $cut = $offlineSince->getTimestamp() - $from->getTimestamp() > $limit ? $from->copy()->addSeconds($limit) : $offlineSince->copy();
+            $pieces = [['work', $from, $cut, 'login'], ['offline', $cut, $now]];
+        } else {
+            $at = $from->copy();
+            foreach (Outage::darkWindows($user->id, $from, $now) as [$a, $b]) {
+                // Silence shorter than the threshold next to an outage is part of it (it would never be offline alone).
+                if ($a->getTimestamp() - $at->getTimestamp() < $limit && $pieces === []) {
+                    $a = $at->copy();
+                }
+                $pieces[] = ['offline', $at, $a];
+                $pieces[] = ['work', $a, $b, 'outage'];
+                $at = $b;
+            }
+            if ($pieces !== [] && $now->getTimestamp() - $at->getTimestamp() < $limit) {
+                $pieces[count($pieces) - 1][2] = $now->copy();
+                $at = $now->copy();
+            }
+            $pieces[] = ['offline', $at, $now];
+        }
+        foreach ($pieces as $p) {
+            if ($p[2]->getTimestamp() <= $p[1]->getTimestamp()) {
+                continue;
+            }
+            TimeSegment::create($p[0] === 'work'
+                ? ['attendance_day_id' => $day->id, 'type' => 'work', 'started_at' => $p[1], 'ended_at' => $p[2],
+                    'source' => $p[3], 'note' => $p[3] === 'outage' ? self::OUTAGE_NOTE : null]
+                : ['attendance_day_id' => $day->id, 'type' => 'break', 'break_category' => 'offline',
+                    'started_at' => $p[1], 'ended_at' => $p[2], 'note' => self::OFFLINE_NOTE, 'source' => 'offline']);
+        }
     }
 }

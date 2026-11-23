@@ -19,8 +19,9 @@ class AttendanceController extends Controller
 {
     public function heartbeat(Request $request, Heartbeat $heartbeat): RedirectResponse
     {
-        $data = $request->validate(['last_activity_at' => ['nullable', 'date']]);
-        $heartbeat($request->user(), isset($data['last_activity_at']) ? Carbon::parse($data['last_activity_at'])->setTimezone(config('app.timezone')) : null);
+        $data = $request->validate(['last_activity_at' => ['nullable', 'date'], 'offline_since' => ['nullable', 'date']]);
+        $at = fn (?string $v) => $v ? Carbon::parse($v)->setTimezone(config('app.timezone')) : null;
+        $heartbeat($request->user(), $at($data['last_activity_at'] ?? null), $at($data['offline_since'] ?? null));
 
         return back();
     }

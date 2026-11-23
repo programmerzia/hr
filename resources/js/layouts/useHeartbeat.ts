@@ -27,14 +27,31 @@ export function useHeartbeat() {
       }
     }
     let lastBeat = 0
+    // When this device lost its connection; sent with the first beat back so the server starts the offline gap there.
+    let offlineSince: number | null = navigator.onLine ? null : Date.now()
     const beat = () => {
-      if (!navigator.onLine) return
+      if (!navigator.onLine) {
+        offlineSince ??= Date.now()
+        return
+      }
       lastBeat = Date.now()
+      const since = offlineSince
       router.post(
         route('heartbeat'),
-        { last_activity_at: new Date(lastActivity).toISOString() },
-        { preserveState: true, preserveScroll: true, only: ['attendance', 'badges'], async: true },
+        { last_activity_at: new Date(lastActivity).toISOString(), offline_since: since ? new Date(since).toISOString() : null },
+        {
+          preserveState: true,
+          preserveScroll: true,
+          only: ['attendance', 'badges'],
+          async: true,
+          onSuccess: () => {
+            if (offlineSince === since) offlineSince = null
+          },
+        },
       )
+    }
+    const onOffline = () => {
+      offlineSince ??= Date.now()
     }
     // Back after a while (woke from sleep, reconnected, tab refocused): beat now; skip if one just went out.
     const beatSoon = () => {
@@ -50,6 +67,7 @@ export function useHeartbeat() {
     window.addEventListener('mousemove', onMove, { passive: true })
     document.addEventListener('visibilitychange', onVisible)
     window.addEventListener('online', beatSoon)
+    window.addEventListener('offline', onOffline)
 
     beat()
     const id = window.setInterval(beat, 60_000)
@@ -59,6 +77,7 @@ export function useHeartbeat() {
       window.removeEventListener('mousemove', onMove)
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('online', beatSoon)
+      window.removeEventListener('offline', onOffline)
     }
   }, [])
 }
