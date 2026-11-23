@@ -38,6 +38,13 @@ function beats($test, string $from, string $to, ?string $activity): void
     }
 }
 
+/** Turns on input-based ("strict") idle for the policy in force on $date; presence is the default. */
+function strictIdle(string $date = '2026-11-12'): void
+{
+    AttendancePolicy::forDate($date)->update(['idle_by_input' => true]);
+    Once::flush();
+}
+
 function rowOf(Employee $e, string $date): ?AttendanceDay
 {
     return AttendanceDay::where('employee_id', $e->id)->whereDate('date', $date)->first();
@@ -189,6 +196,7 @@ it('A5 no "closed automatically" notification for a weekend day', function () {
 it('A6 a heartbeat with stale client activity opens an idle break from the last input', function () {
     $u = makeUser();
     at('2026-11-12 10:00');
+    strictIdle();
     signIn($this, $u);
     beats($this, '2026-11-12 10:01', '2026-11-12 10:13', '2026-11-12 10:02:00');
 
@@ -214,6 +222,7 @@ it('A6 with idle_by_input off the client activity time is ignored', function () 
 it('A6 the next input closes the idle break and resumes work', function () {
     $u = makeUser();
     at('2026-11-12 10:00');
+    strictIdle();
     signIn($this, $u);
     beats($this, '2026-11-12 10:01', '2026-11-12 10:13', '2026-11-12 10:02:00');
     at('2026-11-12 10:14');
@@ -228,6 +237,7 @@ it('A6 the next input closes the idle break and resumes work', function () {
 it('A6 a stale heartbeat keeps the idle break going', function () {
     $u = makeUser();
     at('2026-11-12 10:00');
+    strictIdle();
     signIn($this, $u);
     beats($this, '2026-11-12 10:01', '2026-11-12 10:15', '2026-11-12 10:02:00');
     expect(rowOf($u->employee, '2026-11-12')->status)->toBe('on_break');
@@ -236,6 +246,7 @@ it('A6 a stale heartbeat keeps the idle break going', function () {
 it('A6 client activity time is clamped to the open segment and to now', function () {
     $u = makeUser();
     at('2026-11-12 10:00');
+    strictIdle();
     signIn($this, $u);
     beats($this, '2026-11-12 10:01', '2026-11-12 10:13', '2020-01-01 00:00:00');
     $open = rowOf($u->employee, '2026-11-12')->openSegment();
@@ -250,17 +261,46 @@ it('A6 client activity time is clamped to the open segment and to now', function
     expect($day->status)->toBe('working')->and($day->last_activity_at->format('H:i'))->toBe('11:30');
 });
 
-it('A7 a sweep-opened idle break stays idle when the person returns', function () {
+it('A7 a sweep-opened break becomes offline when the person returns, and work resumes', function () {
     $u = makeUser();
     at('2026-11-12 10:00');
     signIn($this, $u);
     at('2026-11-12 10:12');
     $this->artisan('attendance:sweep')->assertSuccessful();
+    at('2026-11-12 10:30');
     $this->post(route('heartbeat'));
     $day = rowOf($u->employee, '2026-11-12');
+    $off = TimeSegment::where('attendance_day_id', $day->id)->where('break_category', 'offline')->first();
     expect($day->status)->toBe('working')
-        ->and(TimeSegment::where('attendance_day_id', $day->id)->where('break_category', 'idle')->count())->toBe(1)
-        ->and(TimeSegment::where('attendance_day_id', $day->id)->where('break_category', 'offline')->count())->toBe(0);
+        ->and(TimeSegment::where('attendance_day_id', $day->id)->where('break_category', 'idle')->count())->toBe(0)
+        ->and($off->started_at->format('H:i'))->toBe('10:00')->and($off->ended_at->format('H:i'))->toBe('10:30')
+        ->and($off->note)->toBe('App closed, device asleep or no connection');
+});
+
+it('A9 by default an open background tab counts as working however old the last input is', function () {
+    $u = makeUser();
+    at('2026-11-12 10:00');
+    signIn($this, $u);
+    beats($this, '2026-11-12 10:01', '2026-11-12 12:00', '2026-11-12 10:00:30');
+    $day = rowOf($u->employee, '2026-11-12');
+    expect($day->status)->toBe('working')
+        ->and(TimeSegment::where('attendance_day_id', $day->id)->where('type', 'break')->exists())->toBeFalse()
+        ->and($day->last_activity_at->format('H:i'))->toBe('12:00');
+});
+
+it('A9 by default a gap without heartbeats over the timeout is offline, under it is work', function () {
+    $u = makeUser();
+    at('2026-11-12 10:00');
+    signIn($this, $u);
+    at('2026-11-12 10:09');
+    $this->post(route('heartbeat'), ['last_activity_at' => '2026-11-12 10:00:00']);
+    expect(TimeSegment::where('attendance_day_id', rowOf($u->employee, '2026-11-12')->id)->where('type', 'break')->exists())->toBeFalse();
+    at('2026-11-12 10:25');
+    $this->post(route('heartbeat'), ['last_activity_at' => '2026-11-12 10:00:00']);
+    $day = rowOf($u->employee, '2026-11-12');
+    $off = TimeSegment::where('attendance_day_id', $day->id)->where('break_category', 'offline')->sole();
+    expect($day->status)->toBe('working')->and($off->started_at->format('H:i'))->toBe('10:09')
+        ->and($off->ended_at->format('H:i'))->toBe('10:25');
 });
 
 // ---- A8

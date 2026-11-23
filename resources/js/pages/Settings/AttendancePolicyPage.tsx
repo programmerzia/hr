@@ -193,8 +193,12 @@ export default function AttendancePolicyPage() {
                 </Field>
               </div>
               <div>
-                <Switch label="Idle detection by keyboard and mouse" checked={form.data.idle_by_input} onCheckedChange={(v) => form.setData('idle_by_input', v)} />
-                <p className="mt-1 text-xs text-fg-muted">Count time as idle when there is no keyboard or mouse input in this app. Off: idle only when the app is closed or offline.</p>
+                <Switch label="Strict idle: require keyboard or mouse input in the HR tab" checked={form.data.idle_by_input} onCheckedChange={(v) => form.setData('idle_by_input', v)} />
+                <p className="mt-1 text-xs text-fg-muted">
+                  Off (default): people count as working while the HR tab is open, even in the background (other apps, meetings). Time is offline
+                  only after the idle timeout with the tab closed, the device asleep or no internet. On: also idle after the timeout with no input
+                  in the HR tab, which flags work done in other apps.
+                </p>
               </div>
               <Switch
                 label="Leaving early counts toward the late penalty"

@@ -18,6 +18,8 @@ use Carbon\CarbonInterface;
  */
 final class Reconciler
 {
+    public const OFFLINE_NOTE = 'App closed, device asleep or no connection';
+
     /**
      * @param  bool  $live  false at sign-in: only the stale-day and offline-gap steps run (StartWork does the rest)
      * @return bool whether the day changed
@@ -62,7 +64,7 @@ final class Reconciler
             DayState::leaveWork($employee, $day, $seen);
             TimeSegment::create([
                 'attendance_day_id' => $day->id, 'type' => 'break', 'break_category' => 'idle',
-                'started_at' => $seen, 'note' => 'No activity detected', 'source' => 'idle',
+                'started_at' => $seen, 'note' => 'No keyboard or mouse input', 'source' => 'idle',
             ]);
             $day->status = 'on_break';
             $day->last_activity_at = $seen;
@@ -120,8 +122,16 @@ final class Reconciler
         }
         $day = DayState::find($employee);
         $open = $day?->openSegment();
+        if ($day && $open && $day->status === 'on_break' && $open->break_category === 'idle' && $open->source === 'idle_sweep') {
+            // The sweep saw no heartbeat at all: on return that time was offline, not idle at the desk. Resume work.
+            $open->update(['break_category' => 'offline', 'ended_at' => $now, 'note' => self::OFFLINE_NOTE, 'source' => 'offline']);
+            DayState::closeEntries($employee, $open->started_at);
+            DayState::openWork($employee, $day, $now, null);
+
+            return true;
+        }
         if (! $day || ! $open || $day->status !== 'working' || $open->type !== 'work') {
-            return false; // a break the person chose, an idle break, or a day that is not running: no extra lost time
+            return false; // a break the person chose, an input-idle break, or a day that is not running: no extra lost time
         }
         // A heartbeat from before this work segment started says nothing about it.
         if ($open->started_at->gt($lastSeen)) {
@@ -137,7 +147,7 @@ final class Reconciler
         }
         TimeSegment::create([
             'attendance_day_id' => $day->id, 'type' => 'break', 'break_category' => 'offline',
-            'started_at' => $lastSeen, 'ended_at' => $now, 'note' => 'App closed or no connection', 'source' => 'offline',
+            'started_at' => $lastSeen, 'ended_at' => $now, 'note' => self::OFFLINE_NOTE, 'source' => 'offline',
         ]);
         DayState::closeEntries($employee, $lastSeen);
         DayState::openWork($employee, $day, $now, null);

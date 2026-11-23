@@ -3,6 +3,7 @@
 namespace App\Domain\Attendance\Actions;
 
 use App\Domain\Attendance\Services\DayState;
+use App\Domain\Attendance\Services\Reconciler;
 use App\Models\AttendanceDay;
 use App\Models\AttendancePolicy;
 use App\Models\TimeSegment;
@@ -31,7 +32,7 @@ class SweepIdle
                     'type' => 'break',
                     'break_category' => 'idle',
                     'started_at' => $last,
-                    'note' => 'No activity detected',
+                    'note' => Reconciler::OFFLINE_NOTE,
                     'source' => 'idle_sweep',
                 ]);
                 $day->status = 'on_break';

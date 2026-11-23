@@ -23,7 +23,7 @@ class AttendancePolicy extends Model
         'grace_minutes' => 15,
         'standard_minutes' => 480,
         'idle_timeout_minutes' => 10,
-        'idle_by_input' => true,
+        'idle_by_input' => false,
         'lunch_cap_minutes' => 60,
         'effective_from' => '2000-01-01',
         'half_day_after_minutes' => 120,
