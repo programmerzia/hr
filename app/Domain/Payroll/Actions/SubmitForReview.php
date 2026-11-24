@@ -32,7 +32,7 @@ class SubmitForReview
             $this->builder->log($run, $by, 'sent the run for review');
             $label = PayrollPeriod::runTitle($run);
             $n = new PayrollNotification("Payroll for {$label} is ready for review", "{$by->name} sent the run for approval.", "/payroll/{$run->id}");
-            User::where('role', 'management')->get()->each->notify($n);
+            User::permission('approve_payroll')->get()->reject(fn (User $u) => $u->employee_id === $by->id)->each->notify($n);
 
             return $run;
         });

@@ -79,13 +79,14 @@ it('sends HR own request to the other HR-permission holders, falling back to man
     expect(LeaveRequest::firstOrFail()->status)->toBe('pending_hr');
 });
 
-it('falls back to management when nobody else holds approve_leave_hr', function () {
+it('falls back to manage_access holders when nobody holds approve_leave_hr', function () {
     $this->hr->revokePermissionTo('approve_leave_hr');
     $this->hr->syncRoles([]);
     $this->mgmt->revokePermissionTo('approve_leave_hr');
     $this->mgmt->syncRoles([]);
+    $this->mgmt->givePermissionTo('manage_access');
     fxSubmit($this);
-    expect($this->mgmt->notifications()->count())->toBe(1);
+    expect($this->mgmt->notifications()->count())->toBe(1)->and($this->hr->notifications()->count())->toBe(0);
 });
 
 it('does not start work on login while on approved full-day leave', function () {

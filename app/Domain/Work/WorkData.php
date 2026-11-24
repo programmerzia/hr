@@ -30,11 +30,11 @@ use Illuminate\Support\Collection;
 /** Builds the Inertia props of the Work pages. Shapes follow resources/js/types/index.ts. */
 final class WorkData
 {
-    /** Projects the viewer may open: HR and management all, others members and leads. */
+    /** Projects the viewer may open: view_company holders all, others members and leads. */
     public static function visibleProjects(User $user): Builder
     {
         $q = Project::query()->orderBy('name');
-        if (in_array($user->role, ['hr', 'management'], true)) {
+        if ($user->checkPermissionTo('view_company')) {
             return $q;
         }
 

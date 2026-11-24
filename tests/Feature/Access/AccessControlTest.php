@@ -58,7 +58,7 @@ it('shows claims and payslips by employment type', function () {
 it('renders the access page props', function () {
     makeUser('hr');
     $this->actingAs(makeUser('management'))->get(route('settings.access.index'))->assertInertia(fn (Assert $p) => $p
-        ->component('Settings/AccessPage', false)->has('roles', 5)->has('permissions', 14)->has('modules', 10)
+        ->component('Settings/AccessPage', false)->has('roles', 5)->has('permissions', 15)->has('modules', 10)
         ->has('roles.0', fn (Assert $r) => $r->hasAll(['id', 'name', 'label', 'is_system', 'users_count', 'permissions']))
         ->has('users.0', fn (Assert $r) => $r->hasAll(['id', 'employee_id', 'name', 'email', 'role', 'direct_permissions'])));
 });
@@ -134,5 +134,5 @@ it('access:sync is idempotent and assigns missing roles', function () {
     $counts = [Role::count(), Permission::count()];
     expect($u->fresh()->getRoleNames()->all())->toBe(['team_lead']);
     $this->artisan('access:sync')->assertSuccessful();
-    expect([Role::count(), Permission::count()])->toBe($counts)->toBe([5, 14]);
+    expect([Role::count(), Permission::count()])->toBe($counts)->toBe([5, 15]);
 });

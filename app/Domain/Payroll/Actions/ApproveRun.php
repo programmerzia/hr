@@ -37,7 +37,7 @@ class ApproveRun
             $this->builder->log($run, $by, 'approved and locked the run');
             $label = PayrollPeriod::runTitle($run);
             $n = new PayrollNotification("Payroll for {$label} approved", "{$by->name} approved and locked the run. Mark it as paid after the bank transfer.", "/payroll/{$run->id}");
-            User::where('role', 'hr')->get()->each->notify($n);
+            User::permission('manage_payroll')->get()->reject(fn (User $u) => $u->employee_id === $by->id)->each->notify($n);
 
             return $run;
         });

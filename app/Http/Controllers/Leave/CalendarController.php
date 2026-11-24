@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Leave;
 
+use App\Domain\Attendance\Services\Scope;
 use App\Domain\Leave\Support\Shape;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\LeaveRequestResource;
@@ -27,8 +28,8 @@ class CalendarController extends Controller
         $from = $first->startOfWeek($weekStart)->format('Y-m-d');
         $to = $first->endOfMonth()->endOfWeek(($weekStart + 6) % 7)->format('Y-m-d');
 
-        $wide = in_array($user->role, ['hr', 'management'], true);
-        $scope = $wide ? null : array_values(array_unique([$user->employee_id, ...$user->employee->ledEmployeeIds()]));
+        $wide = Scope::company($user);
+        $scope = $wide ? null : array_values(array_unique(array_filter([$user->employee_id, ...Scope::employees($user)->pluck('id')->all()])));
 
         $events = LeaveRequest::where('status', 'approved')
             ->whereDate('starts_on', '<=', $to)->whereDate('ends_on', '>=', $from)

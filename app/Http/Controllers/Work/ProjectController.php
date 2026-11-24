@@ -44,7 +44,7 @@ class ProjectController extends Controller
             'projects' => $rows,
             'clients' => WorkData::clients(),
             'can_create' => $canCreate,
-            'lead_options' => $canCreate ? WorkData::people(User::whereIn('role', ['team_lead', 'management'])->orWhere('employee_id', $user->employee_id)
+            'lead_options' => $canCreate ? WorkData::people(User::permission('manage_projects')->orWhere('employee_id', $user->employee_id)
                 ->pluck('employee_id')->filter()->pipe(fn ($c) => Employee::whereIn('id', $c)->whereNotIn('status', ['resigned', 'terminated'])->pluck('id'))) : [],
             'people' => WorkData::people(collect($rows)->flatMap(fn ($r) => [...$r['member_ids'], $r['lead_employee_id']])),
         ]);

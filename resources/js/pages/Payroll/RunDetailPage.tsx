@@ -30,7 +30,7 @@ import {
   Tr,
 } from '../../components/ui'
 import { formatDate, formatDuration, formatMoney } from '../../lib/format'
-import { useAuth, useShared } from '../../inertia/props'
+import { useCan, useShared } from '../../inertia/props'
 import type { PayrollAdjustment, PayrollAdjustmentKind, PayrollItem, PayrollPolicySwitches, PayrollRun } from '../../types'
 import { deductionMix } from './charts'
 import { act, failureOf, monthLabel, netAdjustment, runTitle, todayIso, type HistoryEvent, type PersonRef, type RunTotals } from './helpers'
@@ -325,7 +325,8 @@ function ItemSheet({
 }
 
 export default function RunDetailPage() {
-  const { role } = useAuth()
+  const canManage = useCan('manage_payroll')
+  const canApprove = useCan('approve_payroll')
   const { run, items: rawItems, adjustments, totals, mix: rawMix, events, people, policy } = useShared<RunDetailProps>()
   const mix = useMemo(() => deductionMix(rawMix), [rawMix])
   const person = (id: string) => people.find((p) => p.id === id)
@@ -352,7 +353,6 @@ export default function RunDetailPage() {
   const flagged = items.filter((i) => i.variance_flag && !i.hold)
   const pendingFlags = flagged.filter((i) => !i.variance_ack_at).length
   const shown = flaggedOnly ? items.filter((i) => i.variance_flag) : items
-  const canManage = role === 'hr' || role === 'management'
   const history = useMemo(
     () => events.map((e) => ({ at: e.created_at, actor: (e.actor_id && person(e.actor_id)?.name) || 'Someone', text: e.description })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -382,12 +382,12 @@ export default function RunDetailPage() {
           Discard draft
         </Button>
       )}
-      {run.status === 'review' && role === 'management' && (
+      {run.status === 'review' && canApprove && (
         <Button variant="primary" icon={<Check size={16} />} onClick={() => setApproveOpen(true)}>
           Approve
         </Button>
       )}
-      {run.status === 'approved' && role === 'management' && !settlement && (
+      {run.status === 'approved' && canApprove && !settlement && (
         <Button icon={<RotateCcw size={16} />} onClick={() => setReopenOpen(true)}>
           Reopen
         </Button>
@@ -419,7 +419,7 @@ export default function RunDetailPage() {
               ? `Prorated salary to the exit date plus unused leave. Add asset deductions as adjustments. ${monthLabel(run.year, run.month)}.`
               : run.status === 'approved' && settlement
                 ? 'Approved and locked. Leave has been encashed, so a settlement run cannot be reopened.'
-                : run.status === 'review' && role !== 'management'
+                : run.status === 'review' && !canApprove
             ? 'Waiting for management to approve.'
             : run.status === 'paid' && run.paid_at
               ? `Paid on ${formatDate(run.paid_at)}, reference ${run.payment_reference ?? '-'}`

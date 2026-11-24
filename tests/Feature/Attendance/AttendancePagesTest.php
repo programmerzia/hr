@@ -43,7 +43,8 @@ it('employee cannot open team pages', function () {
 
 it('lead sees only their team members with presence', function () {
     [$lead, $member] = leadWithMember();
-    makeUser('employee'); // outside the team
+    $outsider = makeUser('employee'); // outside the team, but in another team
+    $outsider->employee->update(['team_id' => Team::factory()->create()->id]);
     $member->forceFill(['last_seen_at' => now()->subMinutes(15)])->save();
 
     $this->actingAs($lead)->get(route('attendance.team'))->assertInertia(fn (Assert $p) => $p

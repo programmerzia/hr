@@ -9,6 +9,7 @@ final class Abilities
 {
     public const TABLE = [
         'view_team' => ['team_lead', 'hr', 'management'],
+        'view_company' => ['hr', 'management'],
         'approve_leave_lead' => ['team_lead', 'management'],
         'approve_leave_hr' => ['hr', 'management'],
         'manage_people' => ['hr', 'management'],

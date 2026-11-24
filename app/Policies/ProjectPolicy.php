@@ -6,12 +6,12 @@ use App\Models\Project;
 use App\Models\ProjectMember;
 use App\Models\User;
 
-/** Project lead, HR and management manage; members and managers write; members, leads, HR and management read. */
+/** Project lead and company-wide viewers (view_company) manage; members and managers write; members, leads, HR and management read. */
 class ProjectPolicy
 {
     private function manager(User $user): bool
     {
-        return in_array($user->role, ['hr', 'management'], true);
+        return $user->checkPermissionTo('view_company');
     }
 
     public function isMember(User $user, Project $project): bool
@@ -29,7 +29,7 @@ class ProjectPolicy
 
     public function create(User $user): bool
     {
-        return in_array($user->role, ['hr', 'management', 'team_lead'], true);
+        return $user->checkPermissionTo('manage_projects') || $this->manager($user);
     }
 
     public function manage(User $user, Project $project): bool

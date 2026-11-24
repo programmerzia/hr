@@ -30,9 +30,9 @@ class PasswordResetRequestController extends Controller
         $user = User::with('employee')->whereRaw('LOWER(email) = ?', [$email])->first();
         if ($user && $user->employee && ! PasswordResetRequest::where('user_id', $user->id)->where('status', 'pending')->exists()) {
             $req = PasswordResetRequest::create(['user_id' => $user->id, 'requested_at' => now(), 'ip' => $request->ip()]);
-            $roles = in_array($user->role, ['hr', 'management'], true) ? ['management'] : ['management', 'hr'];
+            $permissions = PasswordResetRequest::privileged($user) ? ['manage_access'] : ['manage_access', 'manage_people'];
             $note = new PasswordResetNotification($req->id, $user->name.' asked for a password reset', $user->email);
-            User::whereIn('role', $roles)->where('id', '!=', $user->id)->get()->each->notify($note);
+            User::permission($permissions)->where('id', '!=', $user->id)->get()->each->notify($note);
         }
 
         return back()->with('success', self::NEUTRAL);

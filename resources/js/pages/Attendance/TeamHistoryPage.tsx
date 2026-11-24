@@ -28,7 +28,7 @@ import {
   Tr,
   type DateRange,
 } from '../../components/ui'
-import { useAuth, useShared } from '../../inertia/props'
+import { useCan, useShared } from '../../inertia/props'
 import { formatDate, formatDuration, formatTime } from '../../lib/format'
 import type { AttendanceDay, Employee, Team } from '../../types'
 import { isRunning, type DayTotals } from './lib'
@@ -99,7 +99,7 @@ function MemberHeat({ name, days, target }: { name: string; days: HeatDay[]; tar
 }
 
 export default function TeamHistoryPage() {
-  const role = useAuth().role
+  const company = useCan('view_company')
   const { filters, rows, total, limit, members, teams, heat, attendance, overtime } = useShared<HistoryProps>()
   const [approving, setApproving] = useState<HistoryRow | null>(null)
   const [search, setSearch] = useState(filters.q)
@@ -148,7 +148,7 @@ export default function TeamHistoryPage() {
         onSearchChange={setSearch}
         searchPlaceholder="Search people"
         filters={
-          role !== 'team_lead' ? (
+          company ? (
             <NativeSelect aria-label="Team" value={filters.team} onChange={(e) => visit({ team: e.target.value })} className="w-44">
               <option value="all">All teams</option>
               {teams.map((t) => (

@@ -20,7 +20,7 @@ import {
   Thead,
   Tr,
 } from '../../components/ui'
-import { useAuth, useShared } from '../../inertia/props'
+import { useCan, useShared } from '../../inertia/props'
 import { formatTime } from '../../lib/format'
 import { breakCategoryLabels, presenceTone } from '../../lib/status'
 import type { AttendanceDay, Employee, Team, TimeSegment } from '../../types'
@@ -64,7 +64,7 @@ interface TeamProps {
 }
 
 export default function TeamPage() {
-  const role = useAuth().role
+  const company = useCan('view_company')
   const { members, teams, server_time } = useShared<TeamProps>()
   const now = useServerNow(server_time)
   const [search, setSearch] = useState('')
@@ -88,7 +88,7 @@ export default function TeamPage() {
 
   const counts = statusOrder.map((s) => ({ s, n: rows.filter((r) => r.st === s).length }))
   const q = search.trim().toLowerCase()
-  const grouped = role === 'hr' || role === 'management'
+  const grouped = company
   const teamName = (id: string | null) => teams.find((t) => t.id === id)?.name ?? 'No team'
   const visible = rows
         .filter((r) => (team === 'all' ? true : r.e.team_id === team))
@@ -101,7 +101,7 @@ export default function TeamPage() {
             a.e.name.localeCompare(b.e.name),
         )
 
-  const showTeamFilter = role !== 'team_lead'
+  const showTeamFilter = company
   const labels: Record<string, string> = {
     working: 'Working',
     offline: 'Offline',

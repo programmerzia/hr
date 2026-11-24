@@ -17,7 +17,7 @@ class InboxController extends Controller
     {
         $user = $request->user();
         PasswordResetRequest::expireStale();
-        $resets = in_array($user->role, ['hr', 'management'], true)
+        $resets = PasswordResetRequest::privileged($user)
             ? PasswordResetRequest::with('user')->where('status', 'pending')->oldest('requested_at')->get()
                 ->filter(fn ($r) => $r->decidableBy($user))
                 ->map(fn ($r) => ['id' => $r->id, 'name' => $r->user->name, 'email' => $r->user->email, 'role' => $r->user->role, 'requested_at' => Fmt::dt($r->requested_at)])->values()

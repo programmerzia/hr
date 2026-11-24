@@ -2,19 +2,17 @@
 
 namespace App\Policies;
 
+use App\Domain\Attendance\Services\Scope;
 use App\Models\Employee;
 use App\Models\User;
+use Spatie\Permission\Models\Role;
 
 class EmployeePolicy
 {
-    /** Self, team lead over own teams, HR and management over everyone. */
+    /** Self, anyone the viewer's visibility scope covers (view_company, led teams, unassigned people). */
     public function view(User $user, Employee $employee): bool
     {
-        if (in_array($user->role, ['hr', 'management'], true) || $user->employee_id === $employee->id) {
-            return true;
-        }
-
-        return $user->role === 'team_lead' && $user->employee?->leads($employee);
+        return Scope::canSee($user, $employee);
     }
 
     public function viewAny(User $user): bool
@@ -24,52 +22,53 @@ class EmployeePolicy
 
     public function create(User $user): bool
     {
-        return in_array($user->role, ['hr', 'management'], true);
+        return $user->checkPermissionTo('manage_people');
     }
 
     public function update(User $user, Employee $employee): bool
     {
-        return in_array($user->role, ['hr', 'management'], true) && $this->canTouchAccount($user, $employee);
+        return $user->checkPermissionTo('manage_people') && $this->canTouchAccount($user, $employee);
     }
 
-    /** HR may reset anyone's password except management accounts and their own (they use /account). */
+    /** Anyone with manage_people may reset a password except admin accounts (manage_access) and their own (they use /account). */
     public function resetPassword(User $user, Employee $employee): bool
     {
-        if (! in_array($user->role, ['hr', 'management'], true) || $user->employee_id === $employee->id) {
+        if (! $user->checkPermissionTo('manage_people') || $user->employee_id === $employee->id) {
             return false;
         }
 
         return $this->canTouchAccount($user, $employee);
     }
 
-    /** Only management may hand out the management role. */
+    /** Only admins (manage_access) may hand out a role that carries manage_access. */
     public function assignRole(User $user, string $role): bool
     {
-        if ($role === 'management') {
-            return $user->role === 'management';
+        $r = Role::where('name', $role)->where('guard_name', 'web')->first();
+        if ($r?->hasPermissionTo('manage_access')) {
+            return $user->checkPermissionTo('manage_access');
         }
 
-        return in_array($user->role, ['hr', 'management'], true);
+        return $user->checkPermissionTo('manage_people');
     }
 
-    /** Management accounts can only be changed by management. */
+    /** Admin accounts (manage_access) can only be changed by admins. */
     private function canTouchAccount(User $user, Employee $employee): bool
     {
-        if ($user->role === 'management') {
+        if ($user->checkPermissionTo('manage_access')) {
             return true;
         }
 
-        return User::where('employee_id', $employee->id)->value('role') !== 'management';
+        return ! User::where('employee_id', $employee->id)->first()?->checkPermissionTo('manage_access');
     }
 
     public function viewCompensation(User $user, Employee $employee): bool
     {
-        return in_array($user->role, ['hr', 'management'], true);
+        return $user->checkPermissionTo('manage_people');
     }
 
-    /** Salary, bank and documents: HR and management, or the person themselves. */
+    /** Salary, bank and documents: manage_people holders, or the person themselves. */
     public function viewPay(User $user, Employee $employee): bool
     {
-        return in_array($user->role, ['hr', 'management'], true) || $user->employee_id === $employee->id;
+        return $user->checkPermissionTo('manage_people') || $user->employee_id === $employee->id;
     }
 }

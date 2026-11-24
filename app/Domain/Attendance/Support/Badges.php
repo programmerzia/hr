@@ -11,7 +11,7 @@ final class Badges
     /** @return array{regularizations:int} */
     public static function for(User $user): array
     {
-        if ($user->role === 'employee' || ! $user->employee) {
+        if (! $user->employee || ! $user->checkPermissionTo('view_team')) {
             return ['regularizations' => 0];
         }
 

@@ -55,7 +55,7 @@ class MarkPaid
         }
         if ($held !== []) {
             $n = new PayrollNotification("Payroll for {$label} paid, ".count($held).' on hold', 'Not paid or notified: '.implode(', ', $held).'.', "/payroll/{$run->id}");
-            User::where('role', 'hr')->get()->each->notify($n);
+            User::permission('manage_payroll')->get()->each->notify($n);
         }
     }
 }

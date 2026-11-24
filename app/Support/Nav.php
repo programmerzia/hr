@@ -14,8 +14,8 @@ final class Nav
     /** @return array<int, array<string, mixed>> */
     public static function groups(): array
     {
-        $fullTime = fn (Employee $e, string $role) => $e->employment_type === 'full_time';
-        $contractor = fn (Employee $e, string $role) => $e->employment_type === 'contractor' && $role !== 'management';
+        $fullTime = fn (Employee $e, bool $approver) => $e->employment_type === 'full_time';
+        $contractor = fn (Employee $e, bool $approver) => $e->employment_type === 'contractor' && ! $approver;
 
         return [
             ['id' => 'workspace', 'label' => 'Workspace', 'items' => [
@@ -59,8 +59,8 @@ final class Nav
     public static function for(User $user): array
     {
         $employee = $user->employee;
-        $role = $user->role;
         $perms = Abilities::for($user);
+        $approver = in_array('approve_claims', $perms, true);
         $has = fn (string|array $p) => array_intersect((array) $p, $perms) !== [];
         $out = [];
         foreach (self::groups() as $g) {
@@ -72,7 +72,7 @@ final class Nav
                 if (isset($i['unless']) && $has($i['unless'])) {
                     continue;
                 }
-                if (isset($i['visible']) && (! $employee || ! ($i['visible'])($employee, $role))) {
+                if (isset($i['visible']) && (! $employee || ! ($i['visible'])($employee, $approver))) {
                     continue;
                 }
                 $items[] = ['id' => $i['id'], 'label' => $i['label'], 'to' => $i['to'], 'icon' => $i['icon']];

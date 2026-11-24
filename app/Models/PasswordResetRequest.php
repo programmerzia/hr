@@ -33,16 +33,22 @@ class PasswordResetRequest extends Model
         static::where('status', 'pending')->where('requested_at', '<', now()->subHours(48))->update(['status' => 'expired']);
     }
 
-    /** Whether this viewer may decide it: management any; HR only employee and team lead requesters. */
+    /** Accounts that manage people or access are privileged: only admins (manage_access) reset those. */
+    public static function privileged(User $account): bool
+    {
+        return $account->checkPermissionTo('manage_people') || $account->checkPermissionTo('manage_access');
+    }
+
+    /** Whether this viewer may decide it: admins (manage_access) any; manage_people holders only non-privileged requesters. */
     public function decidableBy(User $viewer): bool
     {
-        if ($this->status !== 'pending' || ! in_array($viewer->role, ['hr', 'management'], true)) {
+        if ($this->status !== 'pending' || ! (self::privileged($viewer))) {
             return false;
         }
         if ($viewer->employee_id === $this->user->employee_id) {
             return false;
         }
 
-        return $viewer->role === 'management' || in_array($this->user->role, ['employee', 'team_lead'], true);
+        return $viewer->checkPermissionTo('manage_access') || ! self::privileged($this->user);
     }
 }

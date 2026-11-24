@@ -617,6 +617,7 @@ export interface Setting {
 // ---------- Cross-cutting ----------
 export type Ability =
   | 'view_team'
+  | 'view_company'
   | 'approve_leave_lead'
   | 'approve_leave_hr'
   | 'manage_people'

@@ -6,7 +6,7 @@ import { EmptyTable } from '../../components/shared/EmptyTable'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { Button, buttonVariants, Stat, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
-import { useAuth, useShared } from '../../inertia/props'
+import { useCan, useShared } from '../../inertia/props'
 import { formatDate } from '../../lib/format'
 import type { AttendancePolicy, Holiday, LeaveRequest, LeaveType } from '../../types'
 import { formatDays, formatRange, halfDayLabels, shortTypeName, todayIso, type BalanceRow } from './helpers'
@@ -23,7 +23,7 @@ interface MyLeaveProps {
 }
 
 export default function MyLeavePage() {
-  const { role } = useAuth()
+  const canPolicy = useCan('manage_settings')
   const { year, balances: allBalances, requests, leave_types, holidays, policy, on_probation } = useShared<MyLeaveProps>()
   const [open, setOpen] = useState(false)
   const [toCancel, setToCancel] = useState<LeaveRequest | null>(null)
@@ -44,7 +44,7 @@ export default function MyLeavePage() {
         description={`Balances for ${year}`}
         actions={
           <>
-            {(role === 'hr' || role === 'management') && (
+            {canPolicy && (
               <Link href="/leave/policy" className={buttonVariants({ variant: 'secondary' })}>
                 Leave policy
               </Link>

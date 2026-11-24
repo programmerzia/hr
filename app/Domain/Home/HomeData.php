@@ -19,7 +19,7 @@ use App\Models\User;
 use App\Support\Badges;
 use Carbon\CarbonImmutable;
 
-/** Builds the Home dashboard props for the viewer's role. Tables owned by other modules are read directly. */
+/** Builds the Home dashboard props for the viewer's permissions. Tables owned by other modules are read directly. */
 final class HomeData
 {
     private const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -28,26 +28,29 @@ final class HomeData
     public static function for(User $user): array
     {
         $now = CarbonImmutable::now();
-        $isManager = $user->role !== 'employee' && $user->role !== 'contractor';
-        $isHr = in_array($user->role, ['hr', 'management'], true);
+        $can = fn (string $p) => $user->checkPermissionTo($p);
+        $isManager = $can('view_team');
+        $isCompany = $can('view_company');
+        $decides = $isManager || $can('approve_leave_lead') || $can('approve_leave_hr') || $can('verify_claims')
+            || $can('approve_claims') || $can('manage_payroll') || $can('approve_payroll');
 
         return [
-            'overview' => self::overview($user, $now, $isHr),
+            'overview' => self::overview($user, $now, $isCompany),
             'team_now' => $isManager ? self::teamNow($user, $now) : [],
             'my_tasks' => self::myTasks($user),
             'leave_balances' => self::leaveBalances($user, $now),
-            'attention' => $isManager ? self::attention($user) : [],
-            'payroll' => $isHr ? self::payroll() : null,
-            'billing' => $user->role === 'management' ? self::billing($now) : null,
-            'hiring' => $isHr ? self::hiring($now, 6) : null,
+            'attention' => $decides ? self::attention($user) : [],
+            'payroll' => $can('manage_payroll') ? self::payroll() : null,
+            'billing' => $can('manage_billing') ? self::billing($now) : null,
+            'hiring' => $can('manage_people') ? self::hiring($now, 6) : null,
             'chat_unread' => 0,
         ];
     }
 
-    /** Presence counts for the viewer's scope: company for HR and management, otherwise their team. */
-    private static function overview(User $user, CarbonImmutable $now, bool $isHr): array
+    /** Presence counts for the viewer's scope: everyone for view_company holders, otherwise their team. */
+    private static function overview(User $user, CarbonImmutable $now, bool $isCompany): array
     {
-        $people = $isHr ? Scope::employees($user) : self::teamScope($user);
+        $people = $isCompany ? Scope::employees($user) : self::teamScope($user);
         $ids = $people->pluck('id')->all();
         $days = AttendanceDay::whereIn('employee_id', $ids)->whereDate('date', $now->toDateString())->get()->keyBy('employee_id');
         $seen = User::whereIn('employee_id', $ids)->pluck('last_seen_at', 'employee_id');
@@ -72,7 +75,7 @@ final class HomeData
         }
 
         $facts = [];
-        if ($isHr) {
+        if ($isCompany) {
             $current = Employee::whereNull('exited_on');
             $facts = [
                 ['label' => 'Headcount', 'value' => (clone $current)->count()],
@@ -82,7 +85,7 @@ final class HomeData
         }
 
         return [
-            'title' => $isHr ? 'Company today' : 'Team today',
+            'title' => $isCompany ? 'Company today' : 'Team today',
             'total' => count($ids),
             'counts' => $n,
             'facts' => array_values(array_filter($facts, fn ($f) => $f['value'] > 0)),
@@ -158,7 +161,7 @@ final class HomeData
             ['label' => 'Claims to review', 'count' => $b['claims'], 'to' => '/claims'],
             ['label' => 'Payroll to review', 'count' => $b['payroll'], 'to' => '/payroll'],
         ];
-        if ($user->role === 'management') {
+        if ($user->checkPermissionTo('manage_billing')) {
             $rows[] = ['label' => 'Overdue invoices', 'count' => Invoice::where('status', 'overdue')->count(), 'to' => '/invoices', 'warn' => true];
         }
 

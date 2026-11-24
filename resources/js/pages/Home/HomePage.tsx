@@ -3,7 +3,7 @@ import { format } from 'date-fns'
 import { Ring } from '../../components/charts/Ring'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { useWorkSeconds } from '../../inertia/clock'
-import { useAuth, useShared } from '../../inertia/props'
+import { useAuth, useCan, useShared } from '../../inertia/props'
 import { formatDuration } from '../../lib/format'
 import { ChatCard, LeaveBalancesCard, MyTasksCard } from './EmployeeCards'
 import { AttentionCard, BillingCard, HiringCard, OverviewCard, PayrollCard, TeamNowCard } from './ManagerCards'
@@ -34,11 +34,13 @@ function TodayRing() {
 }
 
 export default function HomePage() {
-  const { employee, role } = useAuth()
+  const { employee } = useAuth()
   const now = new Date()
   const first = employee.name.split(' ')[0]
-  const isManager = role === 'team_lead' || role === 'hr' || role === 'management'
-  const isHr = role === 'hr' || role === 'management'
+  const isManager = useCan('view_team')
+  const canPayroll = useCan('manage_payroll')
+  const canHire = useCan('manage_people')
+  const canBilling = useCan('manage_billing')
 
   return (
     <div className="mx-auto max-w-content space-y-6">
@@ -55,13 +57,13 @@ export default function HomePage() {
         <div className="space-y-6 lg:col-span-2">
           {isManager && <TeamNowCard />}
           <MyTasksCard />
-          {isHr && <PayrollCard />}
+          {canPayroll && <PayrollCard />}
         </div>
         <div className="space-y-6">
           {isManager && <AttentionCard />}
-          {role === 'management' && <BillingCard />}
+          {canBilling && <BillingCard />}
           <LeaveBalancesCard />
-          {isHr && <HiringCard />}
+          {canHire && <HiringCard />}
           <ChatCard />
         </div>
       </div>

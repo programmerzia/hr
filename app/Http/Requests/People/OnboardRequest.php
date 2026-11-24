@@ -3,6 +3,7 @@
 namespace App\Http\Requests\People;
 
 use App\Domain\People\Actions\Concerns;
+use App\Policies\EmployeePolicy;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -12,6 +13,15 @@ class OnboardRequest extends FormRequest
     public function authorize(): bool
     {
         return $this->user()?->can('manage_people') ?? false;
+    }
+
+    /** @return list<string> */
+    private function assignableRoles(): array
+    {
+        $policy = new EmployeePolicy;
+        $user = $this->user();
+
+        return $user ? array_values(array_filter(['employee', 'team_lead', 'hr', 'management'], fn ($r) => $policy->assignRole($user, $r))) : [];
     }
 
     public function rules(): array
@@ -25,7 +35,7 @@ class OnboardRequest extends FormRequest
             'team_id' => ['nullable', 'exists:teams,id'],
             'designation' => ['required', 'string'],
             'employment_type' => ['required', Rule::in(['full_time', 'contractor', 'intern'])],
-            'role' => ['required', Rule::in($this->user()?->role === 'management' ? ['employee', 'team_lead', 'hr', 'management'] : ['employee', 'team_lead', 'hr'])],
+            'role' => ['required', Rule::in($this->assignableRoles())],
             'joined_on' => ['required', 'date'],
             'probation_until' => ['nullable', 'date', 'after:joined_on'],
             'salary' => ['nullable', 'array'],

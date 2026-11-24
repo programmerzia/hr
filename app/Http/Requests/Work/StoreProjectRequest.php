@@ -16,8 +16,8 @@ class StoreProjectRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $this->merge(['key' => strtoupper(trim((string) $this->input('key')))]);
-        // Team leads can only lead their own projects.
-        if ($this->user()->role === 'team_lead') {
+        // Without company-wide access a person can only lead their own projects.
+        if (! $this->user()->checkPermissionTo('view_company')) {
             $this->merge(['lead_employee_id' => $this->user()->employee_id]);
         }
     }

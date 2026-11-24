@@ -52,7 +52,7 @@ class ReportsController extends Controller
         return Inertia::render('Reports/ReportsPage', [
             'scope' => 'team', 'filters' => $f, 'summary' => null, 'department' => null, 'statement' => null,
             'sheet' => $this->sheet($request, $f), 'employees' => [], 'departments' => [], 'tax_years' => [],
-            'teams' => $request->user()->role === 'team_lead' ? [] : Team::orderBy('name')->get(['id', 'name'])->all(),
+            'teams' => $request->user()->checkPermissionTo('view_company') ? Team::orderBy('name')->get(['id', 'name'])->all() : [],
         ]);
     }
 

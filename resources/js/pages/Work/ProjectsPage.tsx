@@ -21,7 +21,7 @@ import {
   Thead,
   Tr,
 } from '../../components/ui'
-import { useAuth, useShared } from '../../inertia/props'
+import { useAuth, useCan, useShared } from '../../inertia/props'
 import type { BillingType } from '../../types'
 import { AvatarStack, usePersonName, type Person, type ProjectRow } from './shared'
 
@@ -139,7 +139,8 @@ export default function ProjectsPage() {
 }
 
 function NewProjectDialog({ onClose }: { onClose: () => void }) {
-  const { employee, role } = useAuth()
+  const { employee } = useAuth()
+  const seesAll = useCan('view_company')
   const { clients, lead_options: leads, projects } = useShared<ProjectsProps>()
   const form = useForm({
     name: '',
@@ -206,7 +207,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
             </NativeSelect>
           </Field>
         )}
-        {role !== 'team_lead' && (
+        {seesAll && (
           <Field label="Lead">
             <NativeSelect value={form.data.lead_employee_id} onChange={(e) => form.setData('lead_employee_id', e.target.value)}>
               {leads.map((e) => (

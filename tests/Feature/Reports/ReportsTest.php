@@ -179,6 +179,7 @@ it('shows a lead only their own team on the sheet', function () {
     $team = Team::factory()->create(['department_id' => $this->deptA->id, 'lead_employee_id' => $lead->employee_id]);
     $lead->employee->update(['team_id' => $team->id]);
     $this->a1->update(['team_id' => $team->id]);
+    Employee::whereNull('team_id')->update(['team_id' => Team::factory()->create(['department_id' => $this->deptA->id])->id]);
 
     $this->actingAs($lead)->get('/team/sheet?month=2026-10')->assertOk()
         ->assertInertia(function ($p) use ($lead) {

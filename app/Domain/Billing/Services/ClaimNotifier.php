@@ -6,6 +6,7 @@ use App\Domain\Billing\Support\BillingNotification;
 use App\Models\ContractorClaim;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 
 class ClaimNotifier
 {
@@ -25,32 +26,41 @@ class ClaimNotifier
         }
     }
 
-    /** Submitted: the contractor's team lead (management when there is no other lead). */
+    /** Everyone holding the permission except the claimant. @return Collection<int, User> */
+    private function holders(string $permission, ContractorClaim $c): Collection
+    {
+        return User::permission($permission)->get()->reject(fn (User $u) => $u->employee_id === $c->employee_id)->values();
+    }
+
+    /** Submitted: the contractor's team lead; verify_claims holders with view_company when there is no other lead (admins as the last resort). */
     public function submitted(ContractorClaim $c): void
     {
         $c->loadMissing('employee.team');
         $leadId = $c->employee->team?->lead_employee_id;
         $users = $leadId && $leadId !== $c->employee_id ? User::where('employee_id', $leadId)->get() : collect();
         if ($users->isEmpty()) {
-            $users = User::where('role', 'management')->where('employee_id', '!=', $c->employee_id)->get();
+            $users = $this->holders('verify_claims', $c)->filter(fn (User $u) => $u->checkPermissionTo('view_company'))->values();
+        }
+        if ($users->isEmpty()) {
+            $users = $this->holders('manage_access', $c);
         }
         $this->send($users, $c, 'Claim to verify from '.$c->employee->name);
     }
 
-    /** Verified: management approves next. */
+    /** Verified: approve_claims holders decide next. */
     public function verified(ContractorClaim $c): void
     {
         $c->loadMissing('employee');
-        $this->send(User::where('role', 'management')->get(), $c, 'Claim to approve from '.$c->employee->name);
+        $this->send($this->holders('approve_claims', $c), $c, 'Claim to approve from '.$c->employee->name);
     }
 
-    /** Approved: HR pays (management when no HR user). */
+    /** Approved: manage_payroll holders pay (admins when nobody holds it). */
     public function approved(ContractorClaim $c): void
     {
         $c->loadMissing('employee');
-        $users = User::where('role', 'hr')->get();
+        $users = $this->holders('manage_payroll', $c);
         if ($users->isEmpty()) {
-            $users = User::where('role', 'management')->get();
+            $users = $this->holders('manage_access', $c);
         }
         $this->send($users, $c, 'Claim to pay for '.$c->employee->name);
     }

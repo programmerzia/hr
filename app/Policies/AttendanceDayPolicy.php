@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Domain\Attendance\Services\Scope;
 use App\Models\AttendanceDay;
 use App\Models\User;
 
@@ -9,17 +10,17 @@ class AttendanceDayPolicy
 {
     public function view(User $user, AttendanceDay $day): bool
     {
-        if (in_array($user->role, ['hr', 'management'], true) || $user->employee_id === $day->employee_id) {
+        if ($user->employee_id === $day->employee_id) {
             return true;
         }
 
-        return $user->role === 'team_lead' && in_array($day->employee_id, $user->employee?->ledEmployeeIds() ?? [], true);
+        return Scope::canSee($user, $day->employee()->firstOrFail());
     }
 
-    /** Deciding regularizations: in scope, not own day, not a plain employee. */
+    /** Deciding regularizations: in scope, not own day, view_team. */
     public function regularize(User $user, AttendanceDay $day): bool
     {
-        return $user->role !== 'employee' && $user->employee_id !== $day->employee_id && $this->view($user, $day);
+        return $user->checkPermissionTo('view_team') && $user->employee_id !== $day->employee_id && $this->view($user, $day);
     }
 
     /** Requesting a regularization: only for your own day. */

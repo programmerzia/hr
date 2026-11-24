@@ -20,6 +20,7 @@ final class Access
     /** @var list<array{name:string,label:string,module:string}> */
     public const PERMISSIONS = [
         ['name' => 'view_team', 'label' => 'View team attendance, history, regularisations, overtime', 'module' => 'attendance'],
+        ['name' => 'view_company', 'label' => 'See everyone company-wide: attendance, leave, people', 'module' => 'attendance'],
         ['name' => 'approve_leave_lead', 'label' => 'Approve leave for own team', 'module' => 'leave'],
         ['name' => 'approve_leave_hr', 'label' => 'Approve leave company-wide, manage leave types', 'module' => 'leave'],
         ['name' => 'manage_people', 'label' => 'Onboard, edit employees, approve password resets', 'module' => 'people'],
@@ -56,14 +57,18 @@ final class Access
         return $perms;
     }
 
-    /** Idempotent: creates missing permissions/system roles (seeding new roles only), guarantees management keeps manage_access, and gives each user the Spatie role named by users.role. */
+    /** Idempotent: creates missing permissions/system roles (seeding new roles only, and new permissions go to their default roles only when first created; never revokes), guarantees management keeps manage_access, and gives each user the Spatie role named by users.role. */
     public static function sync(): array
     {
         $stats = ['permissions' => 0, 'roles' => 0, 'users' => 0];
         self::flush();
+        $created = [];
         foreach (self::PERMISSIONS as $p) {
             $perm = Permission::firstOrCreate(['name' => $p['name'], 'guard_name' => 'web']);
             $stats['permissions'] += (int) $perm->wasRecentlyCreated;
+            if ($perm->wasRecentlyCreated) {
+                $created[] = $p['name'];
+            }
         }
         self::flush();
         foreach (self::SYSTEM_ROLES as $name => $label) {
@@ -71,8 +76,15 @@ final class Access
             if ($role->wasRecentlyCreated) {
                 $role->syncPermissions(self::defaultsFor($name));
                 $stats['roles']++;
-            } elseif (! $role->is_system) {
-                $role->forceFill(['is_system' => true])->save();
+            } else {
+                // A permission that is new to this install goes to its default roles once; existing grants are never touched.
+                $new = array_values(array_intersect(self::defaultsFor($name), $created));
+                if ($new !== []) {
+                    $role->givePermissionTo($new);
+                }
+                if (! $role->is_system) {
+                    $role->forceFill(['is_system' => true])->save();
+                }
             }
         }
         Role::findByName('management', 'web')->givePermissionTo('manage_access');

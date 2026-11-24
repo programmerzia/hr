@@ -42,7 +42,7 @@ class LeaveNotifier
 
     /**
      * Everyone who can decide at the HR stage (permission approve_leave_hr), never the requester.
-     * Management accounts are the fallback when nobody else holds the permission.
+     * Admins (manage_access) are the fallback when nobody else holds the permission.
      *
      * @return Collection<int, User>
      */
@@ -51,7 +51,7 @@ class LeaveNotifier
         $notRequester = fn ($q) => $q->whereNull('employee_id')->orWhere('employee_id', '!=', $r->employee_id);
         $users = User::permission('approve_leave_hr')->where($notRequester)->get();
         if ($users->isEmpty()) {
-            $users = User::where('role', 'management')->where($notRequester)->get();
+            $users = User::permission('manage_access')->where($notRequester)->get();
         }
 
         return $users;

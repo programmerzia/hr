@@ -5,6 +5,7 @@ namespace App\Domain\Billing\Actions;
 use App\Domain\Billing\Services\ClaimNotifier;
 use App\Domain\Billing\Support\Audit;
 use App\Domain\Billing\Support\Fail;
+use App\Domain\Leave\Services\LeaveNotifier;
 use App\Models\ContractorClaim;
 use App\Models\Employee;
 
@@ -17,7 +18,9 @@ class VerifyClaim
         if ($claim->status !== 'submitted') {
             Fail::with('Only submitted claims can be verified');
         }
-        if (! $lead->leads($claim->employee()->firstOrFail())) {
+        $claimant = $claim->employee()->firstOrFail();
+        $standIn = LeaveNotifier::leadOf($claimant) === null && (bool) $lead->user?->checkPermissionTo('view_company');
+        if (! $lead->leads($claimant) && ! $standIn) {
             Fail::with('Only the contractor’s team lead can verify');
         }
         $claim->update(['status' => 'verified', 'verified_by' => $lead->id]);

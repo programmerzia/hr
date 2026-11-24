@@ -43,8 +43,11 @@ class ClaimController extends Controller
             'people' => Employee::whereIn('id', $claims->pluck('employee_id')->unique())->get(['id', 'name']),
             'actions' => $claims->mapWithKeys(fn ($c) => [$c->id => $policy->next($user, $c)])->filter()->all() ?: new \stdClass,
             'awaiting' => $awaiting,
-            'mode' => match ($user->role) {
-                'management' => 'management', 'hr' => 'hr', 'team_lead' => 'lead', default => 'contractor',
+            'mode' => match (true) {
+                $user->checkPermissionTo('approve_claims') => 'management',
+                $user->checkPermissionTo('manage_payroll') => 'hr',
+                $user->checkPermissionTo('verify_claims') => 'lead',
+                default => 'contractor',
             },
             'period' => ['year' => (int) $now->format('Y'), 'month' => (int) $now->format('n')],
             'can_generate' => $user->employee?->employment_type === 'contractor',

@@ -43,3 +43,11 @@ Owner decision (2026-11-12): Spatie-style RBAC managed by management in-app. Men
 
 ## Shipped (2026-11-12)
 Everything above, plus: `users.role` widened to string(40) for custom roles; composite gates `view_settings`, `payroll_staff`, `leave_approver` guard /settings, /payroll/* (except own payslips) and leave approvals at route level; `access:sync` runs on deploy and never overwrites matrix edits. Custom roles carry permissions only; scope rules (own team / own record) follow the built-in role semantics. Browser QA: scripts/qa-access.mjs (flow L).
+
+## Visibility (permission and team data, never users.role)
+
+- `view_company` (default: hr, management) sees everyone. Added by `access:sync` only when the permission is first created; it never removes or resets grants.
+- `view_team` without `view_company` sees: members of teams they lead (Team.lead_employee_id), employees with no team who do not hold `view_company`, and themselves.
+- Neither: themselves only.
+- One implementation: `App\Domain\Attendance\Services\Scope` (`employees()`, `canSee()`, `decideIds()`, `deciders()`).
+- Admin = `manage_access`. Fallback notification recipients when nobody holds the working permission are `manage_access` holders.
