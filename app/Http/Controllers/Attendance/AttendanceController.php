@@ -7,6 +7,7 @@ use App\Domain\Attendance\Actions\Heartbeat;
 use App\Domain\Attendance\Actions\SetCurrentTask;
 use App\Domain\Attendance\Actions\StartBreak;
 use App\Domain\Attendance\Actions\StartWork;
+use App\Domain\Attendance\Services\Reconciler;
 use App\Http\Controllers\Controller;
 use App\Models\Task;
 use Illuminate\Http\RedirectResponse;
@@ -19,9 +20,16 @@ class AttendanceController extends Controller
 {
     public function heartbeat(Request $request, Heartbeat $heartbeat): RedirectResponse
     {
-        $data = $request->validate(['last_activity_at' => ['nullable', 'date'], 'offline_since' => ['nullable', 'date']]);
+        $data = $request->validate([
+            'last_activity_at' => ['nullable', 'date'],
+            // What the client saw while it was not sending beats (see Reconciler::GAP_NOTES) and when it started.
+            'gap_reason' => ['nullable', Rule::in(array_keys(Reconciler::GAP_NOTES))],
+            'gap_since' => ['nullable', 'date'],
+            'offline_since' => ['nullable', 'date'], // clients before gap_reason: same as gap_reason=no_internet
+        ]);
         $at = fn (?string $v) => $v ? Carbon::parse($v)->setTimezone(config('app.timezone')) : null;
-        $heartbeat($request->user(), $at($data['last_activity_at'] ?? null), $at($data['offline_since'] ?? null));
+        $reason = $data['gap_reason'] ?? (isset($data['offline_since']) ? 'no_internet' : null);
+        $heartbeat($request->user(), $at($data['last_activity_at'] ?? null), $reason, $at($data['gap_since'] ?? $data['offline_since'] ?? null));
 
         return back();
     }
@@ -41,8 +49,14 @@ class AttendanceController extends Controller
 
     public function resume(Request $request, StartWork $startWork): RedirectResponse
     {
-        $data = $request->validate(['confirm_overtime' => ['sometimes', 'boolean']]);
-        $result = $startWork($request->user()->employee, (bool) ($data['confirm_overtime'] ?? false));
+        $data = $request->validate(['confirm_overtime' => ['sometimes', 'boolean'], 'confirm_leave' => ['sometimes', 'boolean']]);
+        $result = $startWork($request->user()->employee, (bool) ($data['confirm_overtime'] ?? false), (bool) ($data['confirm_leave'] ?? false));
+        if ($result === StartWork::NEEDS_LEAVE_CONFIRM) {
+            $leave = StartWork::leaveToday($request->user()->employee);
+            $range = $leave ? $leave->starts_on->format('M j').($leave->starts_on->equalTo($leave->ends_on) ? '' : ' to '.$leave->ends_on->format('M j')) : '';
+
+            return back()->withErrors(['needs_leave_confirm' => "You're on approved leave today ({$leave?->leaveType?->name}, {$range}). Starting work ends your leave from today and returns those days to your balance."]);
+        }
         if ($result === StartWork::NEEDS_OVERTIME_CONFIRM) {
             return back()->withErrors(['needs_overtime_confirm' => 'You ended your day already. Start an overtime session?']);
         }

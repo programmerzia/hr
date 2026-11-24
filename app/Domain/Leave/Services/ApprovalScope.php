@@ -21,7 +21,7 @@ final class ApprovalScope
         $q = LeaveRequest::query();
         $own = $user->employee_id;
         $led = $user->employee ? array_values(array_diff($user->employee->ledEmployeeIds(), [$own])) : [];
-        $isHr = in_array($user->role, ['hr', 'management'], true);
+        $isHr = $user->checkPermissionTo('approve_leave_hr');
 
         if (! $isHr && $led === []) {
             return $q->whereRaw('1 = 0');

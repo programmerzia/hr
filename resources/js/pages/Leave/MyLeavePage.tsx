@@ -27,11 +27,15 @@ export default function MyLeavePage() {
   const { year, balances: allBalances, requests, leave_types, holidays, policy, on_probation } = useShared<MyLeaveProps>()
   const [open, setOpen] = useState(false)
   const [toCancel, setToCancel] = useState<LeaveRequest | null>(null)
+  const [toEnd, setToEnd] = useState<LeaveRequest | null>(null)
   const typeById = (id: string) => leave_types.find((t) => t.id === id)
   const balances = allBalances.filter((b) => b.year === year && (b.unlimited || b.entitled > 0 || b.used > 0 || b.pending > 0))
   const typeName = (id: string) => typeById(id)?.name ?? id
   const canCancel = (r: LeaveRequest) =>
     r.status === 'pending_lead' || r.status === 'pending_hr' || (r.status === 'approved' && r.starts_on > todayIso())
+
+  const canEnd = (r: LeaveRequest) =>
+    r.status === 'approved' && r.half_day === 'none' && r.starts_on <= todayIso() && r.ends_on >= todayIso()
 
   return (
     <div className="mx-auto max-w-content">
@@ -102,6 +106,11 @@ export default function MyLeavePage() {
                 <Td><StatusBadge status={r.status} /></Td>
                 <Td className="text-fg-muted">{formatDate(r.created_at)}</Td>
                 <Td className="text-right">
+                  {canEnd(r) && (
+                    <Button size="sm" variant="ghost" onClick={() => setToEnd(r)}>
+                      Back early
+                    </Button>
+                  )}
                   {canCancel(r) && (
                     <Button size="sm" variant="ghost" onClick={() => setToCancel(r)}>
                       Cancel
@@ -122,6 +131,21 @@ export default function MyLeavePage() {
         balances={allBalances}
         holidays={holidays.map((h) => h.date)}
         weekend={policy.weekend_days}
+      />
+      <ConfirmDialog
+        open={!!toEnd}
+        onOpenChange={(o) => !o && setToEnd(null)}
+        title="Back from leave early"
+        description={
+          toEnd
+            ? `End your ${shortTypeName(typeName(toEnd.leave_type_id)).toLowerCase()} leave from today (${formatRange(toEnd.starts_on, toEnd.ends_on)})? The days from today on go back to your balance.`
+            : ''
+        }
+        confirmLabel="End leave from today"
+        onConfirm={() => {
+          if (toEnd) router.post(route('leave.end-early', toEnd.id), {}, { preserveScroll: true })
+          setToEnd(null)
+        }}
       />
       <ConfirmDialog
         open={!!toCancel}

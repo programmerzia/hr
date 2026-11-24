@@ -38,6 +38,7 @@ export function formatTime(value: string | Date): string {
 
 /** Seconds to "7h 42m". Under one hour: "42m". */
 export function formatDuration(seconds: number): string {
+  if (seconds > 0 && seconds < 60) return '<1m'
   const total = Math.max(0, Math.floor(seconds / 60))
   const h = Math.floor(total / 60)
   const m = total % 60

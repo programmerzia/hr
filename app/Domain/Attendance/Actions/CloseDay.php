@@ -85,6 +85,7 @@ class CloseDay
                 $seg->update(['ended_at' => $end->max($seg->started_at), 'note' => 'auto-closed']);
             }
             DayState::closeEntries($employee, $end);
+            DayState::tidy($day);
             $t = DayCalculator::totals($day->segments()->get(), $end, $policy->lunch_cap_minutes);
             $day->fill([
                 'status' => 'ended',

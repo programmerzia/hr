@@ -15,6 +15,7 @@ Route::prefix('leave')->name('leave.')->group(function () {
     Route::get('/policy', [PolicyController::class, 'index'])->name('policy');
     Route::get('/{leaveRequest}/attachment', [MyLeaveController::class, 'attachment'])->name('attachment');
     Route::post('/{leaveRequest}/cancel', [MyLeaveController::class, 'cancel'])->name('cancel');
+    Route::post('/{leaveRequest}/end-early', [MyLeaveController::class, 'endEarly'])->name('end-early');
     Route::middleware('can:leave_approver')->group(function () {
         Route::get('/approvals', [ApprovalController::class, 'index'])->name('approvals');
         Route::post('/{leaveRequest}/approve', [ApprovalController::class, 'approve'])->name('approve');

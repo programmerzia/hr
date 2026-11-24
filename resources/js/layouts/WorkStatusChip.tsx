@@ -44,7 +44,14 @@ export function WorkStatusChip() {
         ? {
             label: status === 'on_break' ? 'Resume' : 'Start work',
             icon: <Play size={14} />,
-            run: () => router.post(route('attendance.resume'), {}, keep),
+            run: () =>
+              router.post(route('attendance.resume'), {}, {
+                ...keep,
+                // On approved leave: the confirmation lives on My day.
+                onError: (errors) => {
+                  if (errors.needs_leave_confirm) router.visit('/my-day')
+                },
+              }),
           }
         : { label: 'Start overtime', icon: <Play size={14} />, run: () => router.visit('/my-day') }
 

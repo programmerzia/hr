@@ -5,8 +5,10 @@ namespace App\Domain\Attendance\Actions;
 use App\Domain\Attendance\Services\DayGrader;
 use App\Domain\Attendance\Services\DayState;
 use App\Domain\Attendance\Services\Grading;
+use App\Domain\Leave\Actions\EndEarly;
 use App\Models\AttendancePolicy;
 use App\Models\Employee;
+use App\Models\LeaveRequest;
 use Illuminate\Support\Facades\DB;
 
 class StartWork
@@ -21,9 +23,24 @@ class StartWork
 
     public const NEEDS_OVERTIME_CONFIRM = 'needs_overtime_confirm';
 
-    public function __invoke(Employee $employee, bool $confirmOvertime = false): string
+    public const NEEDS_LEAVE_CONFIRM = 'needs_leave_confirm';
+
+    /** The approved full-day leave covering today, when today is a working day. */
+    public static function leaveToday(Employee $employee): ?LeaveRequest
     {
-        return DB::transaction(function () use ($employee, $confirmOvertime) {
+        $date = now()->toDateString();
+        $cal = Grading::calendar($employee->id, $date);
+        if ($cal['leave_weight'] < 1 || $cal['is_weekend'] || $cal['is_holiday']) {
+            return null;
+        }
+
+        return LeaveRequest::with('leaveType')->where('employee_id', $employee->id)->where('status', 'approved')->where('half_day', 'none')
+            ->whereDate('starts_on', '<=', $date)->whereDate('ends_on', '>=', $date)->first();
+    }
+
+    public function __invoke(Employee $employee, bool $confirmOvertime = false, bool $confirmLeave = false): string
+    {
+        return DB::transaction(function () use ($employee, $confirmOvertime, $confirmLeave) {
             $day = DayState::ensureToday($employee);
             $now = now();
             if ($day->status === 'working') {
@@ -44,9 +61,17 @@ class StartWork
             }
             // not_started, on_leave, absent, holiday: first sign-in of the day
             $date = $now->toDateString();
+            // Signing in on an approved full-day leave ends the leave from today (after the person confirms).
+            $leave = self::leaveToday($employee);
+            if ($leave) {
+                if (! $confirmLeave) {
+                    return self::NEEDS_LEAVE_CONFIRM;
+                }
+                app(EndEarly::class)($leave, $date);
+            }
             // Lateness only means something on a working day: not a weekend, a holiday, or a day off on leave.
             $cal = Grading::calendar($employee->id, $date);
-            $offDay = $cal['is_weekend'] || $cal['is_holiday'] || $cal['leave_weight'] >= 1 || Grading::hasFirstHalfLeave($employee->id, $date);
+            $offDay = $cal['is_weekend'] || $cal['is_holiday'] || $cal['leave_weight'] >= 1 || Grading::hasFirstHalfLeave($employee->id, $date) || $leave !== null;
             [$late, $halfDay] = $offDay ? [0, false] : DayGrader::late(AttendancePolicy::forDate($date), $date, $now);
             DayState::openWork($employee, $day, $now, null, [
                 'first_in_at' => $now,

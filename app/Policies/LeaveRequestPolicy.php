@@ -16,7 +16,7 @@ class LeaveRequestPolicy
     public function viewAttachment(User $user, LeaveRequest $request): bool
     {
         return $user->employee_id === $request->employee_id
-            || in_array($user->role, ['hr', 'management'], true)
+            || $user->checkPermissionTo('approve_leave_hr')
             || (bool) $user->employee?->leads($request->employee()->first());
     }
 
@@ -24,12 +24,12 @@ class LeaveRequestPolicy
     public function approveLead(User $user, LeaveRequest $request): bool
     {
         return (bool) $user->employee?->leads($request->employee()->first())
-            || in_array($user->role, ['hr', 'management'], true);
+            || $user->checkPermissionTo('approve_leave_hr');
     }
 
     public function approveHr(User $user, LeaveRequest $request): bool
     {
-        return in_array($user->role, ['hr', 'management'], true);
+        return $user->checkPermissionTo('approve_leave_hr');
     }
 
     /** Deciding at whichever stage the request is currently at. */

@@ -65,6 +65,15 @@ class LoginController extends Controller
                 ->withInput($request->only('email'));
         }
 
+        if ($result === StartWork::NEEDS_LEAVE_CONFIRM) {
+            // On approved leave: sign in without starting work; My day offers to end the leave.
+            Auth::login($user, true);
+            $request->session()->regenerate();
+            $user->forceFill(['last_seen_at' => now()])->save();
+
+            return redirect()->route('attendance.my-day')->with('error', "You're on approved leave today, so your work day was not started. Start work from My day to end your leave early.");
+        }
+
         Auth::login($user, true);
         $request->session()->regenerate();
         $user->forceFill(['last_seen_at' => now()])->save();

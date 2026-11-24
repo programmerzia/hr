@@ -101,6 +101,38 @@ final class DayState
     }
 
     /** Refreshes the cached seconds (break = chosen + idle + offline, as endDay in the mock) and saves. */
+    /**
+     * Keeps a day's timeline readable: drops closed segments with no length (a beat that resumed work and went quiet
+     * again in the same second, a break opened at the very moment the day was closed) and joins back-to-back pieces
+     * of the same kind (work split around a beat, offline with the same note). Task time moves to the kept segment.
+     */
+    public static function tidy(AttendanceDay $day): void
+    {
+        $prev = null;
+        foreach (TimeSegment::where('attendance_day_id', $day->id)->orderBy('started_at')->orderBy('created_at')->get() as $seg) {
+            if ($seg->ended_at && $seg->ended_at->getTimestamp() <= $seg->started_at->getTimestamp()) {
+                if ($prev) {
+                    TaskTimeEntry::where('time_segment_id', $seg->id)->update(['time_segment_id' => $prev->id]);
+                }
+                $seg->delete();
+
+                continue;
+            }
+            $joinable = $prev && $prev->ended_at && $prev->ended_at->getTimestamp() === $seg->started_at->getTimestamp()
+                && $prev->type === $seg->type && $prev->break_category === $seg->break_category
+                && $prev->note === $seg->note && $prev->source === $seg->source
+                && ($seg->type === 'work' || $seg->break_category === 'offline');
+            if ($joinable) {
+                $prev->update(['ended_at' => $seg->ended_at]);
+                TaskTimeEntry::where('time_segment_id', $seg->id)->update(['time_segment_id' => $prev->id]);
+                $seg->delete();
+
+                continue;
+            }
+            $prev = $seg;
+        }
+    }
+
     public static function rollup(AttendanceDay $day, CarbonInterface $at): void
     {
         $t = DayCalculator::totals($day->segments()->get(), $at, AttendancePolicy::current()->lunch_cap_minutes);

@@ -54,7 +54,7 @@ class ApprovalController extends Controller
             'items' => $items,
             'people' => Shape::people($ids),
             'leave_types' => Shape::types(),
-            'scope' => in_array($request->user()->role, ['hr', 'management'], true) ? 'hr' : 'lead',
+            'scope' => $request->user()->checkPermissionTo('approve_leave_hr') ? 'hr' : 'lead',
         ]);
     }
 
@@ -65,7 +65,7 @@ class ApprovalController extends Controller
         $note = $form->validated('note');
         match ($leaveRequest->status) {
             // HR/management stepping in for a lead approves straight through.
-            'pending_lead' => in_array($user->role, ['hr', 'management'], true) && ! $user->employee?->leads($leaveRequest->employee()->first())
+            'pending_lead' => $user->checkPermissionTo('approve_leave_hr') && ! $user->employee?->leads($leaveRequest->employee()->first())
                 ? $hr($leaveRequest, $user->employee, $note, onBehalfOfLead: true)
                 : $lead($leaveRequest, $user->employee, $note),
             'pending_hr' => $hr($leaveRequest, $user->employee, $note),

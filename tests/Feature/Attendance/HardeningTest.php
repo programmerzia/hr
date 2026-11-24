@@ -273,7 +273,7 @@ it('A7 a sweep-opened break becomes offline when the person returns, and work re
     expect($day->status)->toBe('working')
         ->and(TimeSegment::where('attendance_day_id', $day->id)->where('break_category', 'idle')->count())->toBe(0)
         ->and($off->started_at->format('H:i'))->toBe('10:00')->and($off->ended_at->format('H:i'))->toBe('10:30')
-        ->and($off->note)->toBe('App closed, device asleep or no connection');
+        ->and($off->note)->toBe('No signal from the HR app');
 });
 
 it('A9 by default an open background tab counts as working however old the last input is', function () {
@@ -304,25 +304,90 @@ it('A9 a missed beat or two is still work; a 5-minute drop is offline from the l
         ->and($off->ended_at->format('H:i'))->toBe('10:08')->and($day->work_seconds)->toBe(180);
 });
 
-it('A9 the client offline time starts the gap, at most the threshold after the last beat', function () {
+it('A9 the client gap start ends the work segment there, trusted only within 90 s of the last beat', function () {
     $u = makeUser();
     at('2026-11-12 10:00');
     signIn($this, $u);
     at('2026-11-12 10:01');
     $this->post(route('heartbeat'));
     at('2026-11-12 10:07');
-    $this->post(route('heartbeat'), ['offline_since' => '2026-11-12 10:01:40']);
-    $off = TimeSegment::where('attendance_day_id', rowOf($u->employee, '2026-11-12')->id)->where('break_category', 'offline')->sole();
-    expect($off->started_at->format('H:i:s'))->toBe('10:01:40')->and($off->ended_at->format('H:i'))->toBe('10:07');
+    $this->post(route('heartbeat'), ['gap_reason' => 'no_internet', 'gap_since' => '2026-11-12 10:01:40']);
+    $day = rowOf($u->employee, '2026-11-12');
+    $segs = TimeSegment::where('attendance_day_id', $day->id)->orderBy('started_at')->get();
+    expect($segs->pluck('type')->all())->toBe(['work', 'break', 'work'])
+        ->and($segs[0]->ended_at->format('H:i:s'))->toBe('10:01:40')
+        ->and($segs[1]->started_at->format('H:i:s'))->toBe('10:01:40')->and($segs[1]->note)->toBe('No internet connection');
 
+    // Woke from sleep: the browser reports "offline" at wake-up time, long after the last beat. Not trusted.
     $v = makeUser();
     auth()->logout();
     at('2026-11-12 11:00');
     signIn($this, $v);
     at('2026-11-12 11:30');
-    $this->post(route('heartbeat'), ['offline_since' => '2026-11-12 11:29:00']); // claims online until 11:29: capped at +3 min
-    $off = TimeSegment::where('attendance_day_id', rowOf($v->employee, '2026-11-12')->id)->where('break_category', 'offline')->sole();
-    expect($off->started_at->format('H:i'))->toBe('11:03');
+    $this->post(route('heartbeat'), ['offline_since' => '2026-11-12 11:29:00']);
+    $segs = TimeSegment::where('attendance_day_id', rowOf($v->employee, '2026-11-12')->id)->orderBy('started_at')->get();
+    // Signed in at 11:00 and silent until 11:30: no work at all, the empty login piece is dropped.
+    expect($segs->pluck('type')->all())->toBe(['break', 'work'])
+        ->and($segs[0]->started_at->format('H:i'))->toBe('11:00')->and($segs[0]->ended_at->format('H:i'))->toBe('11:30');
+});
+
+it('A11 each gap reason gets its own note; no reason is "No signal"', function (?string $reason, string $note) {
+    $u = makeUser();
+    at('2026-11-12 10:00');
+    signIn($this, $u);
+    at('2026-11-12 10:10');
+    $this->post(route('heartbeat'), $reason ? ['gap_reason' => $reason, 'gap_since' => '2026-11-12 10:00:30'] : []);
+    $off = TimeSegment::where('attendance_day_id', rowOf($u->employee, '2026-11-12')->id)->where('break_category', 'offline')->sole();
+    expect($off->note)->toBe($note);
+})->with([
+    [null, 'No signal from the HR app'],
+    ['no_internet', 'No internet connection'],
+    ['unreachable', 'Could not reach the server (network problem)'],
+    ['asleep', 'Device asleep or locked'],
+    ['suspended', 'Browser paused the HR tab'],
+    ['closed', 'HR app closed'],
+]);
+
+it('A11 a gap reason without a gap changes nothing', function () {
+    $u = makeUser();
+    at('2026-11-12 10:00');
+    signIn($this, $u);
+    at('2026-11-12 10:01');
+    $this->post(route('heartbeat'), ['gap_reason' => 'closed', 'gap_since' => '2026-11-12 10:00:30']);
+    expect(TimeSegment::where('attendance_day_id', rowOf($u->employee, '2026-11-12')->id)->count())->toBe(1);
+});
+
+it('A12 a wake-up beat followed by sleep leaves no zero-length work, and the sweep break is relabelled', function () {
+    $u = makeUser();
+    at('2026-11-12 10:00');
+    signIn($this, $u);
+    at('2026-11-12 10:04');
+    $this->artisan('attendance:sweep')->assertSuccessful(); // break from 10:00
+    at('2026-11-12 10:20');
+    $this->post(route('heartbeat'), ['gap_reason' => 'asleep', 'gap_since' => '2026-11-12 10:00:20']); // woke for a second
+    at('2026-11-12 10:24');
+    $this->artisan('attendance:sweep')->assertSuccessful(); // asleep again: break from 10:20
+    at('2026-11-12 10:40');
+    $this->post(route('heartbeat'), ['gap_reason' => 'asleep', 'gap_since' => '2026-11-12 10:20:00']);
+    $segs = TimeSegment::where('attendance_day_id', rowOf($u->employee, '2026-11-12')->id)->orderBy('started_at')->get();
+    expect($segs->filter(fn ($s) => $s->ended_at && $s->ended_at->eq($s->started_at))->count())->toBe(0)
+        ->and($segs->where('break_category', 'offline')->pluck('note')->unique()->values()->all())->toBe(['Device asleep or locked'])
+        ->and($segs->where('break_category', 'idle')->count())->toBe(0)
+        ->and($segs->last()->type)->toBe('work')->and($segs->last()->ended_at)->toBeNull();
+});
+
+it('A12 closing a day whose last beat opened a sweep break leaves no empty break at the end', function () {
+    $u = makeUser();
+    at('2026-11-12 10:00');
+    signIn($this, $u);
+    beats($this, '2026-11-12 10:01', '2026-11-12 10:30', null);
+    at('2026-11-12 10:34');
+    $this->artisan('attendance:sweep')->assertSuccessful();
+    at('2026-11-13 00:10');
+    app(CloseDay::class)->forEmployee($u->employee, '2026-11-12');
+    $segs = TimeSegment::where('attendance_day_id', rowOf($u->employee, '2026-11-12')->id)->orderBy('started_at')->get();
+    expect($segs)->toHaveCount(1)->and($segs[0]->type)->toBe('work')
+        ->and($segs[0]->ended_at->format('H:i'))->toBe('10:30')->and(rowOf($u->employee, '2026-11-12')->work_seconds)->toBe(1800);
 });
 
 it('A10 a server outage (everyone silent) is work; the person\'s own silence around it is offline', function () {

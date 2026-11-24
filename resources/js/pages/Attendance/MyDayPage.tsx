@@ -78,6 +78,7 @@ interface MyDayProps {
   regularizations: RegularizationRequest[]
   late_rule: { enabled: boolean; lates_per_penalty: number; count_this_month: number }
   recent_days: { day: AttendanceDay; regularization: 'pending' | 'rejected' | null; last_note: string | null }[]
+  leave_today: { type: string; starts_on: string; ends_on: string } | null
 }
 
 type RegKind = 'late' | 'early' | 'absent' | 'auto_closed'
@@ -88,6 +89,7 @@ export default function MyDayPage() {
   const [breakOpen, setBreakOpen] = useState(false)
   const [endOpen, setEndOpen] = useState(false)
   const [overtimeOpen, setOvertimeOpen] = useState(false)
+  const [leaveAsk, setLeaveAsk] = useState<string | null>(null)
   const [regDay, setRegDay] = useState<AttendanceDay | null>(null)
   const [regKind, setRegKind] = useState<RegKind>('late')
   const openReg = (d: AttendanceDay) => {
@@ -146,11 +148,12 @@ export default function MyDayPage() {
         0,
       )
 
-  const startOrResume = (confirm = false) => {
-    router.post(route('attendance.resume'), confirm ? { confirm_overtime: true } : {}, {
+  const startOrResume = (confirm = false, confirmLeave = false) => {
+    router.post(route('attendance.resume'), { ...(confirm ? { confirm_overtime: true } : {}), ...(confirmLeave ? { confirm_leave: true } : {}) }, {
       ...keep,
       onError: (errors) => {
         if (errors.needs_overtime_confirm) setOvertimeOpen(true)
+        if (errors.needs_leave_confirm) setLeaveAsk(errors.needs_leave_confirm)
       },
     })
   }
@@ -161,6 +164,16 @@ export default function MyDayPage() {
   return (
     <>
       <PageHeader title="My day" description={formatDate(new Date(now))} />
+
+      {p.leave_today && status !== 'working' && status !== 'on_break' && (
+        <p role="status" className="mb-4 rounded border border-border bg-surface-2 px-3 py-2 text-sm">
+          You're on approved {p.leave_today.type.toLowerCase()} today
+          {p.leave_today.starts_on === p.leave_today.ends_on
+            ? '.'
+            : ` (${formatDate(new Date(`${p.leave_today.starts_on}T00:00`))} to ${formatDate(new Date(`${p.leave_today.ends_on}T00:00`))}).`}{' '}
+          Nothing is tracked. If you start work, your leave ends from today and those days go back to your balance.
+        </p>
+      )}
 
       <Card>
         <CardBody className="flex flex-col gap-4">
@@ -461,6 +474,17 @@ export default function MyDayPage() {
         onConfirm={() => {
           startOrResume(true)
           setOvertimeOpen(false)
+        }}
+      />
+      <ConfirmDialog
+        open={leaveAsk !== null}
+        onOpenChange={(o) => !o && setLeaveAsk(null)}
+        title="End your leave and start work?"
+        description={leaveAsk ?? ''}
+        confirmLabel="Start work"
+        onConfirm={() => {
+          startOrResume(false, true)
+          setLeaveAsk(null)
         }}
       />
       <ReasonDialog

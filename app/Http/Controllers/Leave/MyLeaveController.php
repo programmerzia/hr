@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Leave;
 
 use App\Domain\Leave\Actions\Cancel;
+use App\Domain\Leave\Actions\EndEarly;
 use App\Domain\Leave\Actions\SubmitLeave;
 use App\Domain\Leave\Services\BalanceService;
 use App\Domain\Leave\Support\Shape;
@@ -70,5 +71,13 @@ class MyLeaveController extends Controller
         $cancel($leaveRequest);
 
         return back()->with('success', 'Leave request cancelled');
+    }
+
+    public function endEarly(Request $request, LeaveRequest $leaveRequest, EndEarly $endEarly): RedirectResponse
+    {
+        Gate::authorize('cancel', $leaveRequest);
+        $endEarly($leaveRequest, now()->toDateString());
+
+        return back()->with('success', 'Your leave ended today. The remaining days are back in your balance');
     }
 }

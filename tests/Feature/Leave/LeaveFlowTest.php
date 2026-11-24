@@ -70,7 +70,7 @@ it('moves from lead approval to HR approval and updates the balance', function (
     $r = LeaveRequest::firstOrFail();
 
     $this->actingAs($this->lead)->post(route('leave.approve', $r))->assertSessionHas('success');
-    expect($r->fresh()->status)->toBe('pending_hr')->and($this->hr->notifications()->count())->toBe(1);
+    expect($r->fresh()->status)->toBe('pending_hr')->and($this->hr->notifications()->count())->toBe(2);
 
     $this->actingAs($this->hr)->post(route('leave.approve', $r))->assertSessionHas('success');
     expect($r->fresh()->status)->toBe('approved')

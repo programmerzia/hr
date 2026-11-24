@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Attendance;
 
+use App\Domain\Attendance\Actions\StartWork;
 use App\Domain\Attendance\Services\CloseTime;
 use App\Domain\Attendance\Services\DayCalculator;
 use App\Domain\Attendance\Services\DayState;
@@ -93,6 +94,12 @@ class MyDayController extends Controller
             'regularizations' => RegularizationRequestResource::collection($regs)->resolve(),
             'late_rule' => $this->lateRule($employee->id, $policy),
             'recent_days' => $this->recentDays($employee->id, $regs),
+            // Approved full-day leave covering today: My day says so instead of looking like a missed start.
+            'leave_today' => ($lv = StartWork::leaveToday($employee)) ? [
+                'type' => $lv->leaveType?->name ?? 'Leave',
+                'starts_on' => $lv->starts_on->format('Y-m-d'),
+                'ends_on' => $lv->ends_on->format('Y-m-d'),
+            ] : null,
         ]);
     }
 

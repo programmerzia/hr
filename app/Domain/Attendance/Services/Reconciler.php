@@ -18,7 +18,23 @@ use Carbon\CarbonInterface;
  */
 final class Reconciler
 {
-    public const OFFLINE_NOTE = 'App closed, device asleep or no connection';
+    /** What the client saw while it sent no heartbeats (gap_reason) and the note the offline break gets. */
+    public const GAP_NOTES = [
+        'no_internet' => 'No internet connection',
+        'unreachable' => 'Could not reach the server (network problem)',
+        'asleep' => 'Device asleep or locked',
+        'suspended' => 'Browser paused the HR tab',
+        'closed' => 'HR app closed',
+    ];
+
+    /** No heartbeat and nothing from the client about why (old client, or the tab never came back). */
+    public const NO_SIGNAL_NOTE = 'No signal from the HR app';
+
+    /** Kept for the sweep and old rows: a break opened while we do not yet know why the beats stopped. */
+    public const OFFLINE_NOTE = self::NO_SIGNAL_NOTE;
+
+    /** How far past the last beat the client's own gap start is trusted (one beat plus scheduling slack). */
+    public const SINCE_SLACK = 90;
 
     public const OUTAGE_NOTE = 'Server unreachable for everyone, counted as work';
 
@@ -26,7 +42,7 @@ final class Reconciler
      * @param  bool  $live  false at sign-in: only the stale-day and offline-gap steps run (StartWork does the rest)
      * @return bool whether the day changed
      */
-    public function __invoke(User $user, CarbonInterface $now, ?CarbonInterface $activityAt = null, bool $live = true, ?CarbonInterface $offlineSince = null): bool
+    public function __invoke(User $user, CarbonInterface $now, ?CarbonInterface $activityAt = null, bool $live = true, ?string $gapReason = null, ?CarbonInterface $gapSince = null): bool
     {
         $employee = $user->employee;
         if (! $employee) {
@@ -43,7 +59,7 @@ final class Reconciler
 
         $healed = $this->closeStalePastDays($user, $now);
         $changed = $healed;
-        if ($lastSeen && $this->offlineGap($user, $now, $offlineSince)) {
+        if ($lastSeen && $this->offlineGap($user, $now, $gapReason, $gapSince)) {
             $changed = true;
         }
         if (! $live) {
@@ -114,11 +130,12 @@ final class Reconciler
     }
 
     /**
-     * A gap between heartbeats longer than offline_after_minutes becomes offline from the last beat, except stretches in
-     * which the server heard from nobody (its own outage: counted as work). $offlineSince is the client's own record
-     * of losing the connection; it may only move the start later, by at most the threshold after the last beat.
+     * A gap between heartbeats longer than offline_after_minutes becomes an offline break from the last beat to now,
+     * noted with what the client saw ($reason, see GAP_NOTES), except stretches in which the server heard from nobody
+     * (its own outage: counted as work). $since is the client's own time for the start of the gap; it is trusted only
+     * up to SINCE_SLACK seconds after the last beat (one missed beat), so a client can never stretch work further.
      */
-    private function offlineGap(User $user, CarbonInterface $now, ?CarbonInterface $offlineSince = null): bool
+    private function offlineGap(User $user, CarbonInterface $now, ?string $reason = null, ?CarbonInterface $since = null): bool
     {
         $employee = $user->employee;
         $limit = AttendancePolicy::current()->offline_after_minutes * 60;
@@ -138,55 +155,55 @@ final class Reconciler
             if ($now->getTimestamp() - $from->getTimestamp() <= $limit) {
                 return false;
             }
-            if ($from->getTimestamp() <= $open->started_at->getTimestamp()) {
-                $open->delete();
-            } else {
-                $open->update(['ended_at' => $from]);
-            }
+            $open->update(['ended_at' => $from]);
         } else {
             return false; // a break the person chose, an input-idle break, or a day that is not running: no extra lost time
         }
 
-        $this->fillGap($user, $day, $from, $now, $offlineSince, $limit);
+        // The client knows when it actually went quiet (within one beat of the last one): end the work there.
+        if ($since && $since->gt($from) && $since->getTimestamp() - $from->getTimestamp() <= self::SINCE_SLACK && $since->lt($now)) {
+            TimeSegment::where('attendance_day_id', $day->id)->where('type', 'work')->where('ended_at', $from)->update(['ended_at' => $since]);
+            $from = $since->copy();
+        }
+        $this->fillGap($user, $day, $from, $now, $reason, $limit);
         DayState::closeEntries($employee, $from);
         DayState::openWork($employee, $day, $now, null);
+        DayState::tidy($day);
 
         return true;
     }
 
-    /** Writes the closed segments for ($from, $now): offline, with work for a server outage or before the client dropped. */
-    private function fillGap(User $user, AttendanceDay $day, CarbonInterface $from, CarbonInterface $now, ?CarbonInterface $offlineSince, int $limit): void
+    /** Writes the closed segments for ($from, $now): offline with the reason's note, work for the server's own outage. */
+    private function fillGap(User $user, AttendanceDay $day, CarbonInterface $from, CarbonInterface $now, ?string $reason, int $limit): void
     {
         $pieces = [];
-        if ($offlineSince && $offlineSince->gt($from) && $offlineSince->lt($now)) {
-            $cut = $offlineSince->getTimestamp() - $from->getTimestamp() > $limit ? $from->copy()->addSeconds($limit) : $offlineSince->copy();
-            $pieces = [['work', $from, $cut, 'login'], ['offline', $cut, $now]];
-        } else {
-            $at = $from->copy();
-            foreach (Outage::darkWindows($user->id, $from, $now) as [$a, $b]) {
-                // Silence shorter than the threshold next to an outage is part of it (it would never be offline alone).
-                if ($a->getTimestamp() - $at->getTimestamp() < $limit && $pieces === []) {
-                    $a = $at->copy();
-                }
-                $pieces[] = ['offline', $at, $a];
-                $pieces[] = ['work', $a, $b, 'outage'];
-                $at = $b;
+        $at = $from->copy();
+        // The device itself reported being offline: that is never the server's outage.
+        $windows = $reason === 'no_internet' ? [] : Outage::darkWindows($user->id, $from, $now);
+        foreach ($windows as [$a, $b]) {
+            // Silence shorter than the threshold next to an outage is part of it (it would never be offline alone).
+            if ($a->getTimestamp() - $at->getTimestamp() < $limit && $pieces === []) {
+                $a = $at->copy();
             }
-            if ($pieces !== [] && $now->getTimestamp() - $at->getTimestamp() < $limit) {
-                $pieces[count($pieces) - 1][2] = $now->copy();
-                $at = $now->copy();
-            }
-            $pieces[] = ['offline', $at, $now];
+            $pieces[] = ['offline', $at, $a];
+            $pieces[] = ['work', $a, $b];
+            $at = $b;
         }
+        if ($pieces !== [] && $now->getTimestamp() - $at->getTimestamp() < $limit) {
+            $pieces[count($pieces) - 1][2] = $now->copy();
+            $at = $now->copy();
+        }
+        $pieces[] = ['offline', $at, $now];
+        $note = self::GAP_NOTES[$reason] ?? self::NO_SIGNAL_NOTE;
         foreach ($pieces as $p) {
             if ($p[2]->getTimestamp() <= $p[1]->getTimestamp()) {
                 continue;
             }
             TimeSegment::create($p[0] === 'work'
                 ? ['attendance_day_id' => $day->id, 'type' => 'work', 'started_at' => $p[1], 'ended_at' => $p[2],
-                    'source' => $p[3], 'note' => $p[3] === 'outage' ? self::OUTAGE_NOTE : null]
+                    'source' => 'outage', 'note' => self::OUTAGE_NOTE]
                 : ['attendance_day_id' => $day->id, 'type' => 'break', 'break_category' => 'offline',
-                    'started_at' => $p[1], 'ended_at' => $p[2], 'note' => self::OFFLINE_NOTE, 'source' => 'offline']);
+                    'started_at' => $p[1], 'ended_at' => $p[2], 'note' => $note, 'source' => 'offline']);
         }
     }
 }

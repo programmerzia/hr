@@ -76,7 +76,7 @@ class SubmitLeave
                 'days' => $days,
                 'year_split' => count($byYear) > 1 ? array_map('floatval', $byYear) : null,
                 'reason' => $reason,
-                'status' => LeaveNotifier::leadOf($employee) ? 'pending_lead' : 'pending_hr',
+                'status' => LeaveNotifier::leadUser($employee) ? 'pending_lead' : 'pending_hr',
             ]);
             if ($attachment) {
                 $path = $attachment->store("leave-attachments/{$request->id}", 'local');
