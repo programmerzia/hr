@@ -11,7 +11,7 @@ export function NavBadge({ id, className }: { id: string; className?: string }) 
   return (
     <span
       className={cn(
-        'inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-xs font-medium text-accent-fg',
+        'inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[11px] font-medium text-white',
         className,
       )}
     >
@@ -34,8 +34,8 @@ export function NavList({ groups, collapsed, onNavigate }: NavListProps) {
     <nav aria-label="Main" className="flex flex-col gap-4">
       {groups.map((g) => (
         <div key={g.id}>
-          {g.label && !collapsed && <p className="mb-1 px-2 text-xs font-medium text-fg-subtle">{g.label}</p>}
-          {g.label && collapsed && <div className="mx-2 mb-1 border-t border-border" />}
+          {g.label && !collapsed && <p className="mb-1 px-2 text-[11px] font-medium uppercase tracking-[0.06em] text-sidebar-muted">{g.label}</p>}
+          {g.label && collapsed && <div className="mx-2 mb-1 border-t border-sidebar-border" />}
           <ul className="flex flex-col gap-0.5">
             {g.items.map((item) => {
               const active = isNavActive(pathname, item, all)
@@ -47,10 +47,10 @@ export function NavList({ groups, collapsed, onNavigate }: NavListProps) {
                   aria-current={active ? 'page' : undefined}
                   aria-label={collapsed ? item.label : undefined}
                   className={cn(
-                    'relative flex h-8 items-center gap-2 rounded px-2 text-base transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+                    'relative flex h-8 items-center gap-2 rounded-md px-2 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     active
-                      ? 'bg-accent-soft font-medium text-accent before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-accent'
-                      : 'text-fg-muted hover:bg-surface hover:text-fg hover:shadow-xs',
+                      ? 'bg-sidebar-active font-medium text-sidebar-fg-strong before:absolute before:inset-y-1 before:-left-2 before:w-0.5 before:rounded-full before:bg-accent'
+                      : 'text-sidebar-fg hover:bg-sidebar-hover hover:text-sidebar-fg-strong',
                     collapsed && 'justify-center px-0',
                   )}
                 >

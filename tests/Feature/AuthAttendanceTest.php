@@ -30,10 +30,27 @@ it('rejects a wrong password', function () {
     $this->assertGuest();
 });
 
-it('login on an ended day needs overtime confirmation', function () {
+it('login on a day ended before the standard hours just continues it', function () {
+    $u = makeUser();
+    $this->travelTo(now()->setTime(10, 0));
+    app(StartWork::class)($u->employee);
+    $this->travelTo(now()->setTime(10, 15));
+    app(EndDay::class)($u->employee);
+    $this->travelTo(now()->setTime(10, 16));
+
+    $this->post(route('login.store'), ['email' => $u->email, 'password' => 'password'])->assertRedirect(route('home'));
+    $day = DayState::find($u->employee);
+    expect($day->status)->toBe('working')->and($day->last_out_at)->toBeNull()->and((int) $day->early_minutes)->toBe(0)
+        ->and(TimeSegment::whereNull('ended_at')->value('note'))->toBeNull()
+        ->and(TimeSegment::where('break_category', 'signed_out')->where('note', 'Ended the day, then continued')->count())->toBe(1);
+});
+
+it('login on a day ended after the standard hours needs overtime confirmation', function () {
     $u = makeUser();
     app(StartWork::class)($u->employee);
+    DayState::find($u->employee)->update(['work_seconds' => 8 * 3600]);
     app(EndDay::class)($u->employee);
+    DayState::find($u->employee)->update(['work_seconds' => 8 * 3600]);
 
     $this->post(route('login.store'), ['email' => $u->email, 'password' => 'password'])
         ->assertSessionHasErrors('needs_overtime_confirm');
@@ -146,4 +163,15 @@ it('denies an employee viewing another team day; lead sees own team only', funct
         ->and($lead->can('view', $day))->toBeTrue()
         ->and($lead->can('regularize', $day))->toBeTrue()
         ->and($other->can('view', $member->employee))->toBeFalse();
+});
+
+it('shares work seconds as of server time, so the top bar timer never double counts the running segment', function () {
+    $u = makeUser();
+    $this->travelTo(now()->setTime(9, 0));
+    app(StartWork::class)($u->employee);
+    $this->travelTo(now()->setTime(11, 0));
+    DayState::rollup(DayState::find($u->employee), now()); // stored total now includes 2h of the open segment
+    $this->travelTo(now()->setTime(12, 0));
+    $this->actingAs($u)->get(route('attendance.my-day'))
+        ->assertInertia(fn ($p) => $p->where('attendance.work_seconds', 3 * 3600));
 });

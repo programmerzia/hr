@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Domain\Attendance\Services\DayCalculator;
 use App\Domain\Attendance\Services\DayState;
 use App\Http\Resources\AttendanceDayResource;
 use App\Http\Resources\AttendancePolicyResource;
@@ -61,12 +62,15 @@ class HandleInertiaRequests extends Middleware
         $employee = $request->user()?->employee;
         $day = $employee ? DayState::find($employee) : null;
         $open = $day?->openSegment();
+        $now = now();
 
         return [
             'day' => $day ? AttendanceDayResource::make($day)->resolve($request) : null,
             'open_segment' => $open ? TimeSegmentResource::make($open)->resolve($request) : null,
             'policy' => AttendancePolicyResource::make(AttendancePolicy::current())->resolve($request),
-            'server_time' => Fmt::dt(now()),
+            // Worked so far, as of server_time (the stored total is only as fresh as its last rollup).
+            'work_seconds' => $day ? (int) DayCalculator::totals($day->segments()->get(), $now, AttendancePolicy::current()->lunch_cap_minutes)['work_seconds'] : 0,
+            'server_time' => Fmt::dt($now),
         ];
     }
 }

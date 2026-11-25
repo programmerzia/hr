@@ -17,7 +17,7 @@ function Row({ label, value, strong, muted }: { label: string; value: string; st
   return (
     <tr className="border-b border-border last:border-b-0">
       <td className={cn('py-1.5 pr-3', muted && 'text-fg-muted', strong && 'font-semibold')}>{label}</td>
-      <td className={cn('py-1.5 text-right font-mono tabular-nums', strong && 'font-semibold')}>{value}</td>
+      <td className={cn('py-1.5 text-right num ', strong && 'font-semibold')}>{value}</td>
     </tr>
   )
 }
@@ -177,7 +177,7 @@ export default function PayslipPage() {
                 <span className="text-fg-muted">
                   From {formatDate(sl.effective_from)}, {days(sl.days)} days of {formatMoney(sl.gross)}
                 </span>
-                <span className="font-mono tabular-nums">{formatMoney(sl.gross_share)}</span>
+                <span className="num ">{formatMoney(sl.gross_share)}</span>
               </p>
             ))}
           </section>
@@ -186,7 +186,7 @@ export default function PayslipPage() {
 
         <section className="flex items-center justify-between rounded border border-border bg-surface-2 px-4 py-3">
           <span className="text-base font-semibold">Net pay</span>
-          <span className="font-mono text-xl font-semibold tabular-nums">{formatMoney(item.net)}</span>
+          <span className="num text-xl font-semibold ">{formatMoney(item.net)}</span>
         </section>
 
         <footer className="mt-4 text-sm text-fg-muted">

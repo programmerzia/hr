@@ -112,7 +112,7 @@ export default function ClientsPage() {
               </div>
               <div>
                 <dt className="text-fg-muted">Default rate</dt>
-                <dd className="font-mono tabular-nums">
+                <dd className="num ">
                   {formatMoney(open.default_rate, open.currency)}
                   /h
                 </dd>

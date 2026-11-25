@@ -127,25 +127,25 @@ export function SalaryFields({ value, onChange, errors, hourly, showDate = true 
       )}
       {hourly ? (
         <Field label="Hourly rate (BDT)" error={errors.hourly_rate} hint="Contractors are paid by tracked hours." required>
-          <Input type="number" min={0} value={value.hourly_rate} onChange={set('hourly_rate')} className="text-right font-mono" />
+          <Input type="number" min={0} value={value.hourly_rate} onChange={set('hourly_rate')} className="text-right num" />
         </Field>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Basic" error={errors.basic} required><Input type="number" min={0} value={value.basic} onChange={set('basic')} className="text-right font-mono" /></Field>
-            <Field label="House rent" error={errors.house_rent} required><Input type="number" min={0} value={value.house_rent} onChange={set('house_rent')} className="text-right font-mono" /></Field>
-            <Field label="Medical" error={errors.medical} required><Input type="number" min={0} value={value.medical} onChange={set('medical')} className="text-right font-mono" /></Field>
-            <Field label="Conveyance" error={errors.conveyance} required><Input type="number" min={0} value={value.conveyance} onChange={set('conveyance')} className="text-right font-mono" /></Field>
-            <Field label="Provident fund (%)" error={errors.pf_percent}><Input type="number" min={0} max={100} value={value.pf_percent} onChange={set('pf_percent')} className="text-right font-mono" /></Field>
-            <Field label="Monthly tax" error={errors.tax_monthly}><Input type="number" min={0} value={value.tax_monthly} onChange={set('tax_monthly')} className="text-right font-mono" /></Field>
-            <Field label="Employer PF (%)" error={errors.pf_employer_percent} hint="Leave empty to use the payroll policy."><Input type="number" min={0} max={100} value={value.pf_employer_percent ?? ''} onChange={set('pf_employer_percent')} className="text-right font-mono" /></Field>
+            <Field label="Basic" error={errors.basic} required><Input type="number" min={0} value={value.basic} onChange={set('basic')} className="text-right num" /></Field>
+            <Field label="House rent" error={errors.house_rent} required><Input type="number" min={0} value={value.house_rent} onChange={set('house_rent')} className="text-right num" /></Field>
+            <Field label="Medical" error={errors.medical} required><Input type="number" min={0} value={value.medical} onChange={set('medical')} className="text-right num" /></Field>
+            <Field label="Conveyance" error={errors.conveyance} required><Input type="number" min={0} value={value.conveyance} onChange={set('conveyance')} className="text-right num" /></Field>
+            <Field label="Provident fund (%)" error={errors.pf_percent}><Input type="number" min={0} max={100} value={value.pf_percent} onChange={set('pf_percent')} className="text-right num" /></Field>
+            <Field label="Monthly tax" error={errors.tax_monthly}><Input type="number" min={0} value={value.tax_monthly} onChange={set('tax_monthly')} className="text-right num" /></Field>
+            <Field label="Employer PF (%)" error={errors.pf_employer_percent} hint="Leave empty to use the payroll policy."><Input type="number" min={0} max={100} value={value.pf_employer_percent ?? ''} onChange={set('pf_employer_percent')} className="text-right num" /></Field>
           </div>
           <Field label="Other allowances" error={errors.other_allowances}>
             <div className="flex flex-col gap-2">
               {others.map((o, i) => (
                 <div key={i} className="grid grid-cols-[1fr_8rem_auto] gap-2">
                   <Input aria-label="Allowance name" value={o.label} onChange={(e) => setOther(i, { label: e.target.value })} placeholder="Internet" />
-                  <Input aria-label="Allowance amount" type="number" min={0} value={o.amount} onChange={(e) => setOther(i, { amount: e.target.value })} className="text-right font-mono" />
+                  <Input aria-label="Allowance amount" type="number" min={0} value={o.amount} onChange={(e) => setOther(i, { amount: e.target.value })} className="text-right num" />
                   <Button size="sm" variant="ghost" aria-label="Remove allowance" icon={<Trash2 size={14} />} onClick={() => onChange({ ...value, other_allowances: others.filter((_, j) => j !== i) })} />
                 </div>
               ))}
@@ -157,7 +157,7 @@ export function SalaryFields({ value, onChange, errors, hourly, showDate = true 
             </div>
           </Field>
           <p className="text-sm text-fg-muted">
-            Gross per month <span className="font-mono font-medium tabular-nums text-fg">{formatMoney(gross)}</span>
+            Gross per month <span className="num font-medium  text-fg">{formatMoney(gross)}</span>
           </p>
         </>
       )}

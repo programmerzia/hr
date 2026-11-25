@@ -157,7 +157,7 @@ function ItemSheet({
   const line = (name: string, value: number, sign: '' | '+' | '-' = '', strong = false) => (
     <div className={`flex items-center justify-between py-1.5 text-sm ${strong ? 'font-semibold' : ''}`}>
       <span className={strong ? '' : 'text-fg-muted'}>{name}</span>
-      <span className="font-mono tabular-nums">
+      <span className="num ">
         {sign}
         {formatMoney(value)}
       </span>
@@ -212,7 +212,7 @@ function ItemSheet({
                   <span className="text-fg-muted">
                     From {formatDate(sl.effective_from)}, {days(sl.days)} days of {formatMoney(sl.gross)}
                   </span>
-                  <span className="font-mono tabular-nums">{formatMoney(sl.gross_share)}</span>
+                  <span className="num ">{formatMoney(sl.gross_share)}</span>
                 </div>
               ))}
               {item.components && (
@@ -228,7 +228,7 @@ function ItemSheet({
                   ).map(([k, v]) => (
                     <p key={k} className="flex justify-between py-0.5">
                       <span className="text-fg-muted">{k}</span>
-                      <span className="font-mono tabular-nums">{formatMoney(v)}</span>
+                      <span className="num ">{formatMoney(v)}</span>
                     </p>
                   ))}
                 </div>
@@ -265,7 +265,7 @@ function ItemSheet({
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`font-mono tabular-nums ${a.kind === 'deduction' ? 'text-danger' : ''}`}>
+                      <span className={`num  ${a.kind === 'deduction' ? 'text-danger' : ''}`}>
                         {a.kind === 'deduction' ? '-' : '+'}
                         {formatMoney(a.amount)}
                       </span>
@@ -448,7 +448,7 @@ export default function RunDetailPage() {
             ].map((f) => (
               <div key={f.label}>
                 <dt className="text-sm text-fg-muted">{f.label}</dt>
-                <dd className={`mt-1 font-mono tabular-nums ${f.strong ? 'text-xl font-semibold' : 'text-xl font-medium'}`}>{f.value}</dd>
+                <dd className={`mt-1 num  ${f.strong ? 'text-xl font-semibold' : 'text-xl font-medium'}`}>{f.value}</dd>
               </div>
             ))}
           </dl>

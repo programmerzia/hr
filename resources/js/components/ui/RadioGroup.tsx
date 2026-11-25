@@ -29,7 +29,7 @@ export function RadioGroup({ value, onValueChange, options, name, className, ...
             value={o.value}
             checked={value === o.value}
             onChange={() => onValueChange(o.value)}
-            className="mt-0.5 size-4 shrink-0 accent-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="mt-0.5 size-4 shrink-0 accent-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <span className="text-base text-fg">
             {o.label}

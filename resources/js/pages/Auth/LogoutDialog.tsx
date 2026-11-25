@@ -45,7 +45,7 @@ export function LogoutDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           onValueChange={(v) => setMode(v as Mode)}
           options={[
             { value: 'break', label: 'Take a break', hint: 'Your day stays open. Signing back in resumes work.' },
-            { value: 'end_day', label: 'End my day', hint: 'Closes today. Signing in again starts an overtime session.' },
+            { value: 'end_day', label: 'End my day', hint: 'Closes today. Signing in again continues the day; once you have worked your daily hours it counts as overtime.' },
           ]}
         />
         {mode === 'break' && (

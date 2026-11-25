@@ -455,7 +455,7 @@ function AttendanceTab() {
         </CardBody>
       </Card>
       <Card>
-        <CardHeader title={`${month.month} by week`} actions={<span className="font-mono text-sm tabular-nums text-fg-muted">{formatDuration(month.totalSeconds)}</span>} />
+        <CardHeader title={`${month.month} by week`} actions={<span className="num text-sm  text-fg-muted">{formatDuration(month.totalSeconds)}</span>} />
         <CardBody>
           <Bars
             data={month.data}

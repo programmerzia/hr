@@ -88,7 +88,7 @@ try {
   /** Text of the open drawer or dialog, or the whole body when none is open. */
   const dialogText = () => page.evaluate(() => (document.querySelector('[role="dialog"]') ?? document.body).innerText)
   const rowTexts = (re) =>
-    page.evaluate((s) => [...document.querySelectorAll('tr, [role="row"]')].map((r) => r.innerText.replace(/\s+/g, ' ')).filter((t) => new RegExp(s).test(t)), re.source)
+    page.evaluate((s) => [...document.querySelectorAll('tr, [role="row"], li')].map((r) => r.innerText.replace(/\s+/g, ' ')).filter((t) => new RegExp(s).test(t)), re.source)
   const tomorrowISO = () => {
     const d = new Date(Date.now() + 86400000)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -557,11 +557,11 @@ try {
     })
     return { ok: /In force now/.test(t) && /^\d+$/.test(v ?? ''), observed: `half_day_after_minutes field = ${v ?? 'missing'}; ${snip(t, /In force now/)}` }
   })
-  await step('G.3', 'Sadia /my-day: Needs attention lists the seeded absence and auto-closed day', async () => {
+  await step('G.3', 'Sadia /my-day: attention strip lists the seeded absence and auto-closed day', async () => {
     await freshPage()
     await loginDemo(BASE, page, 'Sadia Sultana')
     await page.goto(`${BASE}/my-day`, { waitUntil: 'networkidle0' })
-    await waitBody(/Needs attention this month/, 8000)
+    await waitBody(/days? needs? attention/, 8000)
     const absent = await rowTexts(/Absence/)
     const auto = await rowTexts(/Auto-closed day/)
     return { ok: absent.length > 0 && auto.length > 0, observed: `absence rows ${absent.length}, auto-closed rows ${auto.length}` }

@@ -13,7 +13,7 @@ export function TaskKey({ taskKey, className }: { taskKey: string; className?: s
       preserveState
       preserveScroll
       className={cn(
-        'rounded font-mono text-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+        'rounded font-mono text-[13px] text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         className,
       )}
     >

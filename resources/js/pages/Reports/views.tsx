@@ -165,8 +165,8 @@ export function StatementView({ statement }: { statement: Statement }) {
       </Table>
       {pf && (
         <p className="text-sm text-fg-muted">
-          Provident fund balance to date: employee <span className="font-mono tabular-nums">{formatMoney(pf.employee)}</span>, employer{' '}
-          <span className="font-mono tabular-nums">{formatMoney(pf.employer)}</span>.
+          Provident fund balance to date: employee <span className="num ">{formatMoney(pf.employee)}</span>, employer{' '}
+          <span className="num ">{formatMoney(pf.employer)}</span>.
         </p>
       )}
     </div>
@@ -216,15 +216,15 @@ export function SheetView({ sheet }: { sheet: Sheet }) {
               <tr key={r.employee.id} className="border-t border-border">
                 <td className="sticky left-0 z-10 truncate bg-surface px-2 py-1 text-sm">{r.employee.name}</td>
                 {r.cells.map((c, i) => (
-                  <td key={i} className={cn('px-0.5 py-1 text-center font-mono', sheet.days[i].type !== 'work' && 'bg-surface-2/60', cellStyle[c])}>
+                  <td key={i} className={cn('px-0.5 py-1 text-center num', sheet.days[i].type !== 'work' && 'bg-surface-2/60', cellStyle[c])}>
                     {c}
                   </td>
                 ))}
-                <td className="px-1.5 text-right font-mono tabular-nums">{r.totals.present}</td>
-                <td className="px-1.5 text-right font-mono tabular-nums">{r.totals.half}</td>
-                <td className="px-1.5 text-right font-mono tabular-nums">{r.totals.absent}</td>
-                <td className="px-1.5 text-right font-mono tabular-nums">{r.totals.leave}</td>
-                <td className="px-1.5 text-right font-mono tabular-nums">{r.totals.late}</td>
+                <td className="px-1.5 text-right num ">{r.totals.present}</td>
+                <td className="px-1.5 text-right num ">{r.totals.half}</td>
+                <td className="px-1.5 text-right num ">{r.totals.absent}</td>
+                <td className="px-1.5 text-right num ">{r.totals.leave}</td>
+                <td className="px-1.5 text-right num ">{r.totals.late}</td>
               </tr>
             ))}
           </tbody>

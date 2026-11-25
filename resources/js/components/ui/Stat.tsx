@@ -19,7 +19,7 @@ export function Stat({ label, value, icon: Icon, delta, className }: StatProps) 
     <Card className={cn('flex items-start justify-between gap-3 p-4', className)}>
       <div className="min-w-0">
         <p className="text-sm text-fg-muted">{label}</p>
-        <p className="mt-1 font-mono text-2xl font-semibold tabular-nums">{value}</p>
+        <p className="mt-1 num text-2xl font-semibold">{value}</p>
         {delta && <p className={cn('mt-1 text-xs', tones[delta.tone ?? 'neutral'])}>{delta.value}</p>}
       </div>
       {Icon && (

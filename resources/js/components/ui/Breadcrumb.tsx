@@ -17,7 +17,7 @@ export function Breadcrumb({ items, className }: { items: Crumb[]; className?: s
             {c.to && i < items.length - 1 ? (
               <Link
                 href={c.to}
-                className="rounded hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="rounded hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {c.label}
               </Link>

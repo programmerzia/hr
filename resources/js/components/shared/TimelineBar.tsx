@@ -24,10 +24,10 @@ interface TimelineBarProps {
 }
 
 const hatchIdle =
-  'repeating-linear-gradient(135deg, rgb(var(--warning) / 0.7) 0 2px, rgb(var(--warning-soft)) 2px 5px)'
+  'repeating-linear-gradient(135deg, rgb(var(--warning) / 0.75) 0 2px, rgb(var(--warning-soft)) 2px 5px)'
 const hatchOffline =
   'repeating-linear-gradient(135deg, rgb(var(--fg-subtle) / 0.7) 0 2px, rgb(var(--surface-2)) 2px 5px)'
-const breakFill = 'rgb(var(--warning) / 0.45)'
+const breakFill = 'rgb(var(--warning) / 0.55)'
 
 type Kind = 'work' | 'break' | 'idle' | 'offline'
 
@@ -86,7 +86,7 @@ export function TimelineBar({ segments, rangeStart, rangeEnd, now, targetAt, cla
         <div
           role="img"
           aria-label="Today's timeline"
-          className="relative h-4 w-full overflow-hidden rounded-full bg-surface-2 shadow-[inset_0_0_0_1px_rgb(var(--border))]"
+          className="relative h-3 w-full overflow-hidden rounded-full bg-surface-2 shadow-[inset_0_0_0_1px_rgb(var(--border))]"
         >
           {segments.map((s, i) => {
             const segEnd = s.ended_at ? new Date(s.ended_at).getTime() : clock
@@ -126,7 +126,7 @@ export function TimelineBar({ segments, rangeStart, rangeEnd, now, targetAt, cla
           />
         )}
       </div>
-      <div ref={axis} className="relative mt-1 h-4 text-xs tabular-nums text-fg-subtle" aria-hidden>
+      <div ref={axis} className="relative mt-1 h-4 num text-[11px] text-fg-subtle" aria-hidden>
         {ticks.map((t) => {
           const left = pct(t)
           return (

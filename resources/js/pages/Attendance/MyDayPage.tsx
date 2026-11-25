@@ -1,10 +1,8 @@
 import { format, parseISO } from 'date-fns'
 import { router } from '@inertiajs/react'
 import { Bars } from '../../components/charts/Bars'
-import { Ring } from '../../components/charts/Ring'
-import { Coffee, LogOut, Play } from 'lucide-react'
+import { ChevronDown, Coffee, LogOut, Play } from 'lucide-react'
 import { useState } from 'react'
-import { Clock } from '../../components/shared/Clock'
 import { BreakDialog } from '../../components/shared/BreakDialog'
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog'
 import { DurationText } from '../../components/shared/DurationText'
@@ -27,7 +25,7 @@ import {
   Tr,
 } from '../../components/ui'
 import { useShared } from '../../inertia/props'
-import { formatDate, formatDuration, formatTime } from '../../lib/format'
+import { formatClock, formatDate, formatDuration, formatTime } from '../../lib/format'
 import { breakCategoryLabels } from '../../lib/status'
 import type {
   AttendanceDay,
@@ -92,6 +90,23 @@ export default function MyDayPage() {
   const [leaveAsk, setLeaveAsk] = useState<string | null>(null)
   const [regDay, setRegDay] = useState<AttendanceDay | null>(null)
   const [regKind, setRegKind] = useState<RegKind>('late')
+  const [stripOpen, setStripOpen] = useState(false)
+  const [intervalsOpen, setIntervalsOpen] = useState(() => {
+    try {
+      return localStorage.getItem('hr.myday.intervals') === '1'
+    } catch {
+      return false
+    }
+  })
+  const toggleIntervals = () => {
+    const next = !intervalsOpen
+    setIntervalsOpen(next)
+    try {
+      localStorage.setItem('hr.myday.intervals', next ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }
   const openReg = (d: AttendanceDay) => {
     setRegKind(regularizableKinds(d)[0] ?? 'late')
     setRegDay(d)
@@ -124,6 +139,7 @@ export default function MyDayPage() {
     return { label: format(parseISO(w.date), 'EEE'), values: [live.work_seconds / 3600], active: w.date === today ? (true as const) : undefined }
   })
   const weekSeconds = Math.round(weeklyData.reduce((a, d) => a + (d.values[0] ?? 0) * 3600, 0))
+  const weekRows = p.week.filter((w) => w.date <= today).reverse()
   const workdays = p.week.filter((w) => !w.off).length
   const workedDays = weeklyData.filter((d) => (d.values[0] ?? 0) > 0).length
 
@@ -175,57 +191,26 @@ export default function MyDayPage() {
         </p>
       )}
 
+      {p.recent_days.length > 0 && (
+        <AttentionStrip
+          days={p.recent_days}
+          open={stripOpen}
+          onToggle={() => setStripOpen((o) => !o)}
+          onRegularise={openReg}
+        />
+      )}
+
       <Card>
-        <CardBody className="flex flex-col gap-4">
-          <div className="grid gap-6 md:grid-cols-[1fr_auto_auto] md:items-center">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge status={status} />
-                {day && day.late_minutes > 0 && (
-                  <StatusBadge status="late" label={`Late ${day.late_minutes}m`} />
-                )}
-                {day && !isRunning(day) && day.early_minutes > 0 && <Badge variant="warning">Left early {day.early_minutes}m</Badge>}
-                {grade && <Badge variant={grade.variant}>{grade.label}</Badge>}
-                {!isRunning(day) && segs.some((s) => s.note === 'Overtime session') && <Badge variant="info">Overtime</Badge>}
-              </div>
-              {lr.enabled && lr.count_this_month > 0 && (
-                <p className="mt-1 text-sm text-fg-muted">
-                  {lateLeft === 0
-                    ? `${lr.count_this_month} lates this month. ${lr.lates_per_penalty} lates cost half a day.`
-                    : `${lateLeft} of ${lr.lates_per_penalty} lates this month before a half-day deduction.`}
-                </p>
-              )}
-              <div className="mt-2">
-                <Clock seconds={totals.work_seconds} />
-              </div>
-              <p className="mt-1 text-sm text-fg-muted">
-                {sinceText}
-                {sinceText && ' · '}
-                Break <DurationText seconds={totals.break_seconds} />
-                {totals.offline_seconds >= 60 && (
-                  <>
-                    {' · '}Offline today <DurationText seconds={totals.offline_seconds} />
-                  </>
-                )}
-                {totals.idle_seconds >= 60 && (
-                  <>
-                    {' · '}Idle <DurationText seconds={totals.idle_seconds} />
-                  </>
-                )}
-              </p>
+        <CardBody className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={status} />
+              {day && day.late_minutes > 0 && <StatusBadge status="late" label={`Late ${day.late_minutes}m`} />}
+              {day && !isRunning(day) && day.early_minutes > 0 && <Badge variant="warning">Left early {day.early_minutes}m</Badge>}
+              {grade && <Badge variant={grade.variant}>{grade.label}</Badge>}
+              {!isRunning(day) && segs.some((s) => s.note === 'Overtime session') && <Badge variant="info">Overtime</Badge>}
             </div>
-            <div className="flex items-center gap-3 md:px-6">
-              <Ring value={pct} size={64} stroke={6} aria-label={`${pct}% of the daily target worked`}>
-                <span className="font-mono text-sm font-medium tabular-nums">{pct}%</span>
-              </Ring>
-              <div>
-                <p className="text-sm font-medium">Daily target</p>
-                <p className="text-sm text-fg-muted">
-                  {formatDuration(totals.work_seconds)} of {formatDuration(target)}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 md:flex-col md:items-stretch">
+            <div className="flex flex-wrap items-center gap-2">
               {status === 'working' && (
                 <Button icon={<Coffee size={16} />} onClick={() => setBreakOpen(true)}>
                   Take a break
@@ -243,7 +228,7 @@ export default function MyDayPage() {
               )}
               {status === 'ended' && (
                 <Button icon={<Play size={16} />} onClick={() => startOrResume()}>
-                  Start overtime
+                  {totals.work_seconds < target ? 'Continue my day' : 'Start overtime'}
                 </Button>
               )}
               {(status === 'working' || status === 'on_break') && (
@@ -252,6 +237,51 @@ export default function MyDayPage() {
                 </Button>
               )}
             </div>
+          </div>
+          {lr.enabled && lr.count_this_month > 0 && (
+            <p className="text-xs text-fg-muted">
+              {lateLeft === 0
+                ? `${lr.count_this_month} lates this month. ${lr.lates_per_penalty} lates cost half a day.`
+                : `${lateLeft} of ${lr.lates_per_penalty} lates this month before a half-day deduction.`}
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <span className="num text-[40px] font-semibold leading-[48px]">{formatClock(totals.work_seconds)}</span>
+            <p className="text-[13px] text-fg-muted">
+              {sinceText}
+              {sinceText && ' · '}
+              Break <DurationText seconds={totals.break_seconds} />
+              {totals.offline_seconds >= 60 && (
+                <>
+                  {' · '}Offline today <DurationText seconds={totals.offline_seconds} />
+                </>
+              )}
+              {totals.idle_seconds >= 60 && (
+                <>
+                  {' · '}Idle <DurationText seconds={totals.idle_seconds} />
+                </>
+              )}
+            </p>
+          </div>
+
+          <div>
+            <div
+              role="progressbar"
+              aria-label="Daily target"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={pct}
+              className="h-1.5 overflow-hidden rounded-full bg-surface-2"
+            >
+              <div
+                className={`h-full rounded-full ${pct >= 100 ? 'bg-success' : 'bg-accent'}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <p className="num mt-1 text-xs text-fg-muted">
+              {formatDuration(totals.work_seconds)} of {formatDuration(target)} · {pct}%
+            </p>
           </div>
 
           <TimelineBar
@@ -262,7 +292,7 @@ export default function MyDayPage() {
             targetAt={shiftEnd.toISOString()}
           />
 
-          <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
+          <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3">
             <span className="text-sm font-medium">Current task</span>
             <Select
               aria-label="Current task"
@@ -273,7 +303,7 @@ export default function MyDayPage() {
               disabled={taskOptions.length === 1}
               placeholder="No task"
             />
-            <span className="text-sm text-fg-muted">
+            <span className="text-[13px] text-fg-muted">
               {taskOptions.length === 1
                 ? 'No tasks are assigned to you.'
                 : selectedTask
@@ -286,28 +316,47 @@ export default function MyDayPage() {
         </CardBody>
       </Card>
 
-      <section className="mt-6 min-w-0" aria-labelledby="today-h">
-        <h2 id="today-h" className="mb-2 text-lg font-semibold">
-          Today
-        </h2>
-        {segs.length === 0 ? (
-          <EmptyTable title="Nothing recorded yet" description="Segments appear here once you start work." />
-        ) : (
-          <SegmentsTable segs={segs} now={now} />
-        )}
-        {totals.lunch_over_cap_minutes > 0 && (
-          <p className="mt-2 text-sm text-warning">
-            Lunch is {totals.lunch_over_cap_minutes}m over the {policy.lunch_cap_minutes}m cap.
-          </p>
-        )}
+      <section className="mt-4 min-w-0" aria-label="Today's intervals">
+        <button
+          type="button"
+          aria-expanded={intervalsOpen}
+          aria-controls="intervals-panel"
+          onClick={toggleIntervals}
+          className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-2.5 text-left text-sm hover:bg-surface-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span className="num min-w-0 truncate">
+            <span className="font-medium">Today's intervals</span>
+            <span className="text-fg-muted">
+              {' · '}Work {formatDuration(totals.work_seconds)} · Break {formatDuration(totals.break_seconds)}
+              {totals.offline_seconds >= 60 && <> · Offline {formatDuration(totals.offline_seconds)}</>}
+              {totals.idle_seconds >= 60 && <> · Idle {formatDuration(totals.idle_seconds)}</>}
+              {' · '}
+              {segs.length} {segs.length === 1 ? 'interval' : 'intervals'}
+            </span>
+          </span>
+          <ChevronDown size={16} className={`shrink-0 text-fg-subtle transition-transform ${intervalsOpen ? 'rotate-180' : ''}`} aria-hidden />
+        </button>
+        <div id="intervals-panel" hidden={!intervalsOpen} className="mt-2">
+          {intervalsOpen &&
+            (segs.length === 0 ? (
+              <EmptyTable title="Nothing recorded yet" description="Segments appear here once you start work." />
+            ) : (
+              <SegmentsTable segs={[...segs].reverse()} now={now} />
+            ))}
+          {intervalsOpen && totals.lunch_over_cap_minutes > 0 && (
+            <p className="mt-2 text-sm text-warning">
+              Lunch is {totals.lunch_over_cap_minutes}m over the {policy.lunch_cap_minutes}m cap.
+            </p>
+          )}
+        </div>
       </section>
 
       <section className="mt-6 min-w-0" aria-labelledby="week-h">
-        <h2 id="week-h" className="mb-3 text-lg font-semibold">
+        <h2 id="week-h" className="mb-2 text-[15px] font-semibold">
           This week
         </h2>
-        <Card className="mb-4">
-          <CardBody className="grid gap-6 md:grid-cols-[1fr_16rem] md:items-center">
+        <Card className="mb-3">
+          <CardBody className="grid gap-4 md:grid-cols-[1fr_16rem] md:items-center">
             <Bars
               data-testid="week-bars"
               data={weeklyData}
@@ -319,13 +368,13 @@ export default function MyDayPage() {
             />
             <dl className="grid grid-cols-2 gap-4 md:grid-cols-1">
               <div>
-                <dt className="text-sm text-fg-muted">Worked this week</dt>
-                <dd className="font-mono text-2xl font-semibold tabular-nums">{formatDuration(weekSeconds)}</dd>
+                <dt className="text-[13px] text-fg-muted">Worked this week</dt>
+                <dd className="num text-2xl font-semibold">{formatDuration(weekSeconds)}</dd>
                 <dd className="text-xs text-fg-subtle">of {formatDuration(workdays * target)} expected</dd>
               </div>
               <div>
-                <dt className="text-sm text-fg-muted">Average per worked day</dt>
-                <dd className="font-mono text-lg font-medium tabular-nums">
+                <dt className="text-[13px] text-fg-muted">Average per worked day</dt>
+                <dd className="num text-lg font-medium">
                   {formatDuration(workedDays ? weekSeconds / workedDays : 0)}
                 </dd>
               </div>
@@ -350,15 +399,15 @@ export default function MyDayPage() {
             </Tr>
           </Thead>
           <Tbody>
-            {p.week.map((w) => {
+            {weekRows.map((w) => {
               const rec = w.day
               const t = rec && w.date === today ? liveTotals(w.totals, openSeg, p.server_time, now) : w.totals
               const key = w.date
               const pending = rec && noRegs(rec.id).some((r) => r.status === 'pending')
               const rejected = rec && noRegs(rec.id).some((r) => r.status === 'rejected')
               return (
-                <Tr key={key} className={key === today ? 'bg-accent-soft/40' : undefined}>
-                  <Td className="whitespace-nowrap">{format(parseISO(key), 'EEE d MMM')}</Td>
+                <Tr key={key} className={key === today ? 'bg-accent-soft font-semibold' : undefined}>
+                  <Td className="whitespace-nowrap">{key === today ? 'Today' : format(parseISO(key), 'EEE d MMM')}</Td>
                   <Td numeric>{rec?.first_in_at ? formatTime(rec.first_in_at) : '-'}</Td>
                   <Td numeric>{rec?.last_out_at ? formatTime(rec.last_out_at) : '-'}</Td>
                   <Td numeric>{rec && rec.first_in_at ? formatDuration(t.work_seconds) : '-'}</Td>
@@ -403,52 +452,6 @@ export default function MyDayPage() {
         </Table>
       </section>
 
-      {p.recent_days.length > 0 && (
-        <section className="mt-6">
-          <h2 className="mb-2 text-sm font-medium">Needs attention this month</h2>
-          <Table>
-            <Thead>
-              <Tr className="hover:bg-transparent">
-                <Th>Day</Th>
-                <Th>Grade</Th>
-                <Th>Issue</Th>
-                <Th>
-                  <span className="sr-only">Actions</span>
-                </Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {p.recent_days.map(({ day: d, regularization, last_note }) => {
-                return (
-                  <Tr key={d.id}>
-                    <Td className="whitespace-nowrap">{format(parseISO(d.date), 'EEE d MMM')}</Td>
-                    <Td>
-                      <GradeChip day={d} />
-                    </Td>
-                    <Td className="text-fg-muted">
-                      {regularizableKinds(d).map((k) => regularizationKindLabels[k]).join(', ')}
-                    </Td>
-                    <Td className="text-right">
-                      {regularization === 'pending' ? (
-                        <StatusBadge status="pending" label="Regularization pending" />
-                      ) : (
-                        <span className="inline-flex items-center gap-2">
-                          {regularization === 'rejected' && <StatusBadge status="rejected" label="Rejected" />}
-                          {regularization === 'rejected' && last_note && <span className="max-w-48 truncate text-xs text-fg-muted" title={last_note}>{last_note}</span>}
-                          <Button size="sm" variant="ghost" onClick={() => openReg(d)}>
-                            Regularise
-                          </Button>
-                        </span>
-                      )}
-                    </Td>
-                  </Tr>
-                )
-              })}
-            </Tbody>
-          </Table>
-        </section>
-      )}
-
       <BreakDialog
         open={breakOpen}
         onOpenChange={setBreakOpen}
@@ -458,7 +461,7 @@ export default function MyDayPage() {
         open={endOpen}
         onOpenChange={setEndOpen}
         title="End your day?"
-        description={`You worked ${formatDuration(totals.work_seconds)} today.${wouldLeaveEarly ? ` Ending before ${formatTime(new Date(earlyCutoff).toISOString())} counts as an early leave.` : ''} Signing in again later counts as overtime.`}
+        description={`You worked ${formatDuration(totals.work_seconds)} today.${wouldLeaveEarly ? ` Ending before ${formatTime(new Date(earlyCutoff).toISOString())} counts as an early leave.` : ''} Starting again later continues the day until you reach your daily hours; after that it counts as overtime.`}
         confirmLabel="End my day"
         onConfirm={() => {
           router.post(route('attendance.end-day'), {}, keep)
@@ -551,5 +554,73 @@ function SegmentsTable({ segs, now }: { segs: TimeSegment[]; now: number }) {
         })}
       </Tbody>
     </Table>
+  )
+}
+
+function AttentionStrip({
+  days,
+  open,
+  onToggle,
+  onRegularise,
+}: {
+  days: MyDayProps['recent_days']
+  open: boolean
+  onToggle: () => void
+  onRegularise: (d: AttendanceDay) => void
+}) {
+  const shown = open ? days : days.slice(0, 3)
+  const more = days.length - 3
+  return (
+    <div role="region" aria-label="Days needing attention" className="mb-4 rounded-lg border border-warning/30 bg-warning-soft px-4 py-2.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="text-sm font-medium text-warning">
+          {days.length} {days.length === 1 ? 'day needs' : 'days need'} attention
+        </span>
+        {more > 0 && (
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={open}
+            className="rounded text-xs font-medium text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {open ? 'Show less' : `+${more} more`}
+          </button>
+        )}
+      </div>
+      <ul className="mt-1 flex flex-col gap-0.5">
+        {shown.map(({ day: d, regularization, last_note }) => {
+          const issue = regularizableKinds(d)
+            .map((k) =>
+              k === 'late'
+                ? `Late ${d.late_minutes}m`
+                : k === 'early'
+                  ? `Left early ${d.early_minutes}m`
+                  : (regularizationKindLabels[k] ?? k),
+            )
+            .join(', ')
+          return (
+            <li key={d.id} className="flex flex-wrap items-center gap-x-2 text-[13px]">
+              <span className="num whitespace-nowrap">
+                {format(parseISO(d.date), 'EEE d MMM')} · {issue}
+              </span>
+              {regularization === 'pending' ? (
+                <StatusBadge status="pending" label="Regularization pending" />
+              ) : (
+                <>
+                  {regularization === 'rejected' && (
+                    <span title={last_note ?? undefined}>
+                      <StatusBadge status="rejected" label="Rejected" />
+                    </span>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => onRegularise(d)}>
+                    Regularise
+                  </Button>
+                </>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }

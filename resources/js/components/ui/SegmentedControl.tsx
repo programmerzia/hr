@@ -34,7 +34,7 @@ export function SegmentedControl<T extends string>({
           aria-checked={value === o.value}
           onClick={() => onValueChange(o.value)}
           className={cn(
-            'h-6 rounded-sm px-2.5 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+            'h-6 rounded-sm px-2.5 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             value === o.value ? 'bg-surface font-medium text-fg' : 'text-fg-muted hover:text-fg',
           )}
         >

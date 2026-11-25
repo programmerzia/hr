@@ -173,7 +173,7 @@ export function AvatarStack({ ids, max = 4 }: { ids: string[]; max?: number }) {
   return (
     <div className="flex items-center">
       {shown.map((id) => (
-        <span key={id} title={personName(id)} className="-ml-1 first:ml-0 rounded-full ring-2 ring-surface">
+        <span key={id} title={personName(id)} className="-ml-0.5 first:ml-0 rounded-full ring-2 ring-surface">
           <Avatar name={personName(id)} size="sm" />
         </span>
       ))}

@@ -13,7 +13,7 @@ export function MoneyCell({
   className?: string
 }) {
   return (
-    <span className={cn('block text-right font-mono tabular-nums', amount < 0 && 'text-danger', className)}>
+    <span className={cn('block text-right num ', amount < 0 && 'text-danger', className)}>
       {formatMoney(amount, currency)}
     </span>
   )

@@ -221,7 +221,7 @@ export default function InvoiceEditorPage() {
                           type="number"
                           min={0}
                           step="any"
-                          className="text-right font-mono"
+                          className="text-right num"
                           value={r.qty}
                           onChange={(e) =>
                             patchRow(r.key, {
@@ -236,7 +236,7 @@ export default function InvoiceEditorPage() {
                           type="number"
                           min={0}
                           step="any"
-                          className="text-right font-mono"
+                          className="text-right num"
                           value={r.price}
                           onChange={(e) =>
                             patchRow(r.key, {

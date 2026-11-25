@@ -23,11 +23,11 @@ function TodayRing() {
       className="group flex items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
     >
       <div className="text-right">
-        <p className="font-mono text-lg font-medium tabular-nums">{formatDuration(workSeconds)}</p>
+        <p className="num text-lg font-medium ">{formatDuration(workSeconds)}</p>
         <p className="text-xs text-fg-muted group-hover:text-fg">of {formatDuration(target)} today</p>
       </div>
       <Ring value={pct} size={48} aria-label={`${pct}% of today's target worked`}>
-        <span className="font-mono text-xs font-medium tabular-nums">{pct}%</span>
+        <span className="num text-xs font-medium ">{pct}%</span>
       </Ring>
     </Link>
   )

@@ -39,7 +39,7 @@ export function Select({
         id={id}
         className={cn(
           fieldClass,
-          'inline-flex h-8 items-center justify-between gap-2 text-left data-[placeholder]:text-fg-subtle',
+          'inline-flex h-[34px] items-center justify-between gap-2 text-left data-[placeholder]:text-fg-subtle',
           className,
         )}
         {...aria}
@@ -53,7 +53,7 @@ export function Select({
         <RSelect.Content
           position="popper"
           sideOffset={4}
-          className="z-50 max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-border bg-surface shadow-float"
+          className="z-50 max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg border border-border bg-surface shadow-float"
         >
           <RSelect.Viewport className="p-1">
             {options.map((o) => (
@@ -79,7 +79,7 @@ export const NativeSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<H
   function NativeSelect({ className, children, ...props }, ref) {
     return (
       <div className="relative">
-        <select ref={ref} className={cn(fieldClass, 'h-8 appearance-none pr-8', className)} {...props}>
+        <select ref={ref} className={cn(fieldClass, 'h-[34px] appearance-none pr-8', className)} {...props}>
           {children}
         </select>
         <ChevronDown

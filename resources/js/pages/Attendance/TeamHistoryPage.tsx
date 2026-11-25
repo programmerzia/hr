@@ -245,7 +245,7 @@ export default function TeamHistoryPage() {
                     <Td numeric>
                       {r.overtime && r.overtime.raw > 0 ? (
                         <span className="inline-flex items-center justify-end gap-2">
-                          <span className="font-mono tabular-nums">
+                          <span className="num ">
                             {r.overtime.raw} / {r.overtime.approved}
                           </span>
                           <Button size="sm" variant="secondary" onClick={() => setApproving(r)}>

@@ -114,7 +114,7 @@ function AppShell({ children }: { children: ReactNode }) {
   )
 
   return (
-    <div className="flex min-h-screen bg-bg [--sticky-top:48px]">
+    <div className="flex min-h-screen bg-bg [--sticky-top:56px]">
       <Sidebar groups={groups} collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar

@@ -9,6 +9,7 @@ use App\Domain\Leave\Actions\EndEarly;
 use App\Models\AttendancePolicy;
 use App\Models\Employee;
 use App\Models\LeaveRequest;
+use App\Models\TimeSegment;
 use Illuminate\Support\Facades\DB;
 
 class StartWork
@@ -52,6 +53,20 @@ class StartWork
                 return self::RESUMED;
             }
             if ($day->status === 'ended') {
+                // Ended before reaching the day's standard hours (signed out with "End my day", or ended by mistake):
+                // signing in again simply continues the day. The time in between is a sign-out break.
+                $standard = AttendancePolicy::forDate($now->toDateString())->standard_minutes * 60;
+                if ((int) $day->work_seconds < $standard) {
+                    if ($day->last_out_at && $day->last_out_at->lt($now)) {
+                        TimeSegment::create([
+                            'attendance_day_id' => $day->id, 'type' => 'break', 'break_category' => 'signed_out',
+                            'started_at' => $day->last_out_at, 'ended_at' => $now, 'note' => 'Ended the day, then continued', 'source' => 'logout',
+                        ]);
+                    }
+                    DayState::openWork($employee, $day, $now, null, ['early_minutes' => 0]);
+
+                    return self::RESUMED;
+                }
                 if (! $confirmOvertime) {
                     return self::NEEDS_OVERTIME_CONFIRM;
                 }

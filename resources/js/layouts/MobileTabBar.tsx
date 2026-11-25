@@ -24,7 +24,7 @@ export function MobileTabBar({
   const all = flatNav(groups)
   const tabs = mobileTabIds.map((id) => all.find((i) => i.id === id)).filter((i) => i !== undefined)
   const tabClass =
-    'relative flex h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40'
+    'relative flex h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
 
   return (
     <>
@@ -55,7 +55,7 @@ export function MobileTabBar({
       </nav>
       <Sheet open={menuOpen} onOpenChange={onMenuOpenChange} title="Menu" side="left">
         <div className="flex h-full flex-col">
-          <div className="flex-1 overflow-y-auto p-2">
+          <div className="flex-1 overflow-y-auto bg-sidebar p-2">
             <NavList groups={groups} onNavigate={() => onMenuOpenChange(false)} />
           </div>
           <div className="flex flex-col gap-2 border-t border-border p-3">

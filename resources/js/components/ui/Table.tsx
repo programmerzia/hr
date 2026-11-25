@@ -2,10 +2,10 @@ import type { HTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from 'react'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import { cn } from '../../lib/cn'
 
-/** Wrapper provides border and horizontal scroll on every screen size. Cells do not wrap; opt in with whitespace-normal. Rows are 32px. */
+/** Wrapper provides border and horizontal scroll on every screen size. Cells do not wrap; opt in with whitespace-normal. Header 36px, rows 40px. */
 export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="relative overflow-x-auto rounded-md border border-border bg-surface shadow-xs">
+    <div className="relative overflow-x-auto rounded-lg border border-border bg-surface shadow-xs">
       <table className={cn('w-full border-collapse text-sm', className)} {...props} />
     </div>
   )
@@ -28,7 +28,7 @@ export function Tr({
     <tr
       aria-selected={selected || undefined}
       className={cn(
-        'border-b border-border transition-colors duration-150 last:border-b-0 hover:bg-surface-2',
+        'border-b border-border transition-colors duration-150 last:border-b-0 hover:bg-surface-2/60',
         selected && 'bg-accent-soft/50 shadow-[inset_2px_0_0_rgb(var(--accent))]',
         className,
       )}
@@ -50,7 +50,7 @@ export function Th({ className, numeric, sort, onSort, children, ...props }: ThP
       scope="col"
       aria-sort={ariaSort}
       className={cn(
-        'h-8 whitespace-nowrap border-b border-border bg-surface-2 px-3 text-xs font-medium text-fg-muted',
+        'h-9 whitespace-nowrap border-b border-border bg-surface-2 px-3 text-[11px] font-medium uppercase tracking-[0.04em] text-fg-subtle',
         numeric ? 'text-right' : 'text-left',
         className,
       )}
@@ -61,7 +61,7 @@ export function Th({ className, numeric, sort, onSort, children, ...props }: ThP
           type="button"
           onClick={onSort}
           className={cn(
-            'inline-flex items-center gap-1 rounded hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+            'inline-flex items-center gap-1 rounded hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             numeric && 'flex-row-reverse',
           )}
         >
@@ -84,8 +84,8 @@ export function Td({
   return (
     <td
       className={cn(
-        'h-8 whitespace-nowrap px-3 py-1 align-middle text-fg',
-        numeric && 'text-right font-mono tabular-nums',
+        'h-10 whitespace-nowrap px-3 py-1 align-middle text-sm text-fg',
+        numeric && 'text-right num',
         className,
       )}
       {...props}

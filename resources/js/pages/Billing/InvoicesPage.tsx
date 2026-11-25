@@ -68,7 +68,7 @@ export default function InvoicesPage() {
           <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <dt className="text-sm text-fg-muted">Outstanding</dt>
-              <dd className="mt-1 font-mono text-xl font-medium tabular-nums">
+              <dd className="mt-1 num text-xl font-medium ">
                 {sumByCurrency(
                   open.map((i) => ({
                     currency: i.currency,
@@ -79,7 +79,7 @@ export default function InvoicesPage() {
             </div>
             <div>
               <dt className="text-sm text-fg-muted">Overdue</dt>
-              <dd className="mt-1 font-mono text-xl font-medium tabular-nums text-danger" data-warning>
+              <dd className="mt-1 num text-xl font-medium  text-danger" data-warning>
                 {sumByCurrency(
                   invoices
                     .filter((i) => i.status === 'overdue')
@@ -92,7 +92,7 @@ export default function InvoicesPage() {
             </div>
             <div>
               <dt className="text-sm text-fg-muted">Paid this month</dt>
-              <dd className="mt-1 font-mono text-xl font-medium tabular-nums">{sumByCurrency(paid_this_month)}</dd>
+              <dd className="mt-1 num text-xl font-medium ">{sumByCurrency(paid_this_month)}</dd>
             </div>
           </dl>
           {aging.length > 0 && (

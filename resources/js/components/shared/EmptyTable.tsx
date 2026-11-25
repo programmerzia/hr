@@ -15,7 +15,7 @@ export function EmptyTable({
   action?: ReactNode
 }) {
   return (
-    <div className="rounded-md border border-border bg-surface">
+    <div className="rounded-lg border border-border bg-surface">
       <EmptyState icon={icon} title={title} description={description} action={action} />
     </div>
   )

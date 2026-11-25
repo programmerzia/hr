@@ -173,7 +173,7 @@ function TaskDrawerBody({ task, onClose }: { task: DrawerTask; onClose: () => vo
           <div className="flex flex-col gap-1.5">
             <span className="text-sm font-medium">Tracked</span>
             <p className="text-base">
-              <span className="font-mono tabular-nums">{formatDuration(tracked)}</span>
+              <span className="num ">{formatDuration(tracked)}</span>
               <span className="text-fg-muted">
                 {' '}
                 of {task.estimate_minutes === null ? 'no estimate' : formatDuration(estimateSeconds)}

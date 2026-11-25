@@ -16,33 +16,33 @@ export function Sidebar({ groups, collapsed, onToggleCollapsed }: SidebarProps) 
   return (
     <aside
       className={cn(
-        'sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border bg-sidebar md:flex',
-        collapsed ? 'w-14' : 'w-60',
+        'sticky top-0 hidden h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-fg md:flex',
+        collapsed ? 'w-14' : 'w-[232px]',
       )}
     >
       <Link
         href="/"
         aria-label="Vivacom home"
         className={cn(
-          'flex h-12 shrink-0 items-center gap-2 border-b border-border px-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40',
+          'flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border px-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
           collapsed && 'justify-center px-0',
         )}
       >
         <Logomark />
-        {!collapsed && <span className="text-lg font-semibold tracking-tight">Vivacom</span>}
+        {!collapsed && <span className="text-lg font-semibold tracking-tight text-sidebar-fg-strong">Vivacom</span>}
       </Link>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
         <NavList groups={groups} collapsed={collapsed} />
       </div>
 
-      <div className="border-t border-border p-2">
+      <div className="border-t border-sidebar-border p-2">
         <button
           type="button"
           onClick={onToggleCollapsed}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className={cn(
-            'flex h-8 w-full items-center gap-2 rounded px-2 text-base text-fg-muted transition-colors duration-150 hover:bg-surface-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+            'flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm text-sidebar-fg transition-colors duration-150 hover:bg-sidebar-hover hover:text-sidebar-fg-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             collapsed && 'justify-center px-0',
           )}
         >

@@ -45,7 +45,7 @@ export function TopBar({ groups, onOpenPalette, onOpenMenu, onSignOut }: TopBarP
   return (
     <header
       data-testid="topbar"
-      className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 md:px-6"
+      className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 md:px-6"
     >
       <Link href="/" aria-label="Vivacom home" className="flex items-center rounded md:hidden">
         <Logomark />
@@ -58,7 +58,7 @@ export function TopBar({ groups, onOpenPalette, onOpenMenu, onSignOut }: TopBarP
       <button
         type="button"
         onClick={onOpenPalette}
-        className="hidden h-8 min-w-0 max-w-sm flex-1 items-center gap-2 rounded-md border border-border bg-surface-2 px-2.5 text-base text-fg-subtle transition-colors duration-150 hover:border-border-strong hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 md:flex"
+        className="hidden h-8 min-w-0 max-w-sm flex-1 items-center gap-2 rounded-md border border-border bg-surface-2 px-2.5 text-base text-fg-subtle transition-colors duration-150 hover:border-border-strong hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:flex"
       >
         <Search size={16} aria-hidden />
         <span className="flex-1 text-left">Search</span>
@@ -73,7 +73,7 @@ export function TopBar({ groups, onOpenPalette, onOpenMenu, onSignOut }: TopBarP
             <Link
               href="/inbox"
               aria-label="Inbox"
-              className="relative inline-flex size-8 items-center justify-center rounded text-fg-muted transition-colors duration-150 hover:bg-surface-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="relative inline-flex size-8 items-center justify-center rounded text-fg-muted transition-colors duration-150 hover:bg-surface-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Bell size={16} />
               <NavBadge id="inbox" className="absolute -right-0.5 -top-0.5" />
@@ -85,7 +85,7 @@ export function TopBar({ groups, onOpenPalette, onOpenMenu, onSignOut }: TopBarP
           <DropdownMenu>
             <DropdownMenuTrigger
               aria-label="Account menu"
-              className="ml-1 rounded-full transition-shadow duration-150 hover:ring-2 hover:ring-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="ml-1 rounded-full transition-shadow duration-150 hover:ring-2 hover:ring-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Avatar name={employee.name} size="md" />
             </DropdownMenuTrigger>

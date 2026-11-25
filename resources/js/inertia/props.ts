@@ -35,6 +35,8 @@ export interface AttendanceProp {
   day: AttendanceDay | null
   open_segment: TimeSegment | null
   policy: AttendancePolicy
+  /** Work seconds as of server_time. */
+  work_seconds: number
   server_time: ISODateTime
 }
 

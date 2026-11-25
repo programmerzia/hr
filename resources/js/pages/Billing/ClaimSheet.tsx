@@ -63,15 +63,15 @@ export function ClaimSheet({ claim, employee, bank, weeks }: Pick<ClaimDetailPro
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-md border border-border p-3">
             <p className="text-sm text-fg-muted">Tracked time</p>
-            <p className="mt-1 font-mono text-lg font-semibold tabular-nums">{hoursText(claim.tracked_minutes)}</p>
+            <p className="mt-1 num text-lg font-semibold ">{hoursText(claim.tracked_minutes)}</p>
           </div>
           <div className="rounded-md border border-border p-3">
             <p className="text-sm text-fg-muted">Claimed hours</p>
-            <p className="mt-1 font-mono text-lg font-semibold tabular-nums">{hoursText(claim.claimed_minutes)}</p>
+            <p className="mt-1 num text-lg font-semibold ">{hoursText(claim.claimed_minutes)}</p>
           </div>
           <div className="rounded-md border border-border p-3">
             <p className="text-sm text-fg-muted">Difference</p>
-            <p className={cn('mt-1 font-mono text-lg font-semibold tabular-nums', diff > 0 ? 'text-warning' : 'text-fg')}>
+            <p className={cn('mt-1 num text-lg font-semibold ', diff > 0 ? 'text-warning' : 'text-fg')}>
               {diff === 0 ? 'Matches' : `${diff > 0 ? '+' : '-'}${hoursText(Math.abs(diff))}`}
             </p>
           </div>
@@ -117,7 +117,7 @@ export function ClaimSheet({ claim, employee, bank, weeks }: Pick<ClaimDetailPro
             </div>
             <div className="flex justify-between">
               <dt className="text-fg-muted">Hours claimed</dt>
-              <dd className="font-mono tabular-nums">{(claim.claimed_minutes / 60).toFixed(2)}</dd>
+              <dd className="num ">{(claim.claimed_minutes / 60).toFixed(2)}</dd>
             </div>
           </>
         ) : (

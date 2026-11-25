@@ -70,7 +70,7 @@ export function FilterChip({
           type="button"
           onClick={onClear}
           aria-label={`Clear ${label} filter`}
-          className="rounded text-fg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="rounded text-fg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <X size={14} />
         </button>

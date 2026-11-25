@@ -84,7 +84,7 @@ export function LeaveBalancesCard() {
             <li key={b.id}>
               <div className="mb-1.5 flex items-baseline justify-between">
                 <span>{b.type.name}</span>
-                <span className="font-mono text-sm tabular-nums">
+                <span className="num text-sm ">
                   {b.available}
                   <span className="text-fg-muted"> of {b.entitled} days</span>
                 </span>

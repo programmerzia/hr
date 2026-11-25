@@ -56,7 +56,7 @@ export function StackedBar({
           <li key={s.label} className="flex items-center gap-1.5 text-sm">
             <span className="size-2 rounded-full" style={{ backgroundColor: chartColor(s.color) }} aria-hidden />
             <span className="text-fg-muted">{s.label}</span>
-            <span className="font-mono font-medium tabular-nums">{s.display ?? s.value}</span>
+            <span className="num font-medium ">{s.display ?? s.value}</span>
           </li>
         ))}
       </ul>

@@ -173,7 +173,7 @@ export default function RunsPage() {
         <Card className="mb-4">
           <CardHeader
             title="Gross by month"
-            actions={<span className="font-mono text-sm tabular-nums text-fg-muted">{formatMoney(series.latestGross)} latest</span>}
+            actions={<span className="num text-sm  text-fg-muted">{formatMoney(series.latestGross)} latest</span>}
           />
           <CardBody>
             <Bars

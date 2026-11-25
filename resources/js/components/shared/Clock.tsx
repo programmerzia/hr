@@ -13,7 +13,7 @@ export function Clock({
   return (
     <span
       className={cn(
-        'font-mono font-medium tabular-nums',
+        'num font-semibold',
         size === 'lg' ? 'text-[40px] leading-[48px]' : 'text-[28px] leading-9',
         className,
       )}

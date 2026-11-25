@@ -25,13 +25,14 @@ function useServerNow(serverTime: string | undefined): number {
 
 /**
  * Today's work seconds, ticking locally between server responses.
- * Contract: `day.work_seconds` covers closed segments; an open `work` segment adds now − started_at.
+ * Contract: `attendance.work_seconds` is the total as of server_time; an open `work` segment adds now − server_time.
  */
 export function useWorkSeconds(attendance: AttendanceProp | undefined): number {
   const now = useServerNow(attendance?.server_time)
   const day = attendance?.day
   const open = attendance?.open_segment
   if (!day) return 0
-  const live = open && open.type === 'work' && !open.ended_at ? Math.max(0, (now - new Date(open.started_at).getTime()) / 1000) : 0
-  return Math.floor(day.work_seconds + live)
+  // work_seconds already counts the open segment up to server_time; only the time since then is added.
+  const live = open && open.type === 'work' && !open.ended_at ? Math.max(0, (now - new Date(attendance!.server_time).getTime()) / 1000) : 0
+  return Math.floor((attendance!.work_seconds ?? day.work_seconds) + live)
 }

@@ -38,7 +38,7 @@ export function OverviewCard() {
     { label: 'Offline', value: n.offline, color: 'muted' },
     { label: 'On leave', value: n.leave, color: 'info' },
     { label: 'Day ended', value: n.ended, color: 'chart-7' },
-    { label: 'Not started', value: n.not_started, color: 'chart-3' },
+    { label: 'Not started', value: n.not_started, color: 'chart-4' },
     { label: 'Absent', value: n.absent, color: 'danger' },
   ]
 
@@ -63,7 +63,7 @@ export function OverviewCard() {
           <dl className="flex flex-wrap gap-x-8 gap-y-2 border-t border-border pt-4">
             {facts.map((f) => (
               <div key={f.label} className="flex items-baseline gap-2">
-                <dd className="stat-value font-mono text-xl font-medium tabular-nums">{f.value}</dd>
+                <dd className="stat-value num text-xl font-medium ">{f.value}</dd>
                 <dt className="text-sm text-fg-muted">{f.label}</dt>
               </div>
             ))}
@@ -148,7 +148,7 @@ export function AttentionCard() {
                 className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
               >
                 <span className="flex-1">{r.label}</span>
-                <Badge variant={r.warn ? 'danger' : 'accent'} className="font-mono tabular-nums">
+                <Badge variant={r.warn ? 'danger' : 'accent'} className="num ">
                   {r.count}
                 </Badge>
                 <ChevronRight size={16} className="text-fg-subtle" aria-hidden />
@@ -188,7 +188,7 @@ export function PayrollCard() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-sm text-fg-muted">{label} gross</p>
-              <p className="font-mono text-2xl font-semibold tabular-nums">{formatMoney(latestGross)}</p>
+              <p className="num text-2xl font-semibold ">{formatMoney(latestGross)}</p>
               {delta !== null && Math.abs(delta) >= 0.05 && (
                 <p className="mt-0.5 text-xs text-fg-muted tabular-nums">
                   {delta > 0 ? '+' : ''}
@@ -249,7 +249,7 @@ export function BillingCard() {
             <div key={row.currency}>
               <div className="mb-2 flex items-baseline justify-between">
                 <span className="text-sm text-fg-muted">Outstanding in {row.currency}</span>
-                <span className="font-mono text-lg font-semibold tabular-nums">{formatMoney(row.total, row.currency)}</span>
+                <span className="num text-lg font-semibold ">{formatMoney(row.total, row.currency)}</span>
               </div>
               <StackedBar
                 segments={row.segments}
@@ -263,7 +263,7 @@ export function BillingCard() {
             <Link href="/claims" className="flex items-center justify-between border-t border-border pt-3 text-sm hover:text-accent">
               <span>Contractor claims awaiting approval</span>
               <span className="flex items-center gap-1">
-                <span className="stat-value font-mono font-medium">{waiting}</span>
+                <span className="stat-value num font-medium">{waiting}</span>
                 <ChevronRight size={16} className="text-fg-subtle" aria-hidden />
               </span>
             </Link>
