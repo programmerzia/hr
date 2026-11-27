@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Payroll;
 
+use App\Models\PayrollAdjustment;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreAdjustmentRequest extends FormRequest
 {
@@ -14,10 +16,15 @@ class StoreAdjustmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'kind' => ['required', 'in:bonus,deduction'],
+            'category' => ['required', Rule::in(array_keys(PayrollAdjustment::CATEGORIES))],
             'label' => ['nullable', 'string', 'max:160'],
             'amount' => ['nullable', 'numeric'],
-            'note' => ['nullable', 'string', 'max:2000'],
+            'note' => ['required', 'string', 'max:2000'],
         ];
+    }
+
+    public function messages(): array
+    {
+        return ['category.*' => 'Choose what kind of adjustment this is.', 'note.required' => 'Give a reason for this adjustment.'];
     }
 }

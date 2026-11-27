@@ -7,6 +7,7 @@ use App\Domain\Leave\Actions\EndEarly;
 use App\Domain\Leave\Actions\SubmitLeave;
 use App\Domain\Leave\Services\BalanceService;
 use App\Domain\Leave\Support\Shape;
+use App\Domain\Leave\Support\Trail;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Leave\StoreLeaveRequest;
 use App\Http\Resources\AttendancePolicyResource;
@@ -32,13 +33,14 @@ class MyLeaveController extends Controller
         $year = (int) now()->format('Y');
         $rows = array_merge($balances->forEmployee($employee, $year), $balances->forEmployee($employee, $year + 1));
 
+        $mine = LeaveRequest::where('employee_id', $employee->id)->orderByDesc('starts_on')->orderByDesc('created_at')->get();
+
         return Inertia::render('Leave/MyLeavePage', [
             'year' => $year,
             'on_probation' => SubmitLeave::onProbation($employee),
             'balances' => array_map(Shape::balance(...), $rows),
-            'requests' => LeaveRequestResource::collection(
-                LeaveRequest::where('employee_id', $employee->id)->orderByDesc('starts_on')->orderByDesc('created_at')->get(),
-            )->resolve(),
+            'requests' => LeaveRequestResource::collection($mine)->resolve(),
+            'trail' => Trail::for($mine),
             'leave_types' => Shape::types(),
             'holidays' => HolidayResource::collection(Holiday::orderBy('date')->get())->resolve(),
             'policy' => AttendancePolicyResource::make(AttendancePolicy::current())->resolve(),
@@ -68,7 +70,7 @@ class MyLeaveController extends Controller
     public function cancel(Request $request, LeaveRequest $leaveRequest, Cancel $cancel): RedirectResponse
     {
         Gate::authorize('cancel', $leaveRequest);
-        $cancel($leaveRequest);
+        $cancel($leaveRequest, $request->user()->employee);
 
         return back()->with('success', 'Leave request cancelled');
     }
@@ -76,7 +78,7 @@ class MyLeaveController extends Controller
     public function endEarly(Request $request, LeaveRequest $leaveRequest, EndEarly $endEarly): RedirectResponse
     {
         Gate::authorize('cancel', $leaveRequest);
-        $endEarly($leaveRequest, now()->toDateString());
+        $endEarly($leaveRequest, now()->toDateString(), $request->user()->employee);
 
         return back()->with('success', 'Your leave ended today. The remaining days are back in your balance');
     }

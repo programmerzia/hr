@@ -28,6 +28,14 @@ class PayrollRunResource extends JsonResource
             'reopened_at' => Fmt::dt($this->reopened_at),
             'reopened_by' => $this->reopened_by,
             'reopen_reason' => $this->reopen_reason,
+            'prepared_by' => $this->prepared_by,
+            'prepared_at' => Fmt::dt($this->created_at),
+            'submitted_by' => $this->submitted_by,
+            'submitted_at' => Fmt::dt($this->submitted_at),
+            'paid_by' => $this->paid_by,
+            'paid_on' => $this->paid_on?->format('Y-m-d'),
+            'early_pay_reason' => $this->early_pay_reason,
+            'self_approved' => (bool) $this->self_approved,
         ];
     }
 }

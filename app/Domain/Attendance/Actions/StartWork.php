@@ -10,6 +10,7 @@ use App\Models\AttendancePolicy;
 use App\Models\Employee;
 use App\Models\LeaveRequest;
 use App\Models\TimeSegment;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
 class StartWork
@@ -39,11 +40,12 @@ class StartWork
             ->whereDate('starts_on', '<=', $date)->whereDate('ends_on', '>=', $date)->first();
     }
 
-    public function __invoke(Employee $employee, bool $confirmOvertime = false, bool $confirmLeave = false): string
+    /** @param  ?CarbonInterface  $at  when the work began, if not now (a beat's input time, clamped by the caller to today) */
+    public function __invoke(Employee $employee, bool $confirmOvertime = false, bool $confirmLeave = false, ?CarbonInterface $at = null): string
     {
-        return DB::transaction(function () use ($employee, $confirmOvertime, $confirmLeave) {
+        return DB::transaction(function () use ($employee, $confirmOvertime, $confirmLeave, $at) {
             $day = DayState::ensureToday($employee);
-            $now = now();
+            $now = $at && $at->lte(now()) && $at->toDateString() === now()->toDateString() ? $at->copy() : now();
             if ($day->status === 'working') {
                 return self::ALREADY_WORKING;
             }

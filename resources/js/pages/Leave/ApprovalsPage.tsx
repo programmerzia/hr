@@ -7,8 +7,8 @@ import { PersonCell } from '../../components/shared/PersonCell'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { Button, Dialog, Field, Sheet, Table, Tbody, Td, Textarea, Th, Thead, Tr } from '../../components/ui'
 import { useShared } from '../../inertia/props'
-import { formatDate } from '../../lib/format'
-import type { LeaveApproval, LeaveRequest, LeaveType } from '../../types'
+import type { LeaveRequest, LeaveTrailEvent, LeaveType } from '../../types'
+import { LeaveTrail } from './LeaveTrail'
 import { formatDays, formatRange, halfDayLabels, isUnlimited, type BalanceRow, type LeavePerson } from './helpers'
 
 interface QueueItem {
@@ -17,18 +17,19 @@ interface QueueItem {
   balance: BalanceRow | null
   /** Days left after approval; null for unlimited types. */
   balance_after: number | null
-  history: LeaveApproval[]
+  history: unknown[]
 }
 
 interface ApprovalsProps {
   items: QueueItem[]
+  trail: Record<string, LeaveTrailEvent[]>
   people: LeavePerson[]
   leave_types: LeaveType[]
   scope: 'lead' | 'hr'
 }
 
 export default function ApprovalsPage() {
-  const { items, people, leave_types, scope: stageScope } = useShared<ApprovalsProps>()
+  const { items, trail, people, leave_types, scope: stageScope } = useShared<ApprovalsProps>()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [rejecting, setRejecting] = useState<LeaveRequest | null>(null)
   const [note, setNote] = useState('')
@@ -162,7 +163,7 @@ export default function ApprovalsPage() {
           )
         }
       >
-        {selected && <RequestDetail item={selected} people={people} types={leave_types} />}
+        {selected && <RequestDetail item={selected} people={people} types={leave_types} trail={trail[selected.request.id]} />}
       </Sheet>
 
       <Dialog
@@ -187,8 +188,8 @@ export default function ApprovalsPage() {
   )
 }
 
-function RequestDetail({ item, people, types }: { item: QueueItem; people: LeavePerson[]; types: LeaveType[] }) {
-  const { request: r, overlaps, balance: bal, balance_after: after, history } = item
+function RequestDetail({ item, people, types, trail }: { item: QueueItem; people: LeavePerson[]; types: LeaveType[]; trail?: LeaveTrailEvent[] }) {
+  const { request: r, overlaps, balance: bal, balance_after: after } = item
   const type = types.find((t) => t.id === r.leave_type_id)
   const personOf = (id: string) => people.find((p) => p.id === id)
   const e = personOf(r.employee_id)
@@ -197,7 +198,6 @@ function RequestDetail({ item, people, types }: { item: QueueItem; people: Leave
     ['Type', type?.name ?? ''],
     ['Dates', formatRange(r.starts_on, r.ends_on)],
     ['Duration', r.half_day === 'none' ? formatDays(r.days) : `${formatDays(r.days)} (${halfDayLabels[r.half_day].toLowerCase()})`],
-    ['Requested', formatDate(r.created_at)],
     ['Reason', r.reason],
   ]
 
@@ -261,22 +261,8 @@ function RequestDetail({ item, people, types }: { item: QueueItem; people: Leave
       </section>
 
       <section>
-        <h3 className="mb-1 text-base font-semibold">Approval history</h3>
-        {history.length === 0 ? (
-          <p className="text-sm text-fg-muted">No decisions yet.</p>
-        ) : (
-          <ul className="flex flex-col gap-1.5 text-sm">
-            {history.map((a) => (
-              <li key={a.id}>
-                <span className="font-medium">{personOf(a.decided_by)?.name}</span>{' '}
-                <span className="text-fg-muted">
-                  {a.decision} as {a.stage === 'lead' ? 'team lead' : 'HR'} on {formatDate(a.decided_at)}
-                  {a.note ? `: ${a.note}` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <h3 className="mb-1 text-base font-semibold">History</h3>
+        <LeaveTrail events={trail} />
       </section>
     </div>
   )

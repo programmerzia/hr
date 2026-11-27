@@ -38,6 +38,8 @@ export interface AttendanceProp {
   /** Work seconds as of server_time. */
   work_seconds: number
   server_time: ISODateTime
+  /** Signed in, today is a working day and nothing is started yet: ask "Start your day?" on first input. */
+  start_prompt?: boolean
 }
 
 /** Shared props on every Inertia response (docs/06-backend-plan.md). Pages extend this with their own props. */

@@ -13,7 +13,7 @@ use App\Models\PayrollPolicy;
  *   lop             = lop_enabled ? round((absent + half × 0.5 + unpaid_leave) × daily_rate) : 0
  *   late days       = late_penalty_enabled ? min(floor(late_count / lates_per_penalty) × penalty_days, cap) : 0
  *   overtime_pay    = overtime_enabled ? round(ot_minutes / 60 × hourly × multiplier) : 0
- *   pf / pf_employer= pf_enabled ? round(earned_basic × percent / 100) : 0 (structure % overrides policy %)
+ *   pf / pf_employer= pf_enabled ? round(earned_basic × percent / 100) : 0 (settings % unless the structure sets pf_override)
  *   tax             = tax_enabled ? structure.tax_monthly : 0
  *   net             = gross + overtime + bonus − lop − late − tax − pf − deductions
  */
@@ -100,8 +100,10 @@ final class PayrollCalculator
         $otMinutes = (int) ($facts['overtime_minutes'] ?? 0);
         $overtime = $policy->overtime_enabled ? (int) round($otMinutes / 60 * $hourly * (float) $policy->overtime_multiplier) : 0;
 
-        $pfEmpPct = (float) ($ref['pf_percent'] ?? 0) ?: (float) $policy->pf_employee_percent;
-        $pfErPct = ($ref['pf_employer_percent'] ?? null) !== null ? (float) $ref['pf_employer_percent'] : (float) $policy->pf_employer_percent;
+        // Settings percentage wins; a structure replaces it only when it carries the explicit override flag.
+        $pfOverride = ! empty($ref['pf_override']) && (float) ($ref['pf_percent'] ?? 0) > 0;
+        $pfEmpPct = $pfOverride ? (float) $ref['pf_percent'] : (float) $policy->pf_employee_percent;
+        $pfErPct = $pfOverride && ($ref['pf_employer_percent'] ?? null) !== null ? (float) $ref['pf_employer_percent'] : (float) $policy->pf_employer_percent;
         $pf = $policy->pf_enabled ? (int) round($components['basic'] * $pfEmpPct / 100) : 0;
         $pfEmployer = $policy->pf_enabled ? (int) round($components['basic'] * $pfErPct / 100) : 0;
         $tax = $policy->tax_enabled ? (int) ($ref['tax_monthly'] ?? 0) : 0;
@@ -136,6 +138,8 @@ final class PayrollCalculator
                 ...$components,
                 'basis' => $facts['basis'] ?? $policy->daily_rate_basis, 'divisor' => $divisor,
                 'daily_rate' => round($daily, 2), 'hourly_rate' => round((float) $hourly, 2),
+                'pf_source' => $policy->pf_enabled ? ($pfOverride ? 'structure' : 'settings') : null,
+                'pf_percent' => $policy->pf_enabled ? $pfEmpPct : null,
             ],
             'slices' => $sliceOut,
         ];

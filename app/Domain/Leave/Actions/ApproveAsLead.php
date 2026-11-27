@@ -4,6 +4,7 @@ namespace App\Domain\Leave\Actions;
 
 use App\Domain\Leave\Services\LeaveNotifier;
 use App\Models\Employee;
+use App\Support\Audit;
 use App\Models\LeaveApproval;
 use App\Models\LeaveRequest;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +20,9 @@ class ApproveAsLead
             if ($r->status !== 'pending_lead') {
                 Fail::with('This request is not waiting for a lead');
             }
+            if (! $decider) {
+                Fail::with('A decider is required');
+            }
             if ($r->employee_id === $decider?->id) {
                 Fail::with('You cannot approve your own request');
             }
@@ -27,6 +31,7 @@ class ApproveAsLead
                 'decision' => 'approved', 'note' => trim((string) $note) ?: null, 'decided_at' => now(),
             ]);
             $r->update(['status' => 'pending_hr']);
+            Audit::log($r, 'Approved as lead'.($note ? ": {$note}" : ''), $decider->user, ['stage' => 'lead']);
             $this->notifier->toNextDecider($r);
 
             return $r;

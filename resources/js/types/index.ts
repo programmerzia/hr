@@ -173,12 +173,12 @@ export interface AttendanceDay {
 }
 
 export type AbsenceKind = 'none' | 'unapproved' | 'half_day' | 'unpaid_leave' | 'paid_leave' | 'holiday' | 'weekend' | 'excused'
-export type RegularizationKind = 'late' | 'early' | 'absent' | 'auto_closed' | 'overtime'
+export type RegularizationKind = 'late' | 'early' | 'absent' | 'auto_closed' | 'overtime' | 'paused'
 export type RegularizationResolution = 'excused' | 'paid_leave' | 'unpaid_leave' | 'keep'
 
 export type SegmentType = 'work' | 'break'
 export type BreakCategory = 'short' | 'tea' | 'lunch' | 'official' | 'idle' | 'signed_out' | 'offline'
-export type SegmentSource = 'login' | 'logout' | 'idle_sweep' | 'idle' | 'offline' | 'manual'
+export type SegmentSource = 'login' | 'logout' | 'idle_sweep' | 'idle' | 'offline' | 'manual' | 'outage' | 'correction'
 
 export interface TimeSegment {
   id: Id
@@ -256,7 +256,16 @@ export interface LeaveRequest {
   reason: string
   attachment_path: string | null
   status: LeaveStatus
+  from_regularization?: boolean
   created_at: ISODateTime
+}
+
+export interface LeaveTrailEvent {
+  kind: 'requested' | 'approved' | 'rejected' | 'cancelled' | 'ended_early' | 'regularization'
+  at: ISODateTime | null
+  by: string | null
+  text: string
+  note: string | null
 }
 
 export type ApprovalDecision = 'approved' | 'rejected'
@@ -289,6 +298,14 @@ export interface PayrollRun {
   reopened_at?: ISODateTime | null
   reopened_by?: Id | null
   reopen_reason?: string | null
+  prepared_by?: Id | null
+  prepared_at?: ISODateTime | null
+  submitted_by?: Id | null
+  submitted_at?: ISODateTime | null
+  paid_by?: Id | null
+  paid_on?: ISODate | null
+  early_pay_reason?: string | null
+  self_approved?: boolean
 }
 
 export type PayrollRunKind = 'regular' | 'festival' | 'settlement'
@@ -307,6 +324,8 @@ export interface PayrollComponents {
   hourly_rate: number | null
   encashment_days?: number
   bonus_percent?: number
+  pf_source?: 'settings' | 'structure' | null
+  pf_percent?: number | null
 }
 
 export interface PayrollSlice {
@@ -374,10 +393,15 @@ export interface PayrollItem {
 }
 
 export type PayrollAdjustmentKind = 'bonus' | 'deduction'
+export type PayrollAdjustmentCategory = 'bonus' | 'arrears' | 'allowance' | 'reimbursement' | 'advance_recovery' | 'loan_recovery' | 'manual_deduction'
 export interface PayrollAdjustment {
   id: Id
   item_id: Id
   kind: PayrollAdjustmentKind
+  category: PayrollAdjustmentCategory
+  source?: string | null
+  removed?: boolean
+  deleted_by?: Id | null
   label: string
   amount: number
   note: string | null

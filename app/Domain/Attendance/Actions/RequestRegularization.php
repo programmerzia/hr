@@ -2,25 +2,30 @@
 
 namespace App\Domain\Attendance\Actions;
 
+use App\Domain\Attendance\Services\Paused;
 use App\Domain\Attendance\Services\Scope;
 use App\Domain\Attendance\Support\AttendanceNotification;
 use App\Models\AttendanceDay;
 use App\Models\RegularizationRequest;
 
-/** Port of requestRegularization(), extended with kinds (late, early, absent, auto_closed). Returns an error message, or null on success. */
+/**
+ * Port of requestRegularization(), extended with kinds (late, early, absent, auto_closed, paused). Returns an error
+ * message, or null on success. `paused` (count time the browser paused the HR tab as work) may be asked for on a
+ * running day too: those stretches are already over and do not change.
+ */
 class RequestRegularization
 {
-    public const KINDS = ['late', 'early', 'absent', 'auto_closed'];
+    public const KINDS = ['late', 'early', 'absent', 'auto_closed', 'paused'];
 
     public function __invoke(AttendanceDay $day, string $reason, string $kind = 'late'): ?string
     {
         $reason = trim($reason);
-        if ($day->is_regularized || $reason === '' || ! $this->applies($day, $kind)) {
+        if (($day->is_regularized && $kind !== 'paused') || $reason === '' || ! $this->applies($day, $kind)) {
             return 'Could not send the request.';
         }
         // Past days, or today once it has ended: a running day is still changing.
         $date = $day->date->format('Y-m-d');
-        if ($date > now()->toDateString() || ($date === now()->toDateString() && $day->status !== 'ended')) {
+        if ($date > now()->toDateString() || ($kind !== 'paused' && $date === now()->toDateString() && $day->status !== 'ended')) {
             return 'You can regularise a day once it has ended.';
         }
         if (RegularizationRequest::where('attendance_day_id', $day->id)->where('status', 'pending')->exists()) {
@@ -56,6 +61,7 @@ class RequestRegularization
             'early' => $day->early_minutes > 0,
             'absent' => in_array($day->absence_kind, ['unapproved', 'half_day'], true) || $day->status === 'absent',
             'auto_closed' => (bool) $day->auto_closed,
+            'paused' => Paused::seconds($day) > 0,
             default => false,
         };
     }

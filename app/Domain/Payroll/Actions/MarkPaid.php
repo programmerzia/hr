@@ -19,14 +19,14 @@ class MarkPaid
 
     public function __invoke(PayrollRun $run, string $paidOn, string $reference, Employee $by): PayrollRun
     {
-        return DB::transaction(function () use ($run, $reference, $by) {
+        return DB::transaction(function () use ($run, $paidOn, $reference, $by) {
             $run = PayrollRun::lockForUpdate()->findOrFail($run->id);
             if ($run->status !== 'approved') {
                 Fail::with('Only approved runs can be marked as paid.');
             }
             $reference = trim($reference);
-            $run->update(['status' => 'paid', 'paid_at' => now(), 'payment_reference' => $reference]);
-            $this->builder->log($run, $by, "marked the run as paid ({$reference})");
+            $run->update(['status' => 'paid', 'paid_at' => now(), 'paid_on' => $paidOn, 'paid_by' => $by->id, 'payment_reference' => $reference]);
+            $this->builder->log($run, $by, "marked the run as paid on {$paidOn} ({$reference})");
             $this->payslipsAndNotices($run);
 
             return $run;

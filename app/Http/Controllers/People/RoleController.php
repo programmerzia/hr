@@ -31,6 +31,7 @@ class RoleController extends Controller
         $user->update(['role' => $new]); // User::saved syncs the Spatie role
         $user->syncRoles([$new]);
         Access::flush();
+        \App\Domain\People\Actions\Concerns::audit($employee, "Role changed from {$old} to {$new}", ['from' => $old, 'to' => $new]);
         SettingsLog::record($request->user(), 'access', "changed {$employee->name}'s role from {$old} to {$new}", ['user' => $user->id, 'from' => $old, 'to' => $new], $employee->id);
 
         return back()->with('success', 'Role updated');

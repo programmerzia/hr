@@ -75,11 +75,17 @@ interface MyDayProps {
   policy: AttendancePolicy
   regularizations: RegularizationRequest[]
   late_rule: { enabled: boolean; lates_per_penalty: number; count_this_month: number }
-  recent_days: { day: AttendanceDay; regularization: 'pending' | 'rejected' | null; last_note: string | null }[]
+  recent_days: {
+    day: AttendanceDay
+    regularization: 'pending' | 'rejected' | null
+    last_note: string | null
+    /** Offline minutes because the browser paused the HR tab; can be asked to count as work. */
+    paused_minutes: number
+  }[]
   leave_today: { type: string; starts_on: string; ends_on: string } | null
 }
 
-type RegKind = 'late' | 'early' | 'absent' | 'auto_closed'
+type RegKind = 'late' | 'early' | 'absent' | 'auto_closed' | 'paused'
 
 export default function MyDayPage() {
   const p = useShared<MyDayProps>()
@@ -90,6 +96,8 @@ export default function MyDayPage() {
   const [leaveAsk, setLeaveAsk] = useState<string | null>(null)
   const [regDay, setRegDay] = useState<AttendanceDay | null>(null)
   const [regKind, setRegKind] = useState<RegKind>('late')
+  /** Paused minutes on the day being regularised, when asked from the attention strip. */
+  const [regPaused, setRegPaused] = useState(0)
   const [stripOpen, setStripOpen] = useState(false)
   const [intervalsOpen, setIntervalsOpen] = useState(() => {
     try {
@@ -107,9 +115,14 @@ export default function MyDayPage() {
       /* ignore */
     }
   }
-  const openReg = (d: AttendanceDay) => {
-    setRegKind(regularizableKinds(d)[0] ?? 'late')
+  const openReg = (d: AttendanceDay, pausedMinutes = 0, kind?: RegKind) => {
+    setRegPaused(pausedMinutes)
+    setRegKind(kind ?? regularizableKinds(d)[0] ?? 'late')
     setRegDay(d)
+  }
+  const regKinds = (d: AttendanceDay): RegKind[] => {
+    const own: RegKind[] = canRegularise(d, today) ? regularizableKinds(d) : []
+    return regPaused > 0 ? [...own, 'paused'] : own
   }
 
   const day = p.day
@@ -196,6 +209,7 @@ export default function MyDayPage() {
           days={p.recent_days}
           open={stripOpen}
           onToggle={() => setStripOpen((o) => !o)}
+          today={today}
           onRegularise={openReg}
         />
       )}
@@ -506,14 +520,16 @@ export default function MyDayPage() {
             <Select
               value={regKind}
               onValueChange={(v) => setRegKind(v as RegKind)}
-              options={regularizableKinds(regDay).map((k) => ({
+              options={regKinds(regDay).map((k) => ({
                 value: k,
                 label:
                   k === 'late'
                     ? `${regularizationKindLabels[k]} (${regDay.late_minutes}m)`
                     : k === 'early'
                       ? `${regularizationKindLabels[k]} (${regDay.early_minutes}m)`
-                      : (regularizationKindLabels[k] ?? k),
+                      : k === 'paused'
+                        ? `Count paused time as work (${regPaused}m)`
+                        : (regularizationKindLabels[k] ?? k),
               }))}
             />
           </Field>
@@ -561,12 +577,14 @@ function AttentionStrip({
   days,
   open,
   onToggle,
+  today,
   onRegularise,
 }: {
   days: MyDayProps['recent_days']
   open: boolean
   onToggle: () => void
-  onRegularise: (d: AttendanceDay) => void
+  today: string
+  onRegularise: (d: AttendanceDay, pausedMinutes?: number, kind?: RegKind) => void
 }) {
   const shown = open ? days : days.slice(0, 3)
   const more = days.length - 3
@@ -588,16 +606,18 @@ function AttentionStrip({
         )}
       </div>
       <ul className="mt-1 flex flex-col gap-0.5">
-        {shown.map(({ day: d, regularization, last_note }) => {
-          const issue = regularizableKinds(d)
-            .map((k) =>
+        {shown.map(({ day: d, regularization, last_note, paused_minutes }) => {
+          const kinds = canRegularise(d, today) ? regularizableKinds(d) : []
+          const issue = [
+            ...kinds.map((k) =>
               k === 'late'
                 ? `Late ${d.late_minutes}m`
                 : k === 'early'
                   ? `Left early ${d.early_minutes}m`
                   : (regularizationKindLabels[k] ?? k),
-            )
-            .join(', ')
+            ),
+            ...(paused_minutes > 0 ? [`Browser paused the HR tab ${paused_minutes}m`] : []),
+          ].join(', ')
           return (
             <li key={d.id} className="flex flex-wrap items-center gap-x-2 text-[13px]">
               <span className="num whitespace-nowrap">
@@ -612,9 +632,16 @@ function AttentionStrip({
                       <StatusBadge status="rejected" label="Rejected" />
                     </span>
                   )}
-                  <Button size="sm" variant="ghost" onClick={() => onRegularise(d)}>
-                    Regularise
-                  </Button>
+                  {kinds.length > 0 && (
+                    <Button size="sm" variant="ghost" onClick={() => onRegularise(d, paused_minutes)}>
+                      Regularise
+                    </Button>
+                  )}
+                  {paused_minutes > 0 && (
+                    <Button size="sm" variant="ghost" onClick={() => onRegularise(d, paused_minutes, 'paused')}>
+                      Ask to count as work
+                    </Button>
+                  )}
                 </>
               )}
             </li>

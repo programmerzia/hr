@@ -5,6 +5,7 @@ namespace App\Domain\Leave\Actions;
 use App\Domain\Leave\Services\BalanceService;
 use App\Domain\Leave\Services\LeaveNotifier;
 use App\Models\Employee;
+use App\Support\Audit;
 use App\Models\LeaveApproval;
 use App\Models\LeaveRequest;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,9 @@ class Reject
             if (! in_array($r->status, ['pending_lead', 'pending_hr'], true)) {
                 Fail::with('This request is not at that stage');
             }
+            if (! $decider) {
+                Fail::with('A decider is required');
+            }
             if ($r->employee_id === $decider?->id) {
                 Fail::with('You cannot reject your own request');
             }
@@ -33,6 +37,7 @@ class Reject
                 'decided_by' => $decider?->id, 'decision' => 'rejected', 'note' => $note, 'decided_at' => now(),
             ]);
             $r->update(['status' => 'rejected']);
+            Audit::log($r, "Rejected: {$note}", $decider->user);
             $this->balances->adjust($r, pending: -(float) $r->days);
             $this->notifier->toRequester($r, 'Leave rejected', $note);
 

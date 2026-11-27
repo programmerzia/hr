@@ -61,8 +61,48 @@ export interface Sheet {
   rows: SheetRow[]
 }
 
+export type TabKey =
+  | 'summary'
+  | 'department'
+  | 'statement'
+  | 'sheet'
+  | 'att_summary'
+  | 'att_daily'
+  | 'late_early'
+  | 'leave_register'
+  | 'leave_balance'
+  | 'headcount'
+  | 'salary_history'
+  | 'tds'
+
+export type ColType = 'text' | 'int' | 'dec' | 'hours' | 'money' | 'date' | 'datetime' | 'pct'
+export interface Col {
+  key: string
+  label: string
+  type: ColType
+}
+export type Row = Record<string, string | number | null>
+export interface SubTable {
+  title: string
+  columns: Col[]
+  rows: Row[]
+}
+export interface TableReport {
+  columns: Col[]
+  rows: Row[]
+  totals: Row | null
+  secondary: SubTable | null
+  extra: { label?: string; note?: string; in_now?: { name: string; since: string | null; status: string }[] | null } | null
+}
+export interface TableMeta {
+  total: number
+  page: number
+  per: number
+  range: [string, string]
+}
+
 export interface Filters {
-  tab: 'summary' | 'department' | 'statement' | 'sheet'
+  tab: TabKey
   year: number
   month: number
   tax_year: number | null
@@ -70,6 +110,11 @@ export interface Filters {
   department: string
   team: string
   q: string
+  from: string | null
+  to: string | null
+  date: string
+  asof: string
+  page: number
 }
 
 export interface ReportsProps {
@@ -83,4 +128,7 @@ export interface ReportsProps {
   departments: { id: string; name: string }[]
   teams: { id: string; name: string }[]
   tax_years: number[]
+  report: TableReport | null
+  meta: TableMeta | null
+  can_payroll: boolean
 }

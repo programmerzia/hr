@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Domain\Payroll\Services\MakerChecker;
 use App\Domain\Settings\PolicyPreview;
 use App\Domain\Settings\SettingsLog;
 use App\Http\Controllers\Controller;
@@ -37,6 +38,7 @@ class PayrollPolicyController extends Controller
             'example_gross' => self::EXAMPLE_GROSS,
             'preview' => fn () => $this->preview($request),
             'history' => SettingsLog::recent('payroll'),
+            'single_approver' => MakerChecker::singleApproverAllowed(),
         ]);
     }
 
@@ -59,6 +61,15 @@ class PayrollPolicyController extends Controller
             'penalty_days' => (float) ($p['penalty_days'] ?? 0),
             'max_penalty_days_per_month' => (float) ($p['max_penalty_days_per_month'] ?? 0),
         ], self::EXAMPLE_GROSS, $date, AttendancePolicy::forDate($date));
+    }
+
+    public function singleApprover(Request $request): RedirectResponse
+    {
+        $on = $request->boolean('on');
+        MakerChecker::setSingleApprover($on);
+        SettingsLog::record($request->user(), 'payroll', $on ? 'allowed one person to prepare and approve payroll' : 'required a second person to approve payroll');
+
+        return back()->with('success', $on ? 'One person may prepare and approve' : 'A second person must approve');
     }
 
     public function store(PayrollPolicyRequest $request): RedirectResponse

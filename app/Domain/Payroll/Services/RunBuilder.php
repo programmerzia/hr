@@ -152,7 +152,12 @@ class RunBuilder
             $item->fill([...$values, 'bank_account_id' => $emp->bankAccounts()->where('is_primary', true)->value('id')])->save();
             $keep[] = $item->id;
         }
-        PayrollItem::where('run_id', $run->id)->whereNotIn('id', $keep)->get()->each->delete();
+        $dropped = PayrollItem::where('run_id', $run->id)->whereNotIn('id', $keep)->get();
+        $blocked = $dropped->filter(fn (PayrollItem $i) => PayrollAdjustment::where('item_id', $i->id)->exists());
+        if ($blocked->isNotEmpty()) {
+            Fail::with('Recompute would drop people who have adjustments: '.$blocked->map(fn ($i) => $i->employee?->name ?? 'an employee')->implode(', ').'. Remove their adjustments first.');
+        }
+        $dropped->each->delete();
         // Facts changed: acknowledgements are void. Runs already in review are re-checked straight away.
         if ($run->status === 'review') {
             app(VarianceCheck::class)->apply($run);
@@ -171,11 +176,62 @@ class RunBuilder
         }
     }
 
-    public function adjustment(PayrollItem $item, string $kind, string $label, int $amount, ?string $note, Employee $by): PayrollAdjustment
+    public function adjustment(PayrollItem $item, string $category, string $label, int $amount, ?string $note, Employee $by, ?string $source = null, ?string $sourceRef = null): PayrollAdjustment
     {
         return PayrollAdjustment::create([
-            'item_id' => $item->id,
-            'kind' => $kind, 'label' => trim($label), 'amount' => $amount, 'note' => $note, 'created_by' => $by->id,
+            'item_id' => $item->id, 'category' => $category, 'kind' => PayrollAdjustment::kindOf($category),
+            'label' => trim($label), 'amount' => $amount, 'note' => $note, 'created_by' => $by->id,
+            'source' => $source, 'source_ref' => $sourceRef,
         ]);
+    }
+
+    /** Net of every non-held item that is below zero (BankAdvice cannot pay these). @return list<string> names */
+    public function negativeNames(PayrollRun $run): array
+    {
+        return PayrollItem::with('employee')->where('run_id', $run->id)->where('hold', false)->where('net', '<', 0)->get()
+            ->map(fn ($i) => ($i->employee?->name ?? 'An employee').' ('.number_format((int) $i->net).')')->all();
+    }
+
+    /**
+     * Salary held in the last paid regular run is paid with this one: an arrears adjustment per held item.
+     * Idempotent per held item.
+     *
+     * @return list<string> names whose held salary could not be carried (not in this run)
+     */
+    public function carryHeld(PayrollRun $run, Employee $by): array
+    {
+        $prev = PayrollRun::where('kind', 'regular')->where('status', 'paid')
+            ->where(fn ($q) => $q->where('year', '<', $run->year)->orWhere(fn ($q) => $q->where('year', $run->year)->where('month', '<', $run->month)))
+            ->orderByDesc('year')->orderByDesc('month')->first();
+        if (! $prev) {
+            return [];
+        }
+        $missed = [];
+        $label = PayrollPeriod::label($prev->year, $prev->month);
+        foreach (PayrollItem::with('employee')->where('run_id', $prev->id)->where('hold', true)->where('net', '>', 0)->get() as $held) {
+            $mine = PayrollItem::where('run_id', $run->id)->where('employee_id', $held->employee_id)->first();
+            if (! $mine) {
+                $missed[] = $held->employee?->name ?? 'an employee';
+
+                continue;
+            }
+            if (PayrollAdjustment::withTrashed()->where('item_id', $mine->id)->where('source', 'carried_hold')->where('source_ref', $held->id)->exists()) {
+                continue;
+            }
+            $this->adjustment($mine, 'arrears', "Held salary, {$label}", (int) $held->net, 'Held in the '.$label.' run: '.($held->hold_reason ?: 'no reason recorded'), $by, 'carried_hold', $held->id);
+            $this->reprice($mine->refresh());
+            $this->log($run, $by, 'carried held salary of '.($held->employee?->name ?? 'an employee')." from {$label}", ['item_id' => $mine->id, 'amount' => (int) $held->net]);
+        }
+
+        return $missed;
+    }
+
+    /** Reprice after an adjustment change; a run in review is re-checked for variance so stale acknowledgements fall away. */
+    public function repriceAfterAdjustment(PayrollRun $run, PayrollItem $item): void
+    {
+        $this->reprice($item->refresh());
+        if ($run->status === 'review') {
+            app(VarianceCheck::class)->applyTo($run, $item->refresh());
+        }
     }
 }

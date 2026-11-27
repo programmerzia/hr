@@ -22,6 +22,10 @@ class PayrollRun extends Model
             'paid_at' => 'datetime',
             'locked_at' => 'datetime',
             'reopened_at' => 'datetime',
+            'submitted_at' => 'datetime',
+            'paid_on' => 'date',
+            'review_editors' => 'array',
+            'self_approved' => 'bool',
         ];
     }
 

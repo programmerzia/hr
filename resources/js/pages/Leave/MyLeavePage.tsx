@@ -1,6 +1,6 @@
 import { Link, router } from '@inertiajs/react'
-import { CalendarDays, Plane, Plus } from 'lucide-react'
-import { useState } from 'react'
+import { CalendarDays, ChevronDown, ChevronRight, Plane, Plus } from 'lucide-react'
+import { Fragment, useState } from 'react'
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { PageHeader } from '../../components/shared/PageHeader'
@@ -8,14 +8,16 @@ import { StatusBadge } from '../../components/shared/StatusBadge'
 import { Button, buttonVariants, Stat, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { useCan, useShared } from '../../inertia/props'
 import { formatDate } from '../../lib/format'
-import type { AttendancePolicy, Holiday, LeaveRequest, LeaveType } from '../../types'
+import type { AttendancePolicy, Holiday, LeaveRequest, LeaveTrailEvent, LeaveType } from '../../types'
 import { formatDays, formatRange, halfDayLabels, shortTypeName, todayIso, type BalanceRow } from './helpers'
+import { LeaveTrail } from './LeaveTrail'
 import { RequestLeaveDialog } from './RequestLeaveDialog'
 
 interface MyLeaveProps {
   year: number
   balances: BalanceRow[]
   requests: LeaveRequest[]
+  trail: Record<string, LeaveTrailEvent[]>
   leave_types: LeaveType[]
   holidays: Holiday[]
   policy: AttendancePolicy
@@ -24,18 +26,17 @@ interface MyLeaveProps {
 
 export default function MyLeavePage() {
   const canPolicy = useCan('manage_settings')
-  const { year, balances: allBalances, requests, leave_types, holidays, policy, on_probation } = useShared<MyLeaveProps>()
+  const { year, balances: allBalances, requests, trail, leave_types, holidays, policy, on_probation } = useShared<MyLeaveProps>()
   const [open, setOpen] = useState(false)
   const [toCancel, setToCancel] = useState<LeaveRequest | null>(null)
   const [toEnd, setToEnd] = useState<LeaveRequest | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
   const typeById = (id: string) => leave_types.find((t) => t.id === id)
   const balances = allBalances.filter((b) => b.year === year && (b.unlimited || b.entitled > 0 || b.used > 0 || b.pending > 0))
   const typeName = (id: string) => typeById(id)?.name ?? id
-  const canCancel = (r: LeaveRequest) =>
-    r.status === 'pending_lead' || r.status === 'pending_hr' || (r.status === 'approved' && r.starts_on > todayIso())
+  const canCancel = (r: LeaveRequest) => r.status === 'pending_lead' || r.status === 'pending_hr' || (r.status === 'approved' && r.starts_on > todayIso())
 
-  const canEnd = (r: LeaveRequest) =>
-    r.status === 'approved' && r.half_day === 'none' && r.starts_on <= todayIso() && r.ends_on >= todayIso()
+  const canEnd = (r: LeaveRequest) => r.status === 'approved' && r.half_day === 'none' && r.starts_on <= todayIso() && r.ends_on >= todayIso()
 
   return (
     <div className="mx-auto max-w-content">
@@ -45,13 +46,18 @@ export default function MyLeavePage() {
         actions={
           <>
             {canPolicy && (
-              <Link href="/leave/policy" className={buttonVariants({ variant: 'secondary' })}>
+              <Link
+                href="/leave/policy"
+                className={buttonVariants({
+                  variant: 'secondary',
+                })}
+              >
                 Leave policy
               </Link>
             )}
-          <Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>
-            Request leave
-          </Button>
+            <Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>
+              Request leave
+            </Button>
           </>
         }
       />
@@ -60,12 +66,10 @@ export default function MyLeavePage() {
           <Stat
             key={b.id}
             icon={Plane}
-            label={`${typeName(b.leave_type_id)}${typeById(b.leave_type_id)?.is_paid ? '' : ' (unpaid)'}`}
+            label={`${typeName(b.leave_type_id)}${typeById(b.leave_type_id)?.is_paid || /unpaid/i.test(typeName(b.leave_type_id)) ? '' : ' (unpaid)'}`}
             value={b.unlimited ? 'Unlimited' : `${b.available} of ${b.entitled + b.carried_in}`}
             delta={{
-              value: `${b.used} used, ${b.pending} pending${b.carried_in > 0 ? `, carried in ${b.carried_in}` : ''}${
-                b.prorated ? ', prorated' : ''
-              }`,
+              value: `${b.used} used, ${b.pending} pending${b.carried_in > 0 ? `, carried in ${b.carried_in}` : ''}${b.prorated ? ', prorated' : ''}`,
               tone: 'neutral',
             }}
           />
@@ -78,7 +82,11 @@ export default function MyLeavePage() {
           icon={CalendarDays}
           title="No leave requests"
           description="Requests you submit will show up here with their approval status."
-          action={<Button variant="primary" onClick={() => setOpen(true)}>Request leave</Button>}
+          action={
+            <Button variant="primary" onClick={() => setOpen(true)}>
+              Request leave
+            </Button>
+          }
         />
       ) : (
         <Table>
@@ -91,33 +99,60 @@ export default function MyLeavePage() {
               <Th>Status</Th>
               <Th>Requested</Th>
               <Th className="w-24" />
+              <Th className="w-8">
+                <span className="sr-only">Details</span>
+              </Th>
             </tr>
           </Thead>
           <Tbody>
             {requests.map((r) => (
-              <Tr key={r.id}>
-                <Td>{typeName(r.leave_type_id)}</Td>
-                <Td>
-                  {formatRange(r.starts_on, r.ends_on)}
-                  {r.half_day !== 'none' && <span className="text-fg-muted"> ({halfDayLabels[r.half_day].toLowerCase()})</span>}
-                </Td>
-                <Td numeric>{r.days}</Td>
-                <Td className="max-w-64 truncate text-fg-muted" title={r.reason}>{r.reason}</Td>
-                <Td><StatusBadge status={r.status} /></Td>
-                <Td className="text-fg-muted">{formatDate(r.created_at)}</Td>
-                <Td className="text-right">
-                  {canEnd(r) && (
-                    <Button size="sm" variant="ghost" onClick={() => setToEnd(r)}>
-                      Back early
-                    </Button>
-                  )}
-                  {canCancel(r) && (
-                    <Button size="sm" variant="ghost" onClick={() => setToCancel(r)}>
-                      Cancel
-                    </Button>
-                  )}
-                </Td>
-              </Tr>
+              <Fragment key={r.id}>
+                <Tr>
+                  <Td>{typeName(r.leave_type_id)}</Td>
+                  <Td>
+                    {formatRange(r.starts_on, r.ends_on)}
+                    {r.half_day !== 'none' && <span className="text-fg-muted"> ({halfDayLabels[r.half_day].toLowerCase()})</span>}
+                  </Td>
+                  <Td numeric>{r.days}</Td>
+                  <Td className="max-w-64 truncate text-fg-muted" title={r.reason}>
+                    {r.reason}
+                  </Td>
+                  <Td>
+                    <StatusBadge status={r.status} />
+                  </Td>
+                  <Td className="text-fg-muted">{formatDate(r.created_at)}</Td>
+                  <Td className="text-right">
+                    {canEnd(r) && (
+                      <Button size="sm" variant="ghost" onClick={() => setToEnd(r)}>
+                        Back early
+                      </Button>
+                    )}
+                    {canCancel(r) && (
+                      <Button size="sm" variant="ghost" onClick={() => setToCancel(r)}>
+                        Cancel
+                      </Button>
+                    )}
+                  </Td>
+                  <Td>
+                    <button
+                      type="button"
+                      className="text-fg-muted hover:text-fg"
+                      aria-label={openId === r.id ? 'Hide history' : 'Show history'}
+                      aria-expanded={openId === r.id}
+                      onClick={() => setOpenId(openId === r.id ? null : r.id)}
+                    >
+                      {openId === r.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    </button>
+                  </Td>
+                </Tr>
+                {openId === r.id && (
+                  <Tr>
+                    <Td colSpan={8} className="bg-surface-2">
+                      <LeaveTrail events={trail[r.id]} />
+                    </Td>
+                  </Tr>
+                )}
+              </Fragment>
             ))}
           </Tbody>
         </Table>

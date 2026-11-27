@@ -16,6 +16,7 @@ interface Props {
   example_gross: number
   preview: PolicyPreviewResult | null
   history: SettingsHistoryEntry[]
+  single_approver: boolean
 }
 
 const basisOptions = [
@@ -63,7 +64,7 @@ function Section({ title, help, switchLabel, on, onChange, children }: {
 }
 
 export default function PayrollPolicyPage() {
-  const { versions, today, example_gross, preview, history } = useShared<Props>()
+  const { versions, today, example_gross, preview, history, single_approver } = useShared<Props>()
   const current = versions.find((v) => v.is_current) ?? versions[0]
   const [editing, setEditing] = useState<PayrollPolicyVersion | null>(null)
   const [removing, setRemoving] = useState<PayrollPolicyVersion | null>(null)
@@ -178,6 +179,19 @@ export default function PayrollPolicyPage() {
 
         <div className="flex flex-col gap-4">
           <Card>
+            <CardHeader title="Approval" />
+            <CardBody className="text-sm">
+              <p className="mb-2 text-xs text-fg-muted">
+                Normally the person who prepared, submitted or changed a run cannot approve it. Turn this on only for a team too small to have a second person. Self-approval is recorded in the run history.
+              </p>
+              <Switch
+                label="Allow one person to prepare and approve"
+                checked={single_approver}
+                onCheckedChange={(on) => router.post(route('settings.payroll.single-approver'), { on }, { preserveScroll: true })}
+              />
+            </CardBody>
+          </Card>
+          <Card>
             <CardHeader title="What this does to a salary" />
             <CardBody className="text-sm">
               {preview ? (
@@ -248,7 +262,7 @@ export default function PayrollPolicyPage() {
 
                 <Section
                   title="Provident fund"
-                  help="Off unless you turn it on. A salary structure can override the percentages for one person."
+                  help="Off unless you turn it on. These percentages apply to everyone. A salary structure replaces them only when it is marked as an override."
                   switchLabel="Deduct provident fund from basic pay"
                   on={d.pf_enabled}
                   onChange={(v) => set('pf_enabled', v)}

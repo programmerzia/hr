@@ -9,7 +9,7 @@ class AddAsset
 {
     public function __invoke(Employee $employee, array $asset): EmployeeAsset
     {
-        return EmployeeAsset::create([
+        $created = EmployeeAsset::create([
             'employee_id' => $employee->id,
             'name' => trim($asset['name']),
             'tag' => trim($asset['tag']),
@@ -17,5 +17,8 @@ class AddAsset
             'returned_on' => null,
             'status' => 'assigned',
         ]);
+        Concerns::audit($employee, "Assigned asset {$created->name} ({$created->tag})", ['asset_id' => $created->id]);
+
+        return $created;
     }
 }

@@ -51,6 +51,7 @@ class OnboardEmployee
                 OnboardingChecklistItem::create(['employee_id' => $employee->id, 'label' => $label, 'done' => false]);
             }
             app(ProvisionBalances::class)($employee, (int) $employee->joined_on->format('Y'));
+            Concerns::audit($employee, 'Onboarded');
             Concerns::event($employee, 'joined', 'Joined as '.mb_strtolower($employee->designation), $p['joined_on']);
 
             return $employee;

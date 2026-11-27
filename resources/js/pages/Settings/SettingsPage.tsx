@@ -1,24 +1,26 @@
 import { Link } from '@inertiajs/react'
-import { CalendarDays, Clock, Palmtree, ShieldCheck, Wallet } from 'lucide-react'
+import { CalendarDays, Clock, History, Palmtree, ShieldCheck, Wallet } from 'lucide-react'
 import { HistoryPanel } from '../../components/shared/HistoryPanel'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { Card, CardBody } from '../../components/ui'
 import { useCan, useShared } from '../../inertia/props'
 import type { SettingsHistoryEntry } from '../../types'
 
-const sections: { name?: string; href?: string; icon: typeof Clock; title: string; text: string; ability?: 'manage_access' | 'manage_policy' }[] = [
+const sections: { name?: string; href?: string; icon: typeof Clock; title: string; text: string; ability?: 'manage_access' | 'manage_policy' | 'manage_settings' }[] = [
   { name: 'settings.attendance.index', icon: Clock, title: 'Attendance', text: 'Shift hours, grace time, weekends and when a day counts as half or absent.', ability: 'manage_policy' },
   { name: 'settings.payroll.index', icon: Wallet, title: 'Payroll', text: 'Which deductions apply: absences, lates, provident fund, tax and overtime.', ability: 'manage_policy' },
   { name: 'settings.leave-types.index', icon: CalendarDays, title: 'Leave types', text: 'Yearly quotas, paid or unpaid, carry forward and encashment.', ability: 'manage_policy' },
   { name: 'settings.holidays.index', icon: Palmtree, title: 'Holidays', text: 'The company holiday calendar by year.', ability: 'manage_policy' },
   { href: '/settings/access', icon: ShieldCheck, title: 'Access', text: 'Roles, module permissions and who holds which role. Menus and pages follow these.', ability: 'manage_access' },
+  { name: 'settings.audit-log.index', icon: History, title: 'Audit log', text: 'Who did what and when, with filters and CSV export.', ability: 'manage_settings' },
 ]
 
 export default function SettingsPage() {
   const { history } = useShared<{ history: SettingsHistoryEntry[] }>()
   const canPolicy = useCan('manage_policy')
   const canAccess = useCan('manage_access')
-  const visible = sections.filter((s) => (s.ability === 'manage_access' ? canAccess : canPolicy))
+  const canSettings = useCan('manage_settings')
+  const visible = sections.filter((s) => (s.ability === 'manage_access' ? canAccess : s.ability === 'manage_settings' ? canSettings : canPolicy))
   return (
     <div className="mx-auto max-w-content">
       <PageHeader title="Settings" description="Company rules for attendance, pay and leave. Policy changes start on a date you choose." />

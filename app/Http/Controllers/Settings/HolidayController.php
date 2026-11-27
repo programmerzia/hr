@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Domain\Attendance\Actions\RegradeDays;
+use App\Domain\Attendance\Services\PayrollLock;
 use App\Domain\Settings\SettingsLog;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\BulkHolidaysRequest;
@@ -34,6 +35,9 @@ class HolidayController extends Controller
 
     public function store(HolidayRequest $request): RedirectResponse
     {
+        if ($msg = PayrollLock::message((string) $request->validated('date'))) {
+            return back()->with('error', $msg);
+        }
         $h = Holiday::create($request->validated());
         app(RegradeDays::class)->forDate($h->date->toDateString());
         SettingsLog::record($request->user(), 'holidays', "added holiday {$h->name} on ".$h->date->format('j M Y'), subjectId: $h->id);
@@ -60,6 +64,11 @@ class HolidayController extends Controller
 
                 continue;
             }
+            if (PayrollLock::locked($m[1])) {
+                $skipped[] = $m[1].' (payroll approved)';
+
+                continue;
+            }
             Holiday::create(['date' => $m[1], 'name' => mb_substr(trim($m[2]), 0, 80)]);
             app(RegradeDays::class)->forDate($m[1]);
             $added++;
@@ -76,9 +85,8 @@ class HolidayController extends Controller
 
     public function destroy(Request $request, Holiday $holiday): RedirectResponse
     {
-        $paid = PayrollRun::where('status', 'paid')->where('year', $holiday->date->year)->where('month', $holiday->date->month)->exists();
-        if ($paid) {
-            return back()->with('error', 'Payroll for '.$holiday->date->format('F Y').' is already paid, so this holiday cannot be removed.');
+        if ($msg = PayrollLock::message($holiday->date->toDateString())) {
+            return back()->with('error', $msg);
         }
         $holiday->delete();
         app(RegradeDays::class)->forDate($holiday->date->toDateString());

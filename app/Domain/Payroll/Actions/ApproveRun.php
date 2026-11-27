@@ -3,6 +3,7 @@
 namespace App\Domain\Payroll\Actions;
 
 use App\Domain\Leave\Services\Encashment;
+use App\Domain\Payroll\Services\MakerChecker;
 use App\Domain\Payroll\Services\PayrollPeriod;
 use App\Domain\Payroll\Services\RunBuilder;
 use App\Domain\Payroll\Support\Fail;
@@ -26,12 +27,18 @@ class ApproveRun
             if ($run->status !== 'review') {
                 Fail::with('Only runs in review can be approved.');
             }
+            $this->checkApprover($run, $by);
+            $this->checkFresh($run);
             $unacked = PayrollItem::where('run_id', $run->id)->where('hold', false)->where('variance_flag', true)->whereNull('variance_ack_at')->exists();
             if ($unacked) {
                 Fail::with('Acknowledge all flagged items before approving.');
             }
             $at = now();
-            $run->update(['status' => 'approved', 'approved_by' => $by->id, 'approved_at' => $at, 'locked_at' => $at]);
+            $self = MakerChecker::conflict($run, $by);
+            $run->update(['status' => 'approved', 'approved_by' => $by->id, 'approved_at' => $at, 'locked_at' => $at, 'self_approved' => $self !== null]);
+            if ($self !== null) {
+                $this->builder->log($run, $by, 'approved their own run (one-person approval is on): '.$self);
+            }
             $this->snapshot($run, $at);
             $this->consumeEncashment($run, $by);
             $this->builder->log($run, $by, 'approved and locked the run');
@@ -41,6 +48,30 @@ class ApproveRun
 
             return $run;
         });
+    }
+
+    private function checkApprover(PayrollRun $run, Employee $by): void
+    {
+        if ($reason = MakerChecker::blockReason($run, $by)) {
+            Fail::with($reason.' Another approver has to approve it.');
+        }
+    }
+
+    /** Re-prices every item in memory; any difference from what was reviewed stops the approval. */
+    private function checkFresh(PayrollRun $run): void
+    {
+        $changed = [];
+        [$attendance, $money] = $this->builder->policies($run);
+        foreach (PayrollItem::with('employee')->where('run_id', $run->id)->get() as $item) {
+            $emp = $item->employee;
+            $values = $emp ? $this->builder->price($run, $emp, $this->builder->adjustmentRows($item), $attendance, $money) : null;
+            if (! $values || (int) $values['net'] !== (int) $item->net) {
+                $changed[] = $emp?->name ?? 'an employee';
+            }
+        }
+        if ($changed !== []) {
+            Fail::with('Numbers changed since review — recompute and resubmit. Changed: '.implode(', ', $changed).'.');
+        }
     }
 
     /** A settlement pays out the leave balance, so it is marked as encashed the moment the run is approved. */

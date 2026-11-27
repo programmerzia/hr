@@ -2,6 +2,7 @@
 
 namespace App\Domain\Payroll\Actions;
 
+use App\Domain\Payroll\Services\MakerChecker;
 use App\Domain\Payroll\Services\RunBuilder;
 use App\Domain\Payroll\Services\VarianceCheck;
 use App\Domain\Payroll\Support\Fail;
@@ -28,6 +29,7 @@ class HoldItem
             if ($run->status === 'review') {
                 $this->variance->applyTo($run, $item->refresh());
             }
+            MakerChecker::noteChange($run, $by);
             $name = $item->employee?->name ?? 'an employee';
             $this->builder->log($run, $by, $hold ? "held the salary of {$name} ({$reason})" : "released the salary of {$name}", ['item_id' => $item->id]);
 

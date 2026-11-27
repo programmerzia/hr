@@ -20,6 +20,8 @@ class LeaveRequest extends Model
             'ends_on' => 'date',
             'days' => 'float',
             'year_split' => 'array',
+            'cancelled_at' => 'datetime',
+            'ended_early_at' => 'datetime',
         ];
     }
 

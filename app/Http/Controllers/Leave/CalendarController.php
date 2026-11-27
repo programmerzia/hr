@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Leave;
 
 use App\Domain\Attendance\Services\Scope;
 use App\Domain\Leave\Support\Shape;
+use App\Domain\Leave\Support\Trail;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\LeaveRequestResource;
 use App\Models\AttendancePolicy;
@@ -32,7 +33,7 @@ class CalendarController extends Controller
         $scope = $wide ? null : array_values(array_unique(array_filter([$user->employee_id, ...Scope::employees($user)->pluck('id')->all()])));
 
         $events = LeaveRequest::where('status', 'approved')
-            ->whereDate('starts_on', '<=', $to)->whereDate('ends_on', '>=', $from)
+            ->where('starts_on', '<=', $to)->where('ends_on', '>=', $from)
             ->when($scope !== null, fn ($q) => $q->whereIn('employee_id', $scope))
             ->orderBy('starts_on')->get();
 
@@ -40,6 +41,7 @@ class CalendarController extends Controller
             'month' => $month,
             'wide' => $wide,
             'events' => LeaveRequestResource::collection($events)->resolve(),
+            'trail' => Trail::for($events),
             'people' => Shape::people($wide ? [] : ($scope ?: [$user->employee_id])),
             'teams' => Team::orderBy('name')->get(['id', 'name'])->map->only(['id', 'name'])->all(),
             'leave_types' => Shape::types(),

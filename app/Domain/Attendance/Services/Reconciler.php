@@ -8,6 +8,7 @@ use App\Models\AttendanceDay;
 use App\Models\AttendancePolicy;
 use App\Models\TimeSegment;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 
 /**
@@ -38,8 +39,15 @@ final class Reconciler
 
     public const OUTAGE_NOTE = 'Server unreachable for everyone, counted as work';
 
+    /** The idle break opened when nobody has touched the app after shift end (presence counts only during the shift). */
+    public const AFTER_HOURS_NOTE = 'No input after shift end';
+
+    /** Hours before shift start from which an open tab already counts as work. */
+    public const PRESENCE_EARLY_HOURS = 3;
+
     /**
      * @param  bool  $live  false at sign-in: only the stale-day and offline-gap steps run (StartWork does the rest)
+     * @param  ?CarbonInterface  $activityAt  the client's last real input; null (older clients) means "active now"
      * @return bool whether the day changed
      */
     public function __invoke(User $user, CarbonInterface $now, ?CarbonInterface $activityAt = null, bool $live = true, ?string $gapReason = null, ?CarbonInterface $gapSince = null): bool
@@ -50,12 +58,17 @@ final class Reconciler
         }
         $policy = AttendancePolicy::current();
         $idle = $policy->idle_timeout_minutes * 60;
-        // With input detection off the client's last input is ignored: being in the app counts as active.
-        if (! $policy->idle_by_input) {
-            $activityAt = $activityAt ? $now : null;
-        }
         $lastSeen = $user->last_seen_at;
         $continuous = $lastSeen && $now->getTimestamp() - $lastSeen->getTimestamp() <= $policy->offline_after_minutes * 60;
+        // Real input in the last idle timeout (old clients send none: taken as input now).
+        $input = $activityAt ? ($activityAt->gt($now) ? $now->copy() : $activityAt->copy()) : $now->copy();
+        $hasInput = $now->getTimestamp() - $input->getTimestamp() <= $idle;
+
+        // Beats stopped and came back with no cause seen by the client, while its last input is from before the gap:
+        // the page was not reloaded (that resets the input clock), so the browser paused the tab in the background.
+        if ($gapReason === null && $activityAt && $lastSeen && ! $continuous && $activityAt->lte($lastSeen)) {
+            $gapReason = 'suspended';
+        }
 
         $healed = $this->closeStalePastDays($user, $now);
         $changed = $healed;
@@ -66,9 +79,10 @@ final class Reconciler
             return $changed;
         }
 
-        // Work that ran past midnight: the old day was just closed (here or by the nightly run), carry on today.
-        if ($continuous && ! DayState::find($employee) && ($healed || $this->yesterdayAutoClosed($user, $now))) {
-            app(StartWork::class)($employee);
+        // Work that ran up to midnight: the old day was just closed (here or by the nightly run), carry on today. Only
+        // on real input: a tab left open overnight never starts the next day by itself.
+        if ($continuous && $hasInput && ! DayState::find($employee) && ($healed || $this->yesterdayAutoClosed($user, $now)) && $this->ranToMidnight($user, $now, $idle)) {
+            app(StartWork::class)($employee, at: $input->max($now->copy()->startOfDay()));
             $changed = true;
         }
         $day = DayState::find($employee);
@@ -76,22 +90,38 @@ final class Reconciler
             return $changed;
         }
         $open = $day->openSegment();
-        $seen = $this->clamp($activityAt ?? $now, $open?->started_at, $now);
+        $shiftStart = $now->copy()->setTimeFromTimeString($policy->shift_start);
+        $shiftEnd = $now->copy()->setTimeFromTimeString($policy->shift_end);
+        // Presence model (idle by input off): during the shift an open tab counts as work. Outside it only input does;
+        // after shift end the presence-credited time up to shift end is kept. Early starters get presence from up to
+        // PRESENCE_EARLY_HOURS before shift start, so reading a document at 08:30 isn't idle; the night stays input-only.
+        $presence = ! $policy->idle_by_input && $now->gte($shiftStart->copy()->subHours(self::PRESENCE_EARLY_HOURS)) && $now->lte($shiftEnd);
+        $checkIdle = $activityAt !== null && ! $presence;
+        // Several tabs: the most recent input any of them reported counts, not just this one's (docs P1-3).
+        $latest = $day->last_activity_at && $day->last_activity_at->gt($input) && $day->last_activity_at->lte($now) ? $day->last_activity_at->copy() : $input;
+        if (! $policy->idle_by_input && $now->gt($shiftEnd) && $latest->lt($shiftEnd)) {
+            $latest = $shiftEnd->copy();
+        }
+        $seen = $presence || $activityAt === null ? $now->copy() : $this->clamp($latest, $open?->started_at, $now);
 
-        if ($day->status === 'working' && $open?->type === 'work' && $activityAt && $now->getTimestamp() - $seen->getTimestamp() > $idle) {
+        if ($day->status === 'working' && $open?->type === 'work' && $checkIdle && $now->getTimestamp() - $seen->getTimestamp() > $idle) {
             DayState::leaveWork($employee, $day, $seen);
             TimeSegment::create([
-                'attendance_day_id' => $day->id, 'type' => 'break', 'break_category' => 'idle',
-                'started_at' => $seen, 'note' => 'No keyboard or mouse input', 'source' => 'idle',
+                'attendance_day_id' => $day->id, 'type' => 'break', 'break_category' => 'idle', 'started_at' => $seen,
+                'note' => $policy->idle_by_input ? 'No keyboard or mouse input' : self::AFTER_HOURS_NOTE, 'source' => 'idle',
             ]);
             $day->status = 'on_break';
             $day->last_activity_at = $seen;
             DayState::rollup($day, $now);
             $changed = true;
-        } elseif ($day->status === 'on_break' && $open?->break_category === 'idle'
-            && ($activityAt === null || ($seen->gt($open->started_at) && $now->getTimestamp() - $seen->getTimestamp() <= $idle))) {
-            DayState::openWork($employee, $day, $seen, null);
-            $changed = true;
+        } elseif ($day->status === 'on_break' && $open?->break_category === 'idle') {
+            // Input resumes work from when it happened; presence alone never ends an idle break.
+            $back = $this->clamp($latest, $open->started_at, $now);
+            if ($activityAt === null || ($back->gt($open->started_at) && $now->getTimestamp() - $back->getTimestamp() <= $idle)) {
+                DayState::openWork($employee, $day, $activityAt === null ? $now : $back, null);
+                $changed = true;
+            }
+            $seen = $day->status === 'working' ? ($activityAt === null ? $now->copy() : $back) : $open->started_at->copy();
         }
         if (in_array($day->status, ['working', 'on_break'], true)) {
             $day->last_activity_at = $day->last_activity_at && $day->last_activity_at->gt($seen) ? $day->last_activity_at : $seen;
@@ -99,6 +129,14 @@ final class Reconciler
         }
 
         return $changed;
+    }
+
+    /** Yesterday's work ran up to (within one idle timeout of) midnight, so a beat just after it continues the work. */
+    private function ranToMidnight(User $user, CarbonInterface $now, int $idle): bool
+    {
+        $out = AttendanceDay::where('employee_id', $user->employee_id)->whereDate('date', $now->copy()->subDay()->toDateString())->value('last_out_at');
+
+        return $out && $now->copy()->startOfDay()->getTimestamp() - CarbonImmutable::parse($out, config('app.timezone'))->getTimestamp() <= $idle + 60;
     }
 
     private function clamp(CarbonInterface $at, ?CarbonInterface $min, CarbonInterface $max): CarbonInterface
@@ -117,11 +155,13 @@ final class Reconciler
         $stale = AttendanceDay::where('employee_id', $user->employee_id)->whereDate('date', '<', $now->toDateString())
             ->whereIn('status', ['working', 'on_break'])->orderBy('date')->get();
         $closer = app(CloseDay::class);
+        $closed = false;
         foreach ($stale as $d) {
-            $closer->forEmployee($user->employee, $d->date->format('Y-m-d'));
+            // A day in a month whose payroll is locked is left as it is (CloseDay refuses it).
+            $closed = $closer->forEmployee($user->employee, $d->date->format('Y-m-d')) || $closed;
         }
 
-        return $stale->isNotEmpty();
+        return $closed;
     }
 
     private function yesterdayAutoClosed(User $user, CarbonInterface $now): bool

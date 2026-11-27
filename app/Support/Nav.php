@@ -41,7 +41,7 @@ final class Nav
             ]],
             ['id' => 'people-pay', 'label' => 'People & pay', 'items' => [
                 ['id' => 'people', 'label' => 'People', 'to' => '/people', 'icon' => 'UserRound', 'permission' => 'manage_people'],
-                ['id' => 'payroll', 'label' => 'Payroll', 'to' => '/payroll', 'icon' => 'Wallet', 'permission' => 'manage_payroll'],
+                ['id' => 'payroll', 'label' => 'Payroll', 'to' => '/payroll', 'icon' => 'Wallet', 'permission' => ['manage_payroll', 'approve_payroll']],
                 ['id' => 'reports', 'label' => 'Reports', 'to' => '/reports', 'icon' => 'FileText', 'permission' => 'view_reports'],
             ]],
             ['id' => 'finance', 'label' => 'Finance', 'items' => [

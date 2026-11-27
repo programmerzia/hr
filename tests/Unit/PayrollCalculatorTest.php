@@ -65,13 +65,17 @@ it('applies the late penalty with the monthly cap only when enabled', function (
         ->and(PayrollCalculator::compute(calcPolicy(), calcSlices(), calcFacts(['late_count' => 30]))['late_deduction'])->toBe(0);
 });
 
-it('computes PF on both sides only when enabled, structure percent overriding policy', function () {
+it('computes PF on both sides only when enabled, structure percent overriding policy only when flagged', function () {
     $p = calcPolicy(['pf_enabled' => true, 'pf_employee_percent' => 10, 'pf_employer_percent' => 10]);
-    $r = PayrollCalculator::compute($p, calcSlices(['pf_percent' => 5]), calcFacts());
+    $r = PayrollCalculator::compute($p, calcSlices(['pf_percent' => 5, 'pf_override' => true]), calcFacts());
     expect($r['pf'])->toBe(2750)->and($r['pf_employer'])->toBe(5500)->and($r['net'])->toBe(100000 - 4000 - 2750);
-    $o = PayrollCalculator::compute($p, calcSlices(['pf_employer_percent' => 0.0]), calcFacts());
+    $o = PayrollCalculator::compute($p, calcSlices(['pf_employer_percent' => 0.0, 'pf_percent' => 10, 'pf_override' => true]), calcFacts());
     expect($o['pf'])->toBe(5500)->and($o['pf_employer'])->toBe(0);
     expect(PayrollCalculator::compute(calcPolicy(), calcSlices(['pf_percent' => 5]), calcFacts())['pf'])->toBe(0);
+    // Without the override flag the Settings percentage wins, and the item says so.
+    $w = PayrollCalculator::compute($p, calcSlices(['pf_percent' => 5]), calcFacts());
+    expect($w['pf'])->toBe(5500)->and($w['components']['pf_source'])->toBe('settings');
+    expect($r['components']['pf_source'])->toBe('structure');
 });
 
 it('honours the tax switch', function () {

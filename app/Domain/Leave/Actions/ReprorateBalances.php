@@ -6,6 +6,7 @@ use App\Domain\Leave\Services\Entitlement;
 use App\Models\Employee;
 use App\Models\LeaveBalance;
 use App\Models\LeaveType;
+use App\Support\Audit;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -37,6 +38,8 @@ class ReprorateBalances
                 }
             }
         });
+
+        Audit::log($type, "Quota changed from {$oldQuota} to {$type->annual_quota}; {$updated} balances re-prorated", null, ['old' => $oldQuota, 'new' => (float) $type->annual_quota, 'rows' => $updated]);
 
         return $updated;
     }

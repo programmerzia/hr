@@ -29,6 +29,8 @@ Route::middleware('can:payroll_staff')->prefix('payroll')->name('payroll.')->gro
     Route::post('/{run}/approve', [RunController::class, 'approve'])->name('runs.approve');
     Route::post('/{run}/reopen', [RunController::class, 'reopen'])->name('runs.reopen');
     Route::get('/{run}/bank-advice.csv', [RunController::class, 'bankAdvice'])->name('runs.bank-advice');
+    Route::get('/{run}/register.csv', [RunController::class, 'register'])->name('runs.register');
+    Route::get('/{run}/payslips.zip', [RunController::class, 'payslipsZip'])->name('runs.payslips-zip');
     Route::post('/{run}/pay', [RunController::class, 'pay'])->name('runs.pay');
 });
 

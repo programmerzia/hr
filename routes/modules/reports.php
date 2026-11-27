@@ -10,6 +10,7 @@ Route::middleware('can:view_reports')->prefix('reports')->name('reports.')->cont
     Route::get('/department-cost.csv', 'departmentCsv')->name('department.csv');
     Route::get('/statement.csv', 'statementCsv')->name('statement.csv');
     Route::get('/attendance-sheet.csv', 'sheetCsv')->name('sheet.csv');
+    Route::get('/export/{report}.csv', 'export')->name('export')->where('report', '[a-z_]+');
 });
 
 Route::get('/me/statement', [ReportsController::class, 'myStatement'])->name('me.statement');
@@ -18,4 +19,5 @@ Route::get('/me/statement.csv', [ReportsController::class, 'myStatementCsv'])->n
 Route::middleware('can:view_team')->group(function () {
     Route::get('/team/sheet', [ReportsController::class, 'teamSheet'])->name('team.sheet');
     Route::get('/team/sheet.csv', [ReportsController::class, 'teamSheetCsv'])->name('team.sheet.csv');
+    Route::get('/team/export/{report}.csv', [ReportsController::class, 'teamExport'])->name('team.export')->where('report', '[a-z_]+');
 });

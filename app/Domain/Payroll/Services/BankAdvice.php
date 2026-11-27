@@ -5,6 +5,7 @@ namespace App\Domain\Payroll\Services;
 use App\Models\BankAccount;
 use App\Models\PayrollItem;
 use App\Models\PayrollRun;
+use App\Domain\Payroll\Support\Csv;
 use Illuminate\Support\Str;
 
 /** Bank advice CSV for an approved or paid run. Held items and items with net <= 0 are excluded. */
@@ -38,16 +39,30 @@ final class BankAdvice
 
     public static function csv(PayrollRun $run): string
     {
-        $h = fopen('php://temp', 'r+');
-        fputcsv($h, self::HEADER, escape: '');
-        foreach (self::rows($run) as $row) {
-            // Account numbers stay text in spreadsheets; leading "=+-@" are neutralised against formula injection.
-            fputcsv($h, array_map(fn ($v) => is_string($v) && preg_match('/^[=+\-@]/', $v) ? "'".$v : $v, $row), escape: '');
-        }
-        rewind($h);
-        $out = stream_get_contents($h);
-        fclose($h);
+        return Csv::render(self::HEADER, self::rows($run));
+    }
 
-        return (string) $out;
+    /**
+     * People left out of the file, or in it with a gap, and why.
+     *
+     * @return list<array{code:string,name:string,reason:string}>
+     */
+    public static function skipped(PayrollRun $run): array
+    {
+        $out = [];
+        foreach (PayrollItem::with('employee')->where('run_id', $run->id)->get()->sortBy(fn ($i) => $i->employee?->code) as $i) {
+            $reason = match (true) {
+                (bool) $i->hold => 'On hold'.($i->hold_reason ? ': '.$i->hold_reason : ''),
+                (int) $i->net < 0 => 'Net pay is below zero',
+                (int) $i->net === 0 => 'Net pay is zero',
+                ! $i->bank_account_id => 'In the file, but no bank account on record',
+                default => null,
+            };
+            if ($reason) {
+                $out[] = ['code' => $i->employee?->code ?? '', 'name' => $i->employee?->name ?? '', 'reason' => $reason];
+            }
+        }
+
+        return $out;
     }
 }

@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Link } from '@inertiajs/react'
 import { Bars } from '../../components/charts/Bars'
 import { HeatStrip } from '../../components/charts/HeatStrip'
+import { HistoryPanel, type HistoryEntry } from '../../components/shared/HistoryPanel'
 import { EmptyTable } from '../../components/shared/EmptyTable'
 import { MoneyCell } from '../../components/shared/MoneyCell'
 import { StatusBadge } from '../../components/shared/StatusBadge'
@@ -74,6 +75,7 @@ interface Props {
   documents: EmployeeDocument[] | null
   assets: EmployeeAsset[]
   checklist: OnboardingChecklist[]
+  activity: HistoryEntry[] | null
   history: { id: string; effective_on: string; kind: string; text: string }[]
   presence: string
   leave_balances: LeaveRow[]
@@ -189,6 +191,7 @@ export default function ProfilePage() {
           <TabsTrigger value="assets">Assets</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="leave">Leave</TabsTrigger>
+          {p.activity && <TabsTrigger value="activity">Activity</TabsTrigger>}
         </TabsList>
         <TabsContent value="overview"><OverviewTab /></TabsContent>
         <TabsContent value="employment"><EmploymentTab /></TabsContent>
@@ -200,6 +203,7 @@ export default function ProfilePage() {
           <AttendanceTab />
         </TabsContent>
         <TabsContent value="leave"><LeaveTab /></TabsContent>
+        {p.activity && <TabsContent value="activity"><HistoryPanel title="Activity" entries={p.activity} /></TabsContent>}
       </Tabs>
 
       {dialog === 'reset' && <ResetPasswordDialog open onOpenChange={close} employee={employee} />}

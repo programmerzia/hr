@@ -7,6 +7,7 @@ use App\Domain\Leave\Services\BalanceService;
 use App\Domain\Leave\Services\LeaveNotifier;
 use App\Domain\Leave\Services\PayrollGuard;
 use App\Models\Employee;
+use App\Support\Audit;
 use App\Models\LeaveApproval;
 use App\Models\LeaveRequest;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +24,9 @@ class ApproveAsHr
             if (! in_array($r->status, $waiting, true)) {
                 Fail::with('This request is not waiting for HR');
             }
+            if (! $decider) {
+                Fail::with('A decider is required');
+            }
             if ($r->employee_id === $decider?->id) {
                 Fail::with('You cannot approve your own request');
             }
@@ -36,6 +40,7 @@ class ApproveAsHr
                 'decision' => 'approved', 'note' => $note ?: null, 'decided_at' => now(),
             ]);
             $r->update(['status' => 'approved']);
+            Audit::log($r, 'Approved as HR'.($note ? ": {$note}" : ''), $decider->user, ['stage' => 'hr']);
             $this->balances->adjust($r, used: (float) $r->days, pending: -(float) $r->days);
             $this->regrade->__invoke($r->employee_id, $r->starts_on->format('Y-m-d'), $r->ends_on->format('Y-m-d'));
             $this->notifier->toRequester($r, 'Leave approved');

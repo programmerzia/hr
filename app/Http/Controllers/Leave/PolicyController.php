@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Leave;
 
 use App\Domain\Leave\Actions\ReprorateBalances;
 use App\Domain\Leave\Support\Shape;
+use App\Domain\Settings\SettingsLog;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Leave\UpdateLeaveTypeRequest;
 use App\Models\LeaveType;
@@ -25,6 +26,7 @@ class PolicyController extends Controller
     {
         $oldQuota = (float) $leaveType->annual_quota;
         $leaveType->update($request->validated());
+        SettingsLog::record($request->user(), 'leave-types', "updated leave type {$leaveType->name}", $leaveType->getChanges() ? ['changed' => array_keys($leaveType->getChanges())] : [], $leaveType->id);
         if ((float) $leaveType->annual_quota !== $oldQuota) {
             $reprorate($leaveType, $oldQuota);
         }

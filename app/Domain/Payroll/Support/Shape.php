@@ -72,6 +72,14 @@ final class Shape
         return PayrollItemResource::make($item)->resolve();
     }
 
+    /** Adjustments of the given items, removed ones included (history stays visible). */
+    public static function adjustmentsFor(iterable $itemIds, bool $withRemoved = true): array
+    {
+        $q = PayrollAdjustment::whereIn('item_id', collect($itemIds)->all());
+
+        return self::adjustments(($withRemoved ? $q->withTrashed() : $q)->orderBy('created_at')->get());
+    }
+
     public static function adjustments(iterable $list): array
     {
         return PayrollAdjustmentResource::collection(collect($list))->resolve();

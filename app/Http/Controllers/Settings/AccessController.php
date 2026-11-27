@@ -96,6 +96,9 @@ class AccessController extends Controller
         }
         $user->syncPermissions($perms);
         Access::flush();
+        if ($user->employee) {
+            \App\Domain\People\Actions\Concerns::audit($user->employee, 'Direct permissions set: '.(implode(', ', $perms) ?: 'none'), ['permissions' => $perms]);
+        }
         SettingsLog::record($request->user(), 'access', "set direct permissions for {$user->name}: ".(implode(', ', $perms) ?: 'none'), ['user' => $user->id], $user->employee_id);
 
         return back()->with('success', 'Overrides saved');

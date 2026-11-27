@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Domain\Attendance\Services\DayCalculator;
 use App\Domain\Attendance\Services\DayState;
+use App\Domain\Attendance\Services\StartPrompt;
 use App\Http\Resources\AttendanceDayResource;
 use App\Http\Resources\AttendancePolicyResource;
 use App\Http\Resources\EmployeeResource;
@@ -71,6 +72,8 @@ class HandleInertiaRequests extends Middleware
             // Worked so far, as of server_time (the stored total is only as fresh as its last rollup).
             'work_seconds' => $day ? (int) DayCalculator::totals($day->segments()->get(), $now, AttendancePolicy::current()->lunch_cap_minutes)['work_seconds'] : 0,
             'server_time' => Fmt::dt($now),
+            // Signed in but today not started (e.g. a remembered session): the app asks on first input.
+            'start_prompt' => StartPrompt::due($employee, $day, $now),
         ];
     }
 }

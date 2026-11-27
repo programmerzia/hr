@@ -47,10 +47,11 @@ class LeaveTypeController extends Controller
     {
         $oldQuota = (float) $leaveType->annual_quota;
         $leaveType->update($request->validated());
+        $changed = array_values(array_diff(array_keys($leaveType->getChanges()), ['updated_at']));
         if ((float) $leaveType->annual_quota !== $oldQuota) {
             $reprorate($leaveType, $oldQuota);
         }
-        SettingsLog::record($request->user(), 'leave-types', "updated leave type {$leaveType->name}", subjectId: $leaveType->id);
+        SettingsLog::record($request->user(), 'leave-types', "updated leave type {$leaveType->name}".($changed ? ' ('.implode(', ', $changed).')' : ''), ['changed' => $changed], subjectId: $leaveType->id);
 
         return back()->with('success', 'Leave type updated');
     }

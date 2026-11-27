@@ -6,6 +6,7 @@ use App\Domain\Attendance\Actions\StartWork;
 use App\Domain\Attendance\Services\CloseTime;
 use App\Domain\Attendance\Services\DayCalculator;
 use App\Domain\Attendance\Services\DayState;
+use App\Domain\Attendance\Services\Paused;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\AttendanceDayResource;
 use App\Http\Resources\AttendancePolicyResource;
@@ -115,16 +116,29 @@ class MyDayController extends Controller
         return ['enabled' => (bool) $pay->late_penalty_enabled, 'lates_per_penalty' => (int) $pay->lates_per_penalty, 'count_this_month' => $count];
     }
 
-    /** Closed days this month that can still be regularised (absent, half day, auto-closed, early). */
+    /**
+     * Days this month that need attention: closed days that can still be regularised (absent, half day, auto-closed,
+     * early), and any day (today included) with time the browser paused the HR tab, which can be asked to count as work.
+     */
     private function recentDays(string $employeeId, $regs): array
     {
-        return AttendanceDay::where('employee_id', $employeeId)->where('is_regularized', false)
-            ->whereBetween('date', [now()->startOfMonth()->toDateString(), now()->toDateString()])
-            ->where(fn ($q) => $q->whereDate('date', '<', now()->toDateString())->orWhere('status', 'ended'))
-            ->where(fn ($q) => $q->whereIn('absence_kind', ['unapproved', 'half_day'])->orWhere('auto_closed', true)->orWhere('early_minutes', '>', 0))
-            ->orderByDesc('date')->get()
+        $today = now()->toDateString();
+        $month = AttendanceDay::where('employee_id', $employeeId)
+            ->whereBetween('date', [now()->startOfMonth()->toDateString(), $today])->orderByDesc('date')->get();
+        $paused = Paused::secondsByDay($month->pluck('id'));
+
+        return $month->filter(function (AttendanceDay $d) use ($today, $paused) {
+            if (($paused[$d->id] ?? 0) >= 60) {
+                return true;
+            }
+            $over = $d->date->format('Y-m-d') < $today || $d->status === 'ended';
+
+            return ! $d->is_regularized && $over
+                && (in_array($d->absence_kind, ['unapproved', 'half_day'], true) || $d->auto_closed || $d->early_minutes > 0);
+        })->values()
             ->map(fn ($d) => [
                 'day' => AttendanceDayResource::make($d)->resolve(),
+                'paused_minutes' => intdiv($paused[$d->id] ?? 0, 60),
                 'last_note' => $regs->where('attendance_day_id', $d->id)->whereIn('status', ['approved', 'rejected'])->whereNotNull('note')
                     ->sortByDesc('decided_at')->first()?->note,
                 'regularization' => $regs->where('attendance_day_id', $d->id)->contains('status', 'pending') ? 'pending'

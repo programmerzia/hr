@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Attendance;
 
 use App\Domain\Attendance\Actions\DecideRegularization;
 use App\Domain\Attendance\Actions\RequestRegularization;
+use App\Domain\Attendance\Services\PayrollLock;
 use App\Domain\Attendance\Services\Scope;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Attendance\DecideRegularizationRequest;
@@ -53,6 +54,9 @@ class RegularizationController extends Controller
     {
         $req = RegularizationRequest::findOrFail($request->validated('id'));
         Gate::authorize('decide', $req);
+        if ($locked = PayrollLock::message($req->day->date->format('Y-m-d'))) {
+            return back()->with('error', $locked);
+        }
         $ok = $action(
             $req, $request->validated('decision'), $request->validated('note'), $request->user()->employee,
             $request->validated('resolution'), $request->validated('leave_type_id'),

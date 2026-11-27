@@ -19,6 +19,10 @@ class PayrollAdjustmentResource extends JsonResource
             'amount' => (int) $this->amount,
             'note' => $this->note,
             'created_by' => $this->created_by,
+            'category' => $this->category ?? ($this->kind === 'bonus' ? 'bonus' : 'manual_deduction'),
+            'source' => $this->source,
+            'removed' => $this->deleted_at !== null,
+            'deleted_by' => $this->deleted_by,
         ];
     }
 }

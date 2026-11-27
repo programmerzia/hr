@@ -185,7 +185,7 @@ final class PayrollFacts
         return [
             'id' => $s->id, 'basic' => (int) $s->basic, 'house_rent' => (int) $s->house_rent, 'medical' => (int) $s->medical,
             'conveyance' => (int) $s->conveyance, 'other_allowances' => $s->otherAllowances(), 'gross' => (int) $s->gross,
-            'hourly_rate' => (int) $s->hourly_rate, 'pf_percent' => (float) $s->pf_percent,
+            'hourly_rate' => (int) $s->hourly_rate, 'pf_percent' => (float) $s->pf_percent, 'pf_override' => (bool) $s->pf_override,
             'pf_employer_percent' => $s->pf_employer_percent === null ? null : (float) $s->pf_employer_percent,
             'tax_monthly' => (int) $s->tax_monthly,
         ];

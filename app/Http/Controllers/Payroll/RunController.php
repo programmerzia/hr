@@ -10,6 +10,10 @@ use App\Domain\Payroll\Actions\Recompute;
 use App\Domain\Payroll\Actions\ReopenRun;
 use App\Domain\Payroll\Actions\SubmitForReview;
 use App\Domain\Payroll\Services\BankAdvice;
+use App\Domain\Payroll\Services\MakerChecker;
+use App\Domain\Payroll\Services\PayrollPeriod;
+use App\Domain\Payroll\Services\PayrollRegister;
+use App\Domain\Payroll\Services\PayslipPdf;
 use App\Domain\Payroll\Support\Shape;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Payroll\MarkPaidRequest;
@@ -25,6 +29,7 @@ use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class RunController extends Controller
 {
@@ -74,16 +79,24 @@ class RunController extends Controller
         $items = PayrollItem::with('employee')->where('run_id', $run->id)->get()->sortBy(fn ($i) => $i->employee?->name)->values();
         $adjustments = PayrollAdjustment::whereIn('item_id', $items->pluck('id'))->orderBy('created_at')->get();
         $events = Shape::events($run->id);
+        $me = $request->user()->employee;
+        $block = $me ? MakerChecker::blockReason($run, $me) : null;
 
         return Inertia::render('Payroll/RunDetailPage', [
             'run' => PayrollRunResource::make($run)->resolve(),
             'items' => $items->map(fn (PayrollItem $i) => Shape::item($i))->all(),
             'policy' => Shape::policy($run, $items),
-            'adjustments' => Shape::adjustments($adjustments),
+            'adjustments' => Shape::adjustmentsFor($items->pluck('id')),
+            'approval' => [
+                'blocked' => $block,
+                'single_approver' => MakerChecker::singleApproverAllowed(),
+                'month_ended' => now()->toDateString() > PayrollPeriod::end($run->year, $run->month),
+            ],
+            'bank_skipped' => in_array($run->status, ['approved', 'paid'], true) ? BankAdvice::skipped($run) : [],
             'totals' => Shape::totals($items, $adjustments),
             'mix' => Shape::mix($items, $adjustments),
             'events' => $events,
-            'people' => Shape::people($items->pluck('employee_id')->push($run->employee_id)->merge(collect($events)->pluck('actor_id'))),
+            'people' => Shape::people($items->pluck('employee_id')->push($run->employee_id, $run->prepared_by, $run->submitted_by, $run->approved_by, $run->paid_by)->merge(collect($events)->pluck('actor_id'))),
         ]);
     }
 
@@ -106,7 +119,8 @@ class RunController extends Controller
     public function submit(Request $request, PayrollRun $run, SubmitForReview $action): RedirectResponse
     {
         Gate::authorize('manage', $run);
-        $action($run, $request->user()->employee);
+        $data = $request->validate(['pay_early' => ['nullable', 'boolean'], 'early_reason' => ['nullable', 'string', 'max:255']]);
+        $action($run, $request->user()->employee, (bool) ($data['pay_early'] ?? false), $data['early_reason'] ?? null);
 
         return back()->with('success', 'Sent for review');
     }
@@ -140,9 +154,36 @@ class RunController extends Controller
         ]);
     }
 
+    public function register(PayrollRun $run): HttpResponse
+    {
+        Gate::authorize('view', $run);
+        $name = PayrollRegister::filename($run);
+
+        return response(PayrollRegister::csv($run), 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$name}\"",
+        ]);
+    }
+
+    public function payslipsZip(PayrollRun $run): BinaryFileResponse
+    {
+        Gate::authorize('view', $run);
+        abort_unless($run->status === 'paid', 404);
+        $zip = new \ZipArchive;
+        $path = tempnam(sys_get_temp_dir(), 'payslips');
+        $zip->open($path, \ZipArchive::OVERWRITE);
+        foreach (PayrollItem::with('employee')->where('run_id', $run->id)->where('hold', false)->get() as $item) {
+            $code = preg_replace('/[^A-Za-z0-9_-]/', '_', (string) ($item->employee?->code ?: $item->employee_id));
+            $zip->addFile(PayslipPdf::ensure($item), sprintf('payslip-%s-%d-%02d.pdf', $code, $run->year, $run->month));
+        }
+        $zip->close();
+
+        return response()->download($path, sprintf('payslips-%d-%02d.zip', $run->year, $run->month), ['Content-Type' => 'application/zip'])->deleteFileAfterSend();
+    }
+
     public function pay(MarkPaidRequest $form, PayrollRun $run, MarkPaid $action): RedirectResponse
     {
-        Gate::authorize('manage', $run);
+        Gate::authorize('approve', $run);
         $action($run, $form->validated('paid_on'), $form->validated('reference'), $form->user()->employee);
 
         return back()->with('success', 'Run marked as paid');

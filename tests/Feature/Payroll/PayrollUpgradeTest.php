@@ -186,7 +186,7 @@ function puRun($t, int $m = 11): PayrollRun
 
 function puApprove($t, PayrollRun $run): PayrollRun
 {
-    $t->actingAs($t->hr)->post(route('payroll.runs.submit', $run))->assertSessionDoesntHaveErrors();
+    $t->actingAs($t->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test'])->assertSessionDoesntHaveErrors();
     PayrollItem::where('run_id', $run->id)->where('variance_flag', true)->get()->each(fn ($i) => $t->actingAs($t->hr)->post(route('payroll.items.ack-variance', $i)));
     $t->actingAs($t->mgmt)->post(route('payroll.runs.approve', $run))->assertSessionDoesntHaveErrors();
 
@@ -216,7 +216,7 @@ it('writes PF for both sides with a cumulative ledger when enabled', function ()
     puStaff($this);
     puPolicy(['pf_enabled' => true, 'pf_employee_percent' => 10, 'pf_employer_percent' => 8]);
     $oct = puApprove($this, puRun($this, 10));
-    $this->actingAs($this->hr)->post(route('payroll.runs.pay', $oct), ['paid_on' => '2026-10-31', 'reference' => 'R1']);
+    $this->actingAs($this->mgmt)->post(route('payroll.runs.pay', $oct), ['paid_on' => '2026-10-31', 'reference' => 'R1']);
     puApprove($this, puRun($this, 11));
     $item = PayrollItem::where('employee_id', $this->emp->employee_id)->where('run_id', $oct->id)->first();
     expect($item->pf)->toBe(5500)->and($item->pf_employer)->toBe(4400);
@@ -228,10 +228,10 @@ it('rejects recompute, adjustments and holds on a locked run', function () {
     puStaff($this);
     $run = puRun($this);
     $item = PayrollItem::where('run_id', $run->id)->firstOrFail();
-    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['kind' => 'bonus', 'label' => 'x', 'amount' => 10]);
+    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['category' => 'bonus', 'note' => 'test', 'label' => 'x', 'amount' => 10]);
     $run->update(['locked_at' => now()]); // locked even while still a draft
     $this->actingAs($this->hr)->post(route('payroll.runs.recompute', $run))->assertSessionHasErrors('payroll');
-    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['kind' => 'bonus', 'label' => 'y', 'amount' => 10])->assertSessionHasErrors(['payroll' => 'This run is locked.']);
+    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['category' => 'bonus', 'note' => 'test', 'label' => 'y', 'amount' => 10])->assertSessionHasErrors(['payroll' => 'This run is locked.']);
     $this->actingAs($this->hr)->delete(route('payroll.adjustments.destroy', PayrollAdjustment::firstOrFail()))->assertSessionHasErrors('payroll');
     $this->actingAs($this->hr)->post(route('payroll.items.hold', $item), ['reason' => 'Docs'])->assertSessionHasErrors(['payroll' => 'This run is locked.']);
     $this->actingAs($this->hr)->post(route('payroll.items.unhold', $item))->assertSessionHasErrors('payroll');
@@ -261,7 +261,8 @@ it('exports the bank advice for approved runs to payroll roles only', function (
     puApprove($this, $run);
     $res = $this->actingAs($this->hr)->get(route('payroll.runs.bank-advice', $run))->assertOk();
     expect($res->headers->get('content-type'))->toContain('text/csv');
-    $lines = array_values(array_filter(explode("\n", $res->getContent())));
+    expect($res->getContent())->toStartWith("\xEF\xBB\xBF");
+    $lines = array_values(array_filter(explode("\n", substr($res->getContent(), 3))));
     expect($lines[0])->toBe('code,name,bank,branch,account_name,account_no,routing_no,net')->and($lines)->toHaveCount(4);
     $code = $this->emp->employee->code;
     $row = collect($lines)->first(fn ($l) => str_starts_with($l, $code.','));
@@ -283,10 +284,10 @@ it('reopens an approved run back to review for management only', function () {
         ->and($run->reopen_reason)->toBe('Missed a bonus')->and($run->reopened_by)->toBe($this->mgmt->employee_id)
         ->and(PfLedger::where('run_id', $run->id)->count())->toBe(0);
     $item = PayrollItem::where('run_id', $run->id)->firstOrFail();
-    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['kind' => 'bonus', 'label' => 'Bonus', 'amount' => 100])->assertSessionDoesntHaveErrors();
+    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['category' => 'bonus', 'note' => 'test', 'label' => 'Bonus', 'amount' => 100])->assertSessionDoesntHaveErrors();
 
     $this->actingAs($this->mgmt)->post(route('payroll.runs.approve', $run));
-    $this->actingAs($this->hr)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'R']);
+    $this->actingAs($this->mgmt)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'R']);
     $this->actingAs($this->mgmt)->post(route('payroll.runs.reopen', $run), ['reason' => 'late'])->assertSessionHasErrors('payroll');
 });
 

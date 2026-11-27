@@ -6,7 +6,9 @@ use App\Domain\Attendance\Actions\RegradeDays;
 use App\Domain\Leave\Services\BalanceService;
 use App\Domain\Leave\Services\LeaveNotifier;
 use App\Domain\Leave\Services\PayrollGuard;
+use App\Models\Employee;
 use App\Models\LeaveRequest;
+use App\Support\Audit;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -17,11 +19,12 @@ class EndEarly
 {
     public function __construct(private BalanceService $balances, private RegradeDays $regrade, private LeaveNotifier $notifier) {}
 
-    public function __invoke(LeaveRequest $request, ?string $date = null): LeaveRequest
+    public function __invoke(LeaveRequest $request, ?string $date = null, ?Employee $by = null): LeaveRequest
     {
         $date ??= now()->toDateString();
+        $by ??= auth()->user()?->employee;
 
-        return DB::transaction(function () use ($request, $date) {
+        return DB::transaction(function () use ($request, $date, $by) {
             $r = LeaveRequest::lockForUpdate()->findOrFail($request->id);
             $start = $r->starts_on->format('Y-m-d');
             $end = $r->ends_on->format('Y-m-d');
@@ -39,13 +42,16 @@ class EndEarly
 
             $this->balances->adjust($r, used: -(float) $r->days);
             if ($days <= 0) {
-                $r->update(['status' => 'cancelled']);
+                $r->update(['status' => 'cancelled', 'cancelled_by' => $by?->id, 'cancelled_at' => now(), 'ended_early_by' => $by?->id, 'ended_early_at' => now()]);
+                Audit::log($r, 'Ended early before it started; cancelled', $by?->user, ['date' => $date]);
             } else {
                 $r->update([
                     'ends_on' => $newEnd,
                     'days' => $days,
                     'year_split' => count($byYear) > 1 ? array_map('floatval', $byYear) : null,
+                    'ended_early_by' => $by?->id, 'ended_early_at' => now(),
                 ]);
+                Audit::log($r, "Ended early on {$date}; leave now runs to {$newEnd}", $by?->user, ['date' => $date]);
                 $this->balances->adjust($r->fresh(), used: $days);
             }
             $this->regrade->__invoke($r->employee_id, max($date, $start), $end);

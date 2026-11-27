@@ -1,3 +1,4 @@
+import { DecidedBy } from './DecidedBy'
 import { router } from '@inertiajs/react'
 import { ClipboardCheck } from 'lucide-react'
 import { useState } from 'react'
@@ -104,6 +105,7 @@ export default function RegularizationsPage() {
                   <Td>
                     <StatusBadge status={r.status} />
                     {r.resolution && <p className="text-xs text-fg-muted">{resolutionLabels[r.resolution]}</p>}
+                    {r.status !== 'pending' && <DecidedBy name={r.decider_name} at={r.decided_at} />}
                   </Td>
                   <Td className="text-right">
                     {r.status === 'pending' && (
@@ -136,11 +138,11 @@ export default function RegularizationsPage() {
         required={target?.decision === 'rejected'}
         confirmLabel={target?.decision === 'approved' ? 'Approve' : 'Reject'}
         destructive={target?.decision === 'rejected'}
-        disabled={target?.decision === 'approved' && resolution === 'paid_leave' && !leaveType}
+        disabled={target?.decision === 'approved' && target.req.kind !== 'paused' && resolution === 'paid_leave' && !leaveType}
         onConfirm={(note) => {
           if (!target) return
           const extra =
-            target.decision === 'approved'
+            target.decision === 'approved' && target.req.kind !== 'paused'
               ? { resolution, leave_type_id: resolution === 'paid_leave' ? leaveType : null }
               : {}
           router.post(
@@ -150,7 +152,10 @@ export default function RegularizationsPage() {
           )
         }}
       >
-        {target?.decision === 'approved' && (
+        {target?.decision === 'approved' && target.req.kind === 'paused' && (
+          <p className="text-sm text-fg-muted">Approving counts the paused time as work and re-grades the day.</p>
+        )}
+        {target?.decision === 'approved' && target.req.kind !== 'paused' && (
           <>
             <Field label="Resolution">
               <Select

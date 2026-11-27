@@ -57,7 +57,7 @@ it('flags variance on submit: up, new and none', function () {
     $prior = PayrollRun::where('month', 10)->firstOrFail();
     PayrollItem::where('run_id', $prior->id)->where('employee_id', $this->mgmt->employee_id)->update(['net' => 150000]); // now down 33%
     $run = uxDraft($this);
-    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
 
     $hr = uxItem($this, $this->hr);
     $mgmt = uxItem($this, $this->mgmt);
@@ -67,7 +67,7 @@ it('flags variance on submit: up, new and none', function () {
 
 it('flags a new payee and an increase', function () {
     $run = uxDraft($this);
-    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
     expect(uxItem($this, $this->emp)->variance_kind)->toBe('new');
 
     PayrollItem::where('employee_id', $this->hr->employee_id)->whereHas('run', fn ($q) => $q->where('month', 10))->update(['net' => 50000]);
@@ -78,7 +78,7 @@ it('flags a new payee and an increase', function () {
 
 it('blocks approval until every flagged item is acknowledged', function () {
     $run = uxDraft($this);
-    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
     $flagged = uxItem($this, $this->emp);
     expect($flagged->variance_flag)->toBeTrue();
 
@@ -99,7 +99,7 @@ it('lets approval pass when the flagged item is on hold', function () {
     $run = uxDraft($this);
     $flagged = uxItem($this, $this->emp);
     $this->actingAs($this->hr)->post(route('payroll.items.hold', $flagged), ['reason' => 'Bank details']);
-    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
     expect($flagged->refresh()->variance_flag)->toBeFalse();
     $this->actingAs($this->mgmt)->post(route('payroll.runs.approve', $run))->assertSessionHasNoErrors();
 });
@@ -108,13 +108,13 @@ it('refuses acknowledgement outside review and for unflagged items', function ()
     $run = uxDraft($this);
     $flagged = uxItem($this, $this->emp);
     $this->actingAs($this->hr)->post(route('payroll.items.ack-variance', $flagged))->assertSessionHasErrors('payroll');
-    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
     $this->actingAs($this->hr)->post(route('payroll.items.ack-variance', uxItem($this, $this->hr)))->assertSessionHasErrors('payroll');
 });
 
 it('clears acknowledgements on recompute', function () {
     $run = uxDraft($this);
-    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
     $flagged = uxItem($this, $this->emp);
     $this->actingAs($this->hr)->post(route('payroll.items.ack-variance', $flagged));
     expect($flagged->refresh()->variance_ack_at)->not->toBeNull();
@@ -126,10 +126,10 @@ it('clears acknowledgements on recompute', function () {
 function uxPay($t): PayrollRun
 {
     $run = uxDraft($t);
-    $t->actingAs($t->hr)->post(route('payroll.runs.submit', $run));
+    $t->actingAs($t->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
     PayrollItem::where('run_id', $run->id)->where('variance_flag', true)->get()->each(fn ($i) => $t->actingAs($t->hr)->post(route('payroll.items.ack-variance', $i)));
     $t->actingAs($t->mgmt)->post(route('payroll.runs.approve', $run));
-    $t->actingAs($t->hr)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'B1']);
+    $t->actingAs($t->mgmt)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'B1']);
 
     return $run->refresh();
 }
@@ -156,10 +156,10 @@ it('stores real payslip PDFs on pay and serves them to owner and staff only', fu
 it('notifies employees on paid and sends held items to an HR summary', function () {
     $run = uxDraft($this);
     $this->actingAs($this->hr)->post(route('payroll.items.hold', uxItem($this, $this->emp)), ['reason' => 'Bank']);
-    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
     $this->actingAs($this->mgmt)->post(route('payroll.runs.approve', $run));
     $this->hr->notifications()->delete();
-    $this->actingAs($this->hr)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'B1']);
+    $this->actingAs($this->mgmt)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'B1']);
 
     $titles = fn ($u) => $u->notifications()->get()->pluck('data.title')->all();
     expect($titles($this->mgmt))->toContain('Your payslip for November 2026 is ready')
@@ -170,7 +170,7 @@ it('notifies employees on paid and sends held items to an HR summary', function 
 
 it('exposes kind and variance on the pages', function () {
     $run = uxDraft($this);
-    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
     $this->actingAs($this->hr)->get(route('payroll.runs.show', $run))
         ->assertInertia(fn ($p) => $p->component('Payroll/RunDetailPage', false)->has('items.0.variance_kind')->has('items.0.variance_flag'));
     $this->actingAs($this->hr)->get(route('payroll.runs'))

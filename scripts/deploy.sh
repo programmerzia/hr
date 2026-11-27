@@ -6,7 +6,17 @@ cd "$(dirname "$0")/.."
 git pull --ff-only
 composer install --no-dev --optimize-autoloader --no-interaction
 npx -y pnpm@12 install --frozen-lockfile
-npx -y pnpm@12 build
+# Build into a side folder and swap it in, so the live site never runs without a manifest.
+# Old hashed assets are kept for a week so open tabs can still lazy-load the chunks they know.
+npx -y pnpm@12 exec tsc -b
+rm -rf public/build-next
+npx -y pnpm@12 exec vite build --outDir public/build-next --emptyOutDir
+if [ -d public/build/assets ]; then cp -rnp public/build/assets/. public/build-next/assets/; fi
+rm -rf public/build-old
+if [ -d public/build ]; then mv public/build public/build-old; fi
+mv public/build-next public/build
+rm -rf public/build-old
+find public/build/assets -type f -mtime +7 -delete
 php artisan migrate --force
 php artisan access:sync
 php artisan payroll:backfill-snapshots

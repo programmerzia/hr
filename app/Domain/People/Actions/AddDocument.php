@@ -12,12 +12,15 @@ class AddDocument
     {
         $path = $file->store("documents/{$employee->id}", 'local');
 
-        return EmployeeDocument::create([
+        $doc = EmployeeDocument::create([
             'employee_id' => $employee->id,
             'kind' => $kind,
             'name' => $file->getClientOriginalName(),
             'path' => $path,
             'uploaded_at' => now(),
         ]);
+        Concerns::audit($employee, "Added document {$doc->name} ({$kind})", ['document_id' => $doc->id]);
+
+        return $doc;
     }
 }

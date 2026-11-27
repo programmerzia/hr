@@ -54,10 +54,10 @@ function draftRun($t): PayrollRun
 function paidRun($t): PayrollRun
 {
     $run = PayrollRun::first() ?? draftRun($t);
-    $t->actingAs($t->hr)->post(route('payroll.runs.submit', $run));
+    $t->actingAs($t->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
     PayrollItem::where('run_id', $run->id)->where('variance_flag', true)->get()->each(fn ($i) => $t->actingAs($t->hr)->post(route('payroll.items.ack-variance', $i)));
     $t->actingAs($t->mgmt)->post(route('payroll.runs.approve', $run));
-    $t->actingAs($t->hr)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'BEFTN-1']);
+    $t->actingAs($t->mgmt)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'BEFTN-1']);
 
     return $run->refresh();
 }
@@ -83,7 +83,7 @@ it('renders runs and the run detail for payroll roles only', function () {
 
 it('lets HR submit but not approve, and notifies management', function () {
     $run = draftRun($this);
-    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run))->assertSessionHas('success');
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test'])->assertSessionHas('success');
     expect($run->refresh()->status)->toBe('review')
         ->and($this->mgmt->notifications()->first()->data['kind'])->toBe('payroll');
     $this->actingAs($this->hr)->post(route('payroll.runs.approve', $run))->assertForbidden();
@@ -93,16 +93,16 @@ it('lets HR submit but not approve, and notifies management', function () {
 it('approves, locks adjustments and notifies HR', function () {
     $run = draftRun($this);
     $item = PayrollItem::where('run_id', $run->id)->where('employee_id', $this->emp->employee_id)->firstOrFail();
-    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['kind' => 'bonus', 'label' => 'Spot bonus', 'amount' => 5000]);
+    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['category' => 'bonus', 'note' => 'test', 'label' => 'Spot bonus', 'amount' => 5000]);
     expect($item->refresh()->net)->toBe(100000 + 5000 - 4000); // PF is off by default
-    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
     PayrollItem::where('run_id', $run->id)->where('variance_flag', true)->get()->each(fn ($i) => $this->actingAs($this->hr)->post(route('payroll.items.ack-variance', $i)));
     $this->actingAs($this->mgmt)->post(route('payroll.runs.approve', $run))->assertSessionHas('success');
     $run->refresh();
     expect($run->status)->toBe('approved')->and($run->locked_at)->not->toBeNull()->and($run->approved_by)->toBe($this->mgmt->employee_id)
         ->and($this->hr->notifications()->count())->toBe(1);
 
-    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['kind' => 'bonus', 'label' => 'Late', 'amount' => 1])
+    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['category' => 'bonus', 'note' => 'test', 'label' => 'Late', 'amount' => 1])
         ->assertSessionHasErrors(['payroll' => 'This run is locked.']);
     $adj = PayrollAdjustment::firstOrFail();
     $this->actingAs($this->hr)->delete(route('payroll.adjustments.destroy', $adj))->assertSessionHasErrors(['payroll' => 'This run is locked.']);
@@ -113,11 +113,11 @@ it('approves, locks adjustments and notifies HR', function () {
 it('validates and removes adjustments on an open run', function () {
     $run = draftRun($this);
     $item = PayrollItem::where('run_id', $run->id)->firstOrFail();
-    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['kind' => 'bonus', 'label' => '', 'amount' => 10])
-        ->assertSessionHasErrors(['payroll' => 'Add a label.']);
-    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['kind' => 'bonus', 'label' => 'x', 'amount' => 0])
+    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['category' => 'bonus', 'note' => '', 'label' => 'x', 'amount' => 10])
+        ->assertSessionHasErrors(['note']);
+    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['category' => 'bonus', 'note' => 'test', 'label' => 'x', 'amount' => 0])
         ->assertSessionHasErrors(['payroll' => 'Enter an amount greater than zero.']);
-    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['kind' => 'deduction', 'label' => 'Fine', 'amount' => 1000]);
+    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['category' => 'manual_deduction', 'note' => 'test', 'label' => 'Fine', 'amount' => 1000]);
     $before = $item->refresh()->net;
     $this->actingAs($this->hr)->delete(route('payroll.adjustments.destroy', PayrollAdjustment::firstOrFail()));
     expect($item->refresh()->net)->toBe($before + 1000)
@@ -126,7 +126,7 @@ it('validates and removes adjustments on an open run', function () {
 
 it('marks an approved run as paid and exposes payslips to the owner only', function () {
     $run = draftRun($this);
-    $this->actingAs($this->hr)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'R1'])
+    $this->actingAs($this->mgmt)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'R1'])
         ->assertSessionHasErrors('payroll');
     $run = paidRun($this);
     expect($run->status)->toBe('paid')->and($run->payment_reference)->toBe('BEFTN-1')->and($run->paid_at)->not->toBeNull();
@@ -153,7 +153,7 @@ it('badges runs awaiting the viewer', function () {
     $run = draftRun($this);
     expect(Badges::for($this->hr)['payroll'])->toBe(1)
         ->and(Badges::for($this->mgmt)['payroll'])->toBe(0);
-    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
     expect(Badges::for($this->mgmt)['payroll'])->toBe(1);
 });
 
@@ -171,7 +171,7 @@ it('lets HR discard a draft run but not a reviewed one', function () {
     expect(PayrollRun::count())->toBe(0)->and(PayrollItem::count())->toBe(0);
 
     $run = draftRun($this);
-    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
     $this->actingAs($this->hr)->delete(route('payroll.runs.destroy', $run))->assertSessionHasErrors('payroll');
     expect(PayrollRun::count())->toBe(1);
 });

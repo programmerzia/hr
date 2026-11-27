@@ -94,6 +94,7 @@ export const regularizationKindLabels: Record<string, string> = {
   absent: 'Absence',
   auto_closed: 'Auto-closed day',
   overtime: 'Overtime',
+  paused: 'Browser paused the HR tab',
 }
 
 export const resolutionLabels: Record<string, string> = {

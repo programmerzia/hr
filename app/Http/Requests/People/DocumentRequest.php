@@ -16,12 +16,12 @@ class DocumentRequest extends FormRequest
     {
         return [
             'kind' => ['required', Rule::in(['nid', 'contract', 'cv', 'certificate', 'other'])],
-            'file' => ['required', 'file', 'max:10240'],
+            'file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx,xlsx', 'max:10240'],
         ];
     }
 
     public function messages(): array
     {
-        return ['file.required' => 'Choose a file', 'file.file' => 'Choose a file', 'file.max' => 'File must be 10 MB or smaller'];
+        return ['file.required' => 'Choose a file', 'file.file' => 'Choose a file', 'file.mimes' => 'Upload a PDF, image, Word or Excel file', 'file.max' => 'File must be 10 MB or smaller'];
     }
 }

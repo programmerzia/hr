@@ -9,6 +9,7 @@ use App\Domain\Leave\Actions\Reject;
 use App\Domain\Leave\Services\ApprovalScope;
 use App\Domain\Leave\Services\BalanceService;
 use App\Domain\Leave\Support\Shape;
+use App\Domain\Leave\Support\Trail;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Leave\DecideLeaveRequest;
 use App\Http\Resources\LeaveApprovalResource;
@@ -52,6 +53,7 @@ class ApprovalController extends Controller
 
         return Inertia::render('Leave/ApprovalsPage', [
             'items' => $items,
+            'trail' => Trail::for($queue),
             'people' => Shape::people($ids),
             'leave_types' => Shape::types(),
             'scope' => $request->user()->checkPermissionTo('approve_leave_hr') ? 'hr' : 'lead',
@@ -93,6 +95,6 @@ class ApprovalController extends Controller
         $mates = Employee::where('team_id', $teamId)->where('id', '!=', $r->employee_id)->pluck('id');
 
         return LeaveRequest::whereIn('employee_id', $mates)->whereIn('status', self::ACTIVE)
-            ->whereDate('starts_on', '<=', $r->ends_on)->whereDate('ends_on', '>=', $r->starts_on)->get();
+            ->where('starts_on', '<=', $r->ends_on->format('Y-m-d'))->where('ends_on', '>=', $r->starts_on->format('Y-m-d'))->get();
     }
 }

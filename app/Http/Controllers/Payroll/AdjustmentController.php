@@ -17,7 +17,7 @@ class AdjustmentController extends Controller
     public function store(StoreAdjustmentRequest $form, PayrollItem $item, AddAdjustment $action): RedirectResponse
     {
         Gate::authorize('manage_payroll');
-        $action($item, $form->validated('kind'), (string) $form->validated('label'), (float) $form->validated('amount'), $form->validated('note'), $form->user()->employee);
+        $action($item, $form->validated('category'), $form->validated('label'), (float) $form->validated('amount'), $form->validated('note'), $form->user()->employee);
 
         return back()->with('success', 'Adjustment added');
     }

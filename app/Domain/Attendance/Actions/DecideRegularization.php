@@ -3,6 +3,8 @@
 namespace App\Domain\Attendance\Actions;
 
 use App\Domain\Attendance\Services\Grading;
+use App\Domain\Attendance\Services\Paused;
+use App\Domain\Attendance\Services\PayrollLock;
 use App\Domain\Attendance\Support\AttendanceNotification;
 use App\Domain\Leave\Services\BalanceService;
 use App\Models\Employee;
@@ -17,6 +19,10 @@ use Illuminate\Validation\ValidationException;
  * Port of decideRegularization(): approving sets is_regularized and re-grades the day with the chosen resolution
  * (excused | paid_leave | unpaid_leave | keep; default excused). paid_leave books an approved LeaveRequest for the
  * missing share of the day (reason "Regularised absence") and moves it to `used` on the balance.
+ *
+ * Kind `paused` (the browser paused the HR tab): approving turns those offline stretches into work and re-grades the
+ * day from the new totals; no resolution, and the day is not marked regularised (late/early can still be asked for).
+ * Refused (validation error `payroll`) when the day's month payroll is no longer open.
  */
 class DecideRegularization
 {
@@ -27,10 +33,24 @@ class DecideRegularization
         if ($req->status !== 'pending') {
             return false;
         }
-        $resolution = $decision === 'approved' ? ($resolution ?: 'excused') : null;
+        PayrollLock::assertOpen($req->day->date->format('Y-m-d'));
+        $paused = $req->kind === 'paused';
+        $resolution = $decision === 'approved' && ! $paused ? ($resolution ?: 'excused') : null;
 
-        DB::transaction(function () use ($req, $decision, $note, $decider, $resolution, $leaveTypeId) {
+        DB::transaction(function () use ($req, $decision, $note, $decider, $resolution, $leaveTypeId, $paused) {
             $day = $req->day()->lockForUpdate()->first();
+            if ($paused) {
+                $req->update(['status' => $decision, 'decided_by' => $decider->id, 'decided_at' => now(), 'note' => trim((string) $note) ?: null]);
+                if ($decision === 'approved') {
+                    Paused::countAsWork($day);
+                    if (! in_array($day->status, ['working', 'on_break'], true)) {
+                        Grading::apply($day);
+                    }
+                    $day->save();
+                }
+
+                return;
+            }
             if ($resolution === 'paid_leave') {
                 $this->bookPaidLeave($req, $day, $leaveTypeId);
             }

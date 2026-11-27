@@ -32,6 +32,7 @@ class ReopenRun
             $run->update([
                 'status' => 'review', 'locked_at' => null, 'approved_at' => null, 'approved_by' => null,
                 'reopened_at' => now(), 'reopened_by' => $by->id, 'reopen_reason' => $reason,
+                'submitted_by' => null, 'submitted_at' => null, 'review_editors' => null, 'self_approved' => false,
             ]);
             PfLedger::where('run_id', $run->id)->delete();
             PayrollItem::where('run_id', $run->id)->update(['snapshot_at' => null]);

@@ -22,6 +22,7 @@ class LeaveRequestResource extends JsonResource
             'reason' => $this->reason,
             'attachment_path' => $this->attachment_path,
             'status' => $this->status,
+            'from_regularization' => $this->reason === \App\Domain\Leave\Support\Trail::REGULARIZED_REASON,
             'created_at' => Fmt::dt($this->created_at),
         ];
     }

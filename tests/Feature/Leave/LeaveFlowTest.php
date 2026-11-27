@@ -140,7 +140,7 @@ it('renders the calendar in viewer scope', function () {
     $this->actingAs($this->emp)->get(route('leave.calendar'))->assertForbidden();
 });
 
-it('shows waiting requests to management without an employee profile, who can approve straight through', function () {
+it('shows waiting requests to management without an employee profile, who cannot decide without one (no anonymous decisions)', function () {
     $boss = User::factory()->role('management')->create();
     leaveSubmit($this);
     $r = LeaveRequest::firstOrFail();
@@ -148,8 +148,8 @@ it('shows waiting requests to management without an employee profile, who can ap
 
     $this->actingAs($boss)->get('/leave/approvals')
         ->assertInertia(fn (Assert $p) => $p->component('Leave/ApprovalsPage', false)->has('items', 1));
-    $this->actingAs($boss)->post("/leave/{$r->id}/approve", ['note' => 'ok'])->assertSessionHas('success');
-    expect($r->fresh()->status)->toBe('approved');
+    $this->actingAs($boss)->post("/leave/{$r->id}/approve", ['note' => 'ok'])->assertSessionHasErrors();
+    expect($r->fresh()->status)->toBe('pending_lead');
 });
 
 it('shows pending_lead to HR so a request is never stuck', function () {

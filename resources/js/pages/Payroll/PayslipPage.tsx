@@ -38,8 +38,9 @@ const days = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 export default function PayslipPage() {
   const { run, item, adjustments, employee: emp, department, bank, staff, policy } = useShared<PayslipProps>()
   const c = item.components
-  const bonuses = adjustments.filter((a) => a.kind === 'bonus')
-  const deductionAdj = adjustments.filter((a) => a.kind === 'deduction')
+  const byCategory = (a: PayrollAdjustment, b: PayrollAdjustment) => a.category.localeCompare(b.category)
+  const bonuses = adjustments.filter((a) => a.kind === 'bonus').sort(byCategory)
+  const deductionAdj = adjustments.filter((a) => a.kind === 'deduction').sort(byCategory)
   const festival = run.kind === 'festival'
   const settlement = run.kind === 'settlement'
   const totalEarnings = item.gross + item.overtime_pay + item.leave_encashment + bonuses.reduce((t, a) => t + a.amount, 0)

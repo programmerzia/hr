@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Attendance;
 
 use App\Domain\Attendance\Services\Overtime;
+use App\Domain\Attendance\Services\PayrollLock;
 use App\Domain\Attendance\Services\Scope;
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceDay;
@@ -35,6 +36,9 @@ class OvertimeController extends Controller
     public function revoke(Request $request, AttendanceDay $day): RedirectResponse
     {
         $this->authorizeDay($request, $day);
+        if ($locked = PayrollLock::message($day->date->format('Y-m-d'))) {
+            return back()->with('error', $locked);
+        }
         $this->requireApprovalMode($day);
         $this->record($request, $day, 0, 'rejected', 'Overtime approval revoked');
 
@@ -51,6 +55,7 @@ class OvertimeController extends Controller
 
     private function requireApprovalMode(AttendanceDay $day): void
     {
+        PayrollLock::assertOpen($day->date->format('Y-m-d'), key: 'minutes');
         if (! Overtime::needsApproval($day->date->format('Y-m-d'))) {
             throw ValidationException::withMessages(['minutes' => 'Overtime approval is not required by the payroll policy.']);
         }

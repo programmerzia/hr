@@ -65,7 +65,10 @@
     @endif
     @if($item->leave_encashment > 0)<tr class="rule"><td>Leave encashment ({{ $d($item->components['encashment_days'] ?? 0) }} days)</td><td class="right">{{ $money($item->leave_encashment) }}</td></tr>@endif
     @if($item->overtime_pay > 0)<tr class="rule"><td>Overtime</td><td class="right">{{ $money($item->overtime_pay) }}</td></tr>@endif
-    @foreach($bonuses as $a)<tr class="rule"><td>{{ $a->label }}</td><td class="right">{{ $money($a->amount) }}</td></tr>@endforeach
+    @foreach($bonuses->groupBy(fn ($a) => $a->category ?? 'bonus') as $cat => $rows)
+      <tr><td colspan="2" class="muted" style="padding-top:5px">{{ \App\Models\PayrollAdjustment::categoryLabel($cat) }}</td></tr>
+      @foreach($rows as $a)<tr class="rule"><td>{{ $a->label }}</td><td class="right">{{ $money($a->amount) }}</td></tr>@endforeach
+    @endforeach
     <tr class="strong"><td>Total earnings</td><td class="right">{{ $money($totalEarnings) }}</td></tr>
   </table>
 </td>
@@ -77,7 +80,10 @@
     @if($showPf)<tr class="rule"><td>Provident fund</td><td class="right">{{ $money($item->pf) }}</td></tr>@endif
     @if($showLop)<tr class="rule"><td>Loss of pay ({{ $d($item->lop_days) }} days)</td><td class="right">{{ $money($item->unpaid_deduction) }}</td></tr>@endif
     @if($showLate)<tr class="rule"><td>Late penalty ({{ $d($item->late_penalty_days) }} days)</td><td class="right">{{ $money($item->late_deduction) }}</td></tr>@endif
-    @foreach($deductionAdjustments as $a)<tr class="rule"><td>{{ $a->label }}</td><td class="right">{{ $money($a->amount) }}</td></tr>@endforeach
+    @foreach($deductionAdjustments->groupBy(fn ($a) => $a->category ?? 'manual_deduction') as $cat => $rows)
+      <tr><td colspan="2" class="muted" style="padding-top:5px">{{ \App\Models\PayrollAdjustment::categoryLabel($cat) }}</td></tr>
+      @foreach($rows as $a)<tr class="rule"><td>{{ $a->label }}</td><td class="right">{{ $money($a->amount) }}</td></tr>@endforeach
+    @endforeach
     <tr class="strong"><td>Total deductions</td><td class="right">{{ $money($totalDeductions) }}</td></tr>
   </table>
 </td>
@@ -91,6 +97,7 @@
     @endforeach
   </div>
 @endif
+@if(($item->components['pf_source'] ?? null) && $item->pf > 0)<div class="muted" style="margin-top:6px">Provident fund {{ rtrim(rtrim(number_format((float) ($item->components['pf_percent'] ?? 0), 2), '0'), '.') }}% of basic, set in {{ $item->components['pf_source'] === 'structure' ? 'this salary structure (override)' : 'payroll settings' }}.</div>@endif
 @if($item->pf_employer > 0)<div class="muted" style="margin-top:6px">Employer provident fund contribution {{ $money($item->pf_employer) }}</div>@endif
 
 <table class="box"><tr>

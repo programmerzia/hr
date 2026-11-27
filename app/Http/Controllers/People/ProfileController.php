@@ -7,6 +7,7 @@ use App\Domain\People\Actions\AddAsset;
 use App\Domain\People\Actions\AddDocument;
 use App\Domain\People\Actions\AddSalaryStructure;
 use App\Domain\People\Actions\ChangeStatus;
+use App\Domain\People\Actions\Concerns;
 use App\Domain\People\Actions\ResetPassword;
 use App\Domain\People\Actions\ToggleChecklistItem;
 use App\Domain\People\Actions\UpdateBankAccount;
@@ -40,6 +41,7 @@ use App\Models\PayrollRun;
 use App\Models\SalaryStructure;
 use App\Models\Team;
 use App\Models\User;
+use App\Support\Audit;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -87,12 +89,13 @@ class ProfileController extends Controller
             'documents' => $pay ? EmployeeDocumentResource::collection(EmployeeDocument::where('employee_id', $employee->id)->orderBy('uploaded_at')->get())->resolve($request) : null,
             'assets' => EmployeeAssetResource::collection(EmployeeAsset::where('employee_id', $employee->id)->orderBy('assigned_on')->get())->resolve($request),
             'checklist' => OnboardingChecklistItemResource::collection(OnboardingChecklistItem::where('employee_id', $employee->id)->orderBy('created_at')->orderBy('id')->get())->resolve($request),
-            'history' => ActivityLogEntry::where('subject_type', 'employee')->where('subject_id', $employee->id)->get()
+            'activity' => $manage ? Audit::entries($employee) : null,
+            'history' => ActivityLogEntry::where('subject_type', 'employee')->where('subject_id', $employee->id)->get()->reject(fn ($e) => ! empty($e->properties['audit']))
                 ->map(fn ($e) => ['id' => $e->id, 'effective_on' => $e->properties['effective_on'] ?? $e->created_at->toDateString(), 'kind' => $e->properties['kind'] ?? 'status', 'text' => $e->description])
                 ->sortByDesc('effective_on')->values(),
             'heat' => Series::heat([$employee->id], now()),
             'month_weeks' => [$employee->id => Series::monthWeeks($employee->id, now())],
-            'presence' => AttendanceDay::where('employee_id', $employee->id)->whereDate('date', $today)->value('status') ?? 'not_started',
+            'presence' => AttendanceDay::where('employee_id', $employee->id)->where('date', $today)->value('status') ?? 'not_started',
             'leave_balances' => $leave,
             'settlement' => $this->settlement($employee),
             'credentials' => $manage ? $request->session()->get('credentials') : null,
@@ -139,6 +142,7 @@ class ProfileController extends Controller
             'other_allowances.*.label.required' => 'Name the allowance',
             'other_allowances.*.amount.*' => 'Enter an amount, 0 or more',
         ]);
+        $oldGross = SalaryStructure::where('employee_id', $employee->id)->orderByDesc('effective_from')->value('gross');
         $structure = $action($employee, $request->payload());
         if ($employee->employment_type !== 'contractor') {
             $others = array_values(array_map(fn ($a) => ['label' => trim($a['label']), 'amount' => (int) $a['amount']], $extra['other_allowances'] ?? []));
@@ -151,6 +155,10 @@ class ProfileController extends Controller
                 'hourly_rate' => $request->input('hourly_rate') ? $structure->hourly_rate : (int) round($gross / 22 / 8),
             ]);
         }
+
+        $structure->refresh();
+        Concerns::audit($employee, 'Added salary structure effective '.substr((string) $structure->effective_from, 0, 10).': gross '.($oldGross === null ? 'none' : number_format((int) $oldGross)).' to '.number_format((int) $structure->gross).($structure->note ? ". Note: {$structure->note}" : ''),
+            ['effective_from' => substr((string) $structure->effective_from, 0, 10), 'old_gross' => $oldGross === null ? null : (int) $oldGross, 'new_gross' => (int) $structure->gross, 'note' => $structure->note]);
 
         return back()->with('success', 'Salary structure added');
     }

@@ -104,13 +104,19 @@ class DraftRun
     private function create(array $attributes, Employee $by, string $log, string $exists): PayrollRun
     {
         try {
-            $run = PayrollRun::create([...$attributes, 'status' => 'draft']);
+            $run = PayrollRun::create([...$attributes, 'status' => 'draft', 'prepared_by' => $by->id]);
         } catch (UniqueConstraintViolationException) {
             Fail::with($exists);
         }
         $skipped = $this->builder->recompute($run);
         $this->builder->log($run, $by, $log);
         $this->builder->logSkipped($run, $by, $skipped);
+        if ($run->kind === 'regular') {
+            $missed = $this->builder->carryHeld($run, $by);
+            if ($missed !== []) {
+                $this->builder->log($run, $by, 'held salary not carried (no item in this run): '.implode(', ', $missed));
+            }
+        }
 
         return $run;
     }

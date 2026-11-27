@@ -3,6 +3,7 @@
 namespace App\Domain\Attendance\Actions;
 
 use App\Domain\Attendance\Services\Grading;
+use App\Domain\Attendance\Services\PayrollLock;
 use App\Models\AttendanceDay;
 use App\Models\AttendancePolicy;
 use App\Models\Employee;
@@ -15,6 +16,7 @@ use Illuminate\Support\Facades\DB;
  *
  * Only days before today are touched: a closed or ended row is graded again from the current facts, a missing past row
  * is created the way the nightly close would (without notifying anyone). Rows still running are left to the close.
+ * Refused (validation error `payroll`) when a day it would touch is in a month whose payroll is no longer open.
  */
 class RegradeDays
 {
@@ -25,6 +27,9 @@ class RegradeDays
             return 0;
         }
         $last = min($to, now()->subDay()->toDateString());
+        if ($from <= $last) {
+            PayrollLock::assertOpen($from, $last);
+        }
         $count = 0;
         for ($d = CarbonImmutable::parse($from)->startOfDay(); $d->toDateString() <= $last; $d = $d->addDay()) {
             $count += DB::transaction(fn () => $this->regrade($employee, $d->toDateString())) ? 1 : 0;
@@ -36,6 +41,9 @@ class RegradeDays
     /** Every employee, for one date (holiday added or removed). */
     public function forDate(string $date): int
     {
+        if ($date < now()->toDateString()) {
+            PayrollLock::assertOpen($date);
+        }
         $n = 0;
         foreach (Employee::pluck('id') as $id) {
             $n += $this($id, $date, $date);

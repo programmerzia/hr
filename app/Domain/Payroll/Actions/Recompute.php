@@ -2,6 +2,7 @@
 
 namespace App\Domain\Payroll\Actions;
 
+use App\Domain\Payroll\Services\MakerChecker;
 use App\Domain\Payroll\Services\RunBuilder;
 use App\Models\Employee;
 use App\Models\PayrollRun;
@@ -17,6 +18,7 @@ class Recompute
             $run = PayrollRun::lockForUpdate()->findOrFail($run->id);
             RunBuilder::assertOpen($run, 'Approved runs are locked and cannot be recomputed.');
             $skipped = $this->builder->recompute($run);
+            MakerChecker::noteChange($run, $by);
             $this->builder->log($run, $by, 'recomputed the run from attendance and leave');
             $this->builder->logSkipped($run, $by, $skipped);
 

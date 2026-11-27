@@ -1,4 +1,4 @@
-import { BadgeCheck, Check, Download, FileText, Flag, Pause, Play, RefreshCw, RotateCcw, Send, Trash2, Users } from 'lucide-react'
+import { BadgeCheck, Check, Download, FileText, Flag, Pause, Play, Plus, RefreshCw, RotateCcw, Send, Trash2, Users } from 'lucide-react'
 import { Link, router, useForm } from '@inertiajs/react'
 import { useMemo, useState } from 'react'
 import { StackedBar } from '../../components/charts/StackedBar'
@@ -14,6 +14,7 @@ import {
   Button,
   buttonVariants,
   Card,
+  Checkbox,
   CardBody,
   Dialog,
   Field,
@@ -31,7 +32,7 @@ import {
 } from '../../components/ui'
 import { formatDate, formatDuration, formatMoney } from '../../lib/format'
 import { useCan, useShared } from '../../inertia/props'
-import type { PayrollAdjustment, PayrollAdjustmentKind, PayrollItem, PayrollPolicySwitches, PayrollRun } from '../../types'
+import type { PayrollAdjustment, PayrollAdjustmentCategory, PayrollItem, PayrollPolicySwitches, PayrollRun } from '../../types'
 import { deductionMix } from './charts'
 import { act, failureOf, monthLabel, netAdjustment, runTitle, todayIso, type HistoryEvent, type PersonRef, type RunTotals } from './helpers'
 
@@ -44,7 +45,116 @@ interface RunDetailProps {
   events: HistoryEvent[]
   people: PersonRef[]
   policy: PayrollPolicySwitches
+  approval: { blocked: string | null; single_approver: boolean; month_ended: boolean }
+  bank_skipped: { code: string; name: string; reason: string }[]
 }
+
+const CATEGORIES: { group: string; options: { value: PayrollAdjustmentCategory; label: string }[] }[] = [
+  {
+    group: 'Earnings',
+    options: [
+      { value: 'bonus', label: 'Bonus' },
+      { value: 'arrears', label: 'Arrears' },
+      { value: 'allowance', label: 'Allowance' },
+      { value: 'reimbursement', label: 'Reimbursement' },
+    ],
+  },
+  {
+    group: 'Deductions',
+    options: [
+      { value: 'advance_recovery', label: 'Advance recovery' },
+      { value: 'loan_recovery', label: 'Loan recovery' },
+      { value: 'manual_deduction', label: 'Other deduction' },
+    ],
+  },
+]
+const categoryLabel = (c: string) => CATEGORIES.flatMap((g) => g.options).find((o) => o.value === c)?.label ?? c
+
+/** Adjust dialog: category, amount, reason. Direction follows the category. */
+function AdjustDialog({ item, name, onClose }: { item: PayrollItem | null; name?: string; onClose: () => void }) {
+  const form = useForm<{ category: PayrollAdjustmentCategory; label: string; amount: string; note: string }>({ category: 'bonus', label: '', amount: '', note: '' })
+  const errors = form.errors as Record<string, string>
+  const add = () => {
+    if (!item) return
+    form.post(route('payroll.adjustments.store', item.id), { preserveScroll: true, onSuccess: () => { form.reset(); onClose() } })
+  }
+  return (
+    <Dialog
+      open={Boolean(item)}
+      onOpenChange={(o) => { if (!o) { form.clearErrors(); onClose() } }}
+      title={`Adjust ${name ?? 'salary'}`}
+      description="Adds a line to this month's pay. Earnings add to net, deductions take from it."
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={add} disabled={!form.data.note.trim() || !(Number(form.data.amount) > 0) || form.processing}>
+            Add adjustment
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Category" error={errors.category}>
+            <NativeSelect value={form.data.category} onChange={(e) => form.setData('category', e.target.value as PayrollAdjustmentCategory)}>
+              {CATEGORIES.map((g) => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.options.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field label="Amount (BDT)">
+            <Input type="number" min={0} value={form.data.amount} onChange={(e) => form.setData('amount', e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Reason" required error={errors.note ?? errors.payroll}>
+          <Textarea rows={2} value={form.data.note} onChange={(e) => form.setData('note', e.target.value)} />
+        </Field>
+      </div>
+    </Dialog>
+  )
+}
+
+/** Adjustments grouped by category; removed lines stay visible, struck through. */
+function AdjustmentList({ adjustments, onRemove, compact }: { adjustments: PayrollAdjustment[]; onRemove?: (a: PayrollAdjustment) => void; compact?: boolean }) {
+  if (adjustments.length === 0) return null
+  const cats = [...new Set(adjustments.map((a) => a.category))]
+  return (
+    <ul className={compact ? 'mt-1 space-y-0.5 text-xs' : 'divide-y divide-border rounded-md border border-border text-sm'}>
+      {cats.flatMap((c) =>
+        adjustments
+          .filter((a) => a.category === c)
+          .map((a) => (
+            <li key={a.id} className={compact ? 'flex items-center justify-between gap-2' : 'flex items-center justify-between gap-2 px-3 py-2'}>
+              <span className={`min-w-0 truncate ${a.removed ? 'text-fg-muted line-through' : compact ? 'text-fg-muted' : ''}`}>
+                <span className="font-medium">{categoryLabel(a.category)}</span>
+                {a.note ? `, ${a.note}` : ''}
+              </span>
+              <span className="flex shrink-0 items-center gap-1">
+                <span className={`num ${a.removed ? 'text-fg-muted line-through' : a.kind === 'deduction' ? 'text-danger' : 'text-success'}`}>
+                  {a.kind === 'deduction' ? '-' : '+'}
+                  {formatMoney(a.amount)}
+                </span>
+                {onRemove && !a.removed && (
+                  <Button size="sm" variant="ghost" aria-label={`Remove ${categoryLabel(a.category)}`} icon={<Trash2 size={14} />} onClick={() => onRemove(a)} />
+                )}
+              </span>
+            </li>
+          )),
+      )}
+    </ul>
+  )
+}
+
+const removeAdjustment = (a: PayrollAdjustment) =>
+  router.delete(route('payroll.adjustments.destroy', a.id), { preserveScroll: true, onError: (e) => toast.error(failureOf(e)) })
 
 const days = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
@@ -128,31 +238,63 @@ function MarkPaidDialog({ open, onOpenChange, runId, label }: { open: boolean; o
   )
 }
 
+function SubmitDialog({ open, onOpenChange, runId, label, monthEnded }: { open: boolean; onOpenChange: (o: boolean) => void; runId: string; label: string; monthEnded: boolean }) {
+  const form = useForm({ pay_early: false, early_reason: '' })
+  const errors = form.errors as Record<string, string>
+  const early = !monthEnded
+  const submit = () => form.post(route('payroll.runs.submit', runId), { preserveScroll: true, onSuccess: () => onOpenChange(false) })
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={`Send ${label} for review`}
+      description="Numbers are recomputed from attendance and leave when you send."
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={submit} disabled={form.processing || (early && (!form.data.pay_early || !form.data.early_reason.trim()))}>
+            Send for review
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {early ? (
+          <>
+            <p className="text-sm text-fg-muted">This month has not ended. Days still to come are paid in full unless you wait.</p>
+            <Checkbox label="Pay before month end" checked={form.data.pay_early} onCheckedChange={(v) => form.setData('pay_early', v === true)} />
+            {form.data.pay_early && (
+              <Field label="Reason" required error={errors.early_reason ?? errors.payroll}>
+                <Textarea rows={2} value={form.data.early_reason} onChange={(e) => form.setData('early_reason', e.target.value)} />
+              </Field>
+            )}
+          </>
+        ) : (
+          <p className="text-sm">{errors.payroll ?? 'Ready to send.'}</p>
+        )}
+      </div>
+    </Dialog>
+  )
+}
+
 function ItemSheet({
   item,
   run,
   adjustments,
   name,
   onClose,
+  onAdjust,
 }: {
   item: PayrollItem | null
   run: PayrollRun
   adjustments: PayrollAdjustment[]
   name?: string
   onClose: () => void
+  onAdjust: () => void
 }) {
-  const form = useForm<{ kind: PayrollAdjustmentKind; label: string; amount: string; note: string }>({ kind: 'bonus', label: '', amount: '', note: '' })
-  const error = (form.errors as Record<string, string>).payroll
   const locked = run.status !== 'draft' && run.status !== 'review'
-
-  const add = () => {
-    if (!item) return
-    form.post(route('payroll.adjustments.store', item.id), { preserveScroll: true, onSuccess: () => {
-        form.reset('label', 'amount', 'note')
-        onClose()
-      },
-    })
-  }
 
   const line = (name: string, value: number, sign: '' | '+' | '-' = '', strong = false) => (
     <div className={`flex items-center justify-between py-1.5 text-sm ${strong ? 'font-semibold' : ''}`}>
@@ -240,83 +382,33 @@ function ItemSheet({
             {line(run.kind === 'festival' ? (run.label ?? 'Festival bonus') : 'Gross salary', item.gross)}
             {item.leave_encashment > 0 && line(`Leave encashment (${days(item.components?.encashment_days ?? 0)} days)`, item.leave_encashment, '+')}
             {item.overtime_pay > 0 && line('Overtime pay', item.overtime_pay, '+')}
-            {adjustments.filter((a) => a.kind === 'bonus').length > 0 && line('Bonuses', adjustments.filter((a) => a.kind === 'bonus').reduce((t, a) => t + a.amount, 0), '+')}
+            {CATEGORIES[0].options.map((o) => {
+              const t = adjustments.filter((a) => a.category === o.value && !a.removed).reduce((n, a) => n + a.amount, 0)
+              return t > 0 ? <div key={o.value}>{line(o.label, t, '+')}</div> : null
+            })}
             {item.unpaid_deduction > 0 && line(`Loss of pay (${days(item.lop_days)} days)`, item.unpaid_deduction, '-')}
             {item.late_deduction > 0 && line(`Late penalty (${days(item.late_penalty_days)} days)`, item.late_deduction, '-')}
             {item.tax > 0 && line('Income tax', item.tax, '-')}
-            {item.pf > 0 && line('Provident fund', item.pf, '-')}
-            {adjustments.filter((a) => a.kind === 'deduction').length > 0 && line('Other deductions', adjustments.filter((a) => a.kind === 'deduction').reduce((t, a) => t + a.amount, 0), '-')}
+            {item.pf > 0 &&
+              line(`Provident fund${item.components?.pf_source ? ` (${item.components.pf_percent}% from ${item.components.pf_source === 'structure' ? 'salary structure override' : 'payroll settings'})` : ''}`, item.pf, '-')}
+            {CATEGORIES[1].options.map((o) => {
+              const t = adjustments.filter((a) => a.category === o.value && !a.removed).reduce((n, a) => n + a.amount, 0)
+              return t > 0 ? <div key={o.value}>{line(o.label, t, '-')}</div> : null
+            })}
             {line('Net pay', item.net, '', true)}
           </section>
 
           <section>
-            <h3 className="mb-2 text-sm font-semibold">Adjustments</h3>
-            {adjustments.length === 0 ? (
-              <p className="text-sm text-fg-muted">No adjustments for this month.</p>
-            ) : (
-              <ul className="divide-y divide-border rounded-md border border-border">
-                {adjustments.map((a) => (
-                  <li key={a.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{a.label}</p>
-                      <p className="truncate text-xs text-fg-muted">
-                        {a.kind === 'bonus' ? 'Bonus' : 'Deduction'}
-                        {a.note ? `, ${a.note}` : ''}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`num  ${a.kind === 'deduction' ? 'text-danger' : ''}`}>
-                        {a.kind === 'deduction' ? '-' : '+'}
-                        {formatMoney(a.amount)}
-                      </span>
-                      {!locked && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          aria-label={`Remove ${a.label}`}
-                          icon={<Trash2 size={14} />}
-                          onClick={() =>
-                            router.delete(route('payroll.adjustments.destroy', a.id), {
-                              preserveScroll: true,
-                              onSuccess: onClose,
-                              onError: (e) => toast.error(failureOf(e)),
-                            })
-                          }
-                        />
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {locked ? (
-              <p className="mt-2 text-xs text-fg-muted">This run is locked, so adjustments can't change.</p>
-            ) : (
-              <div className="mt-3 flex flex-col gap-3 rounded-md border border-border p-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Type">
-                    <NativeSelect value={form.data.kind} onChange={(e) => form.setData('kind', e.target.value as PayrollAdjustmentKind)}>
-                      <option value="bonus">Bonus</option>
-                      <option value="deduction">Deduction</option>
-                    </NativeSelect>
-                  </Field>
-                  <Field label="Amount (BDT)">
-                    <Input type="number" min={0} value={form.data.amount} onChange={(e) => form.setData('amount', e.target.value)} />
-                  </Field>
-                </div>
-                <Field label="Label">
-                  <Input value={form.data.label} onChange={(e) => form.setData('label', e.target.value)} placeholder="Project delivery bonus" />
-                </Field>
-                <Field label="Note" error={error || undefined}>
-                  <Textarea rows={2} value={form.data.note} onChange={(e) => form.setData('note', e.target.value)} />
-                </Field>
-                <div className="flex justify-end">
-                  <Button variant="primary" onClick={add} disabled={!form.data.label.trim() || !(Number(form.data.amount) > 0) || form.processing}>
-                    Add adjustment
-                  </Button>
-                </div>
-              </div>
-            )}
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Adjustments</h3>
+              {!locked && (
+                <Button size="sm" variant="secondary" icon={<Plus size={14} />} onClick={onAdjust}>
+                  Adjust
+                </Button>
+              )}
+            </div>
+            {adjustments.length === 0 ? <p className="text-sm text-fg-muted">No adjustments for this month.</p> : <AdjustmentList adjustments={adjustments} onRemove={locked ? undefined : removeAdjustment} />}
+            {locked && <p className="mt-2 text-xs text-fg-muted">This run is locked, so adjustments can't change.</p>}
           </section>
         </div>
       )}
@@ -327,7 +419,7 @@ function ItemSheet({
 export default function RunDetailPage() {
   const canManage = useCan('manage_payroll')
   const canApprove = useCan('approve_payroll')
-  const { run, items: rawItems, adjustments, totals, mix: rawMix, events, people, policy } = useShared<RunDetailProps>()
+  const { run, items: rawItems, adjustments, totals, mix: rawMix, events, people, policy, approval, bank_skipped } = useShared<RunDetailProps>()
   const mix = useMemo(() => deductionMix(rawMix), [rawMix])
   const person = (id: string) => people.find((p) => p.id === id)
 
@@ -337,6 +429,8 @@ export default function RunDetailPage() {
   const [reopenOpen, setReopenOpen] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
   const [holdId, setHoldId] = useState<string | null>(null)
+  const [adjustId, setAdjustId] = useState<string | null>(null)
+  const [submitOpen, setSubmitOpen] = useState(false)
 
   const items = rawItems
   const [flaggedOnly, setFlaggedOnly] = useState(false)
@@ -373,7 +467,7 @@ export default function RunDetailPage() {
         </Button>
       )}
       {run.status === 'draft' && (
-        <Button variant="primary" icon={<Send size={16} />} onClick={() => act(route('payroll.runs.submit', run.id))}>
+        <Button variant="primary" icon={<Send size={16} />} onClick={() => setSubmitOpen(true)}>
           Send for review
         </Button>
       )}
@@ -383,21 +477,31 @@ export default function RunDetailPage() {
         </Button>
       )}
       {run.status === 'review' && canApprove && (
-        <Button variant="primary" icon={<Check size={16} />} onClick={() => setApproveOpen(true)}>
-          Approve
-        </Button>
+        <span title={approval.blocked ?? undefined}>
+          <Button variant="primary" icon={<Check size={16} />} disabled={Boolean(approval.blocked)} onClick={() => setApproveOpen(true)}>
+            Approve
+          </Button>
+        </span>
       )}
       {run.status === 'approved' && canApprove && !settlement && (
         <Button icon={<RotateCcw size={16} />} onClick={() => setReopenOpen(true)}>
           Reopen
         </Button>
       )}
+      <a href={route('payroll.runs.register', run.id)} className={buttonVariants({ variant: 'secondary' })}>
+        <Download size={16} aria-hidden /> Register
+      </a>
+      {run.status === 'paid' && (
+        <a href={route('payroll.runs.payslips-zip', run.id)} className={buttonVariants({ variant: 'secondary' })}>
+          <Download size={16} aria-hidden /> All payslips
+        </a>
+      )}
       {(run.status === 'approved' || run.status === 'paid') && (
         <a href={route('payroll.runs.bank-advice', run.id)} className={buttonVariants({ variant: 'secondary' })}>
           <Download size={16} aria-hidden /> Bank advice
         </a>
       )}
-      {run.status === 'approved' && (
+      {run.status === 'approved' && canApprove && (
         <Button variant="primary" onClick={() => setPayOpen(true)}>
           Mark as paid
         </Button>
@@ -406,6 +510,14 @@ export default function RunDetailPage() {
   )
 
   const adjFor = (id: string) => netAdjustment(adjustments.filter((a) => a.item_id === id))
+  const shortDate = (d?: string | null) => (d ? formatDate(d) : '')
+  const trail = [
+    run.prepared_by && `Prepared by ${person(run.prepared_by)?.name ?? 'someone'} · ${shortDate(run.prepared_at)}`,
+    run.submitted_by && `Submitted by ${person(run.submitted_by)?.name ?? 'someone'} · ${shortDate(run.submitted_at)}`,
+    run.approved_by && `Approved by ${person(run.approved_by)?.name ?? 'someone'} · ${shortDate(run.approved_at)}${run.self_approved ? ' (own run)' : ''}`,
+    run.paid_by && `Paid by ${person(run.paid_by)?.name ?? 'someone'} on ${shortDate(run.paid_on ?? run.paid_at)}`,
+  ].filter(Boolean) as string[]
+  const adjustItem = items.find((i) => i.id === adjustId) ?? null
 
   return (
     <div className="mx-auto max-w-content">
@@ -436,6 +548,13 @@ export default function RunDetailPage() {
         }
       />
 
+      {(trail.length > 0 || run.early_pay_reason || (run.status === 'review' && approval.blocked)) && (
+        <div className="mb-3 space-y-0.5 text-sm text-fg-muted">
+          {trail.length > 0 && <p>{trail.join('  ·  ')}</p>}
+          {run.early_pay_reason && <p>Sent before month end: {run.early_pay_reason}</p>}
+          {run.status === 'review' && approval.blocked && <p className="text-warning">You cannot approve this run. {approval.blocked}</p>}
+        </div>
+      )}
       <Card className="mb-4">
         <CardBody className="space-y-5">
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-5">
@@ -493,7 +612,7 @@ export default function RunDetailPage() {
                   <Th numeric>Adjustments</Th>
                   <Th numeric>Deductions</Th>
                   <Th numeric>Net</Th>
-                  {canManage && open && <Th>Hold</Th>}
+                  {canManage && open && <Th>Actions</Th>}
                 </Tr>
               </Thead>
               <Tbody>
@@ -510,6 +629,7 @@ export default function RunDetailPage() {
                     >
                       <Td>
                         <PersonCell name={emp?.name ?? i.employee_id} subtitle={emp?.code} />
+                        <AdjustmentList compact adjustments={adjustments.filter((a) => a.item_id === i.id)} />
                         {i.variance_flag && !i.hold && (
                           <div className="mt-1 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             <VarianceBadge item={i} />
@@ -570,7 +690,10 @@ export default function RunDetailPage() {
                         <MoneyCell amount={i.net} className="font-semibold" />
                       </Td>
                       {canManage && open && (
-                        <Td onClick={(e) => e.stopPropagation()}>
+                        <Td onClick={(e) => e.stopPropagation()} className="whitespace-nowrap">
+                          <Button size="sm" variant="ghost" icon={<Plus size={14} />} onClick={() => setAdjustId(i.id)}>
+                            Adjust
+                          </Button>
                           {i.hold ? (
                             <Button size="sm" variant="ghost" icon={<Play size={14} />} title={i.hold_reason ?? undefined} onClick={() => act(route('payroll.items.unhold', i.id))}>
                               Release
@@ -589,7 +712,23 @@ export default function RunDetailPage() {
             </Table>
           )}
         </div>
-        <HistoryPanel entries={history} title="Run history" />
+        <div className="flex flex-col gap-4">
+          {bank_skipped.length > 0 && (
+            <Card>
+              <CardBody className="text-sm">
+                <p className="mb-2 font-medium">Not in the bank advice</p>
+                <ul className="space-y-1">
+                  {bank_skipped.map((b) => (
+                    <li key={b.code + b.name}>
+                      <span className="font-medium">{b.name}</span> <span className="text-fg-muted">{b.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardBody>
+            </Card>
+          )}
+          <HistoryPanel entries={history} title="Run history" />
+        </div>
       </div>
 
       <ItemSheet
@@ -598,7 +737,10 @@ export default function RunDetailPage() {
         adjustments={adjustments.filter((a) => a.item_id === selected)}
         name={selectedItem ? person(selectedItem.employee_id)?.name : undefined}
         onClose={() => setSelected(null)}
+        onAdjust={() => setAdjustId(selected)}
       />
+      <AdjustDialog key={`adj-${adjustId ?? ''}`} item={adjustItem} name={adjustItem ? person(adjustItem.employee_id)?.name : undefined} onClose={() => setAdjustId(null)} />
+      <SubmitDialog key={`sub-${String(submitOpen)}`} open={submitOpen} onOpenChange={setSubmitOpen} runId={run.id} label={label} monthEnded={approval.month_ended || run.kind !== 'regular'} />
       <ReasonDialog
         key={`hold-${holdId ?? ''}`}
         open={holdId !== null}

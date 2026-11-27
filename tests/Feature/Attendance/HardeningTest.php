@@ -390,36 +390,33 @@ it('A12 closing a day whose last beat opened a sweep break leaves no empty break
         ->and($segs[0]->ended_at->format('H:i'))->toBe('10:30')->and(rowOf($u->employee, '2026-11-12')->work_seconds)->toBe(1800);
 });
 
-it('A10 a server outage (everyone silent) is work; the person\'s own silence around it is offline', function () {
+it('A10 a server outage (no sweep ran) is work; the first sweep after it opens no breaks', function () {
     $a = makeUser();
     $b = makeUser();
-    $c = makeUser();
-    foreach ([$a, $b, $c] as $u) {
+    foreach ([$a, $b] as $u) {
         at('2026-11-12 10:00');
         signIn($this, $u);
         auth()->logout();
     }
-    // Everyone beats every minute until 10:10, nobody reaches the server 10:11-10:16, all are back at 10:17.
+    // The server (sweep + beats) is alive until 10:10, down 10:11-10:16, back at 10:17.
     for ($m = 1; $m <= 10; $m++) {
-        foreach ([$a, $b, $c] as $u) {
-            at(sprintf('2026-11-12 10:%02d', $m));
+        at(sprintf('2026-11-12 10:%02d', $m));
+        $this->artisan('attendance:sweep')->assertSuccessful();
+        foreach ([$a, $b] as $u) {
             $this->actingAs($u)->post(route('heartbeat'));
         }
     }
-    at('2026-11-12 10:13');
-    $this->artisan('attendance:sweep')->assertSuccessful();
-    expect(rowOf($a->employee, '2026-11-12')->status)->toBe('working'); // no sweep during the server's own outage
     at('2026-11-12 10:17');
-    foreach ([$b, $c, $a] as $u) {
-        $this->actingAs($u)->post(route('heartbeat'));
-    }
+    $this->artisan('attendance:sweep')->assertSuccessful();
+    expect(rowOf($a->employee, '2026-11-12')->status)->toBe('working'); // first sweep after its own outage waits
+    $this->actingAs($a)->post(route('heartbeat'));
     $day = rowOf($a->employee, '2026-11-12');
     expect($day->status)->toBe('working')
         ->and(TimeSegment::where('attendance_day_id', $day->id)->where('break_category', 'offline')->exists())->toBeFalse()
         ->and(TimeSegment::where('attendance_day_id', $day->id)->where('source', 'outage')->count())->toBe(1);
 });
 
-it('A10 one person dropping while others keep beating is offline', function () {
+it('A10 everyone going silent while the server keeps sweeping is offline, not an outage', function () {
     $a = makeUser();
     $b = makeUser();
     $c = makeUser();
@@ -429,15 +426,17 @@ it('A10 one person dropping while others keep beating is offline', function () {
         auth()->logout();
     }
     for ($m = 1; $m <= 16; $m++) {
-        foreach ($m <= 10 ? [$a, $b, $c] : [$b, $c] as $u) {
-            at(sprintf('2026-11-12 10:%02d', $m));
+        at(sprintf('2026-11-12 10:%02d', $m));
+        $this->artisan('attendance:sweep')->assertSuccessful();
+        foreach ($m <= 10 ? [$a, $b, $c] : [] as $u) {
             $this->actingAs($u)->post(route('heartbeat'));
         }
     }
     at('2026-11-12 10:17');
     $this->actingAs($a)->post(route('heartbeat'));
     $off = TimeSegment::where('attendance_day_id', rowOf($a->employee, '2026-11-12')->id)->where('break_category', 'offline')->sole();
-    expect($off->started_at->format('H:i'))->toBe('10:10')->and($off->ended_at->format('H:i'))->toBe('10:17');
+    expect($off->started_at->format('H:i'))->toBe('10:10')->and($off->ended_at->format('H:i'))->toBe('10:17')
+        ->and(TimeSegment::where('attendance_day_id', rowOf($a->employee, '2026-11-12')->id)->where('source', 'outage')->exists())->toBeFalse();
 });
 
 // ---- A8

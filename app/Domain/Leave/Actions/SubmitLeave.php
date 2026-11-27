@@ -9,6 +9,7 @@ use App\Models\Attachment;
 use App\Models\Employee;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
+use App\Support\Audit;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 
@@ -55,7 +56,7 @@ class SubmitLeave
         return DB::transaction(function () use ($employee, $type, $startsOn, $endsOn, $half, $reason, $days, $byYear, $attachment) {
             $clash = LeaveRequest::where('employee_id', $employee->id)
                 ->whereIn('status', self::ACTIVE)
-                ->whereDate('starts_on', '<=', $endsOn)->whereDate('ends_on', '>=', $startsOn)
+                ->where('starts_on', '<=', $endsOn)->where('ends_on', '>=', $startsOn)
                 ->lockForUpdate()->exists();
             if ($clash) {
                 Fail::with('You already have leave on some of these dates');
@@ -87,6 +88,7 @@ class SubmitLeave
                 ]);
                 $request->update(['attachment_path' => $path]);
             }
+            Audit::log($request, 'Requested', $employee->user, ['days' => $days]);
             $this->balances->adjust($request, pending: $days);
             $this->notifier->toNextDecider($request);
 

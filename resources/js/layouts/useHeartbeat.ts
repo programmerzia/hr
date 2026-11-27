@@ -44,7 +44,9 @@ function writeStore(v: Stored) {
  * - no_internet: the browser went offline while the page was running (exact time of the drop)
  * - unreachable: the device was online but heartbeats failed (network problem or the server was down)
  * - asleep: the page's own clock jumped, i.e. the device slept or was locked and suspended
- * - suspended: the browser froze or discarded the tab (Memory Saver / sleeping tabs)
+ * - suspended: the browser froze or discarded the tab (Memory Saver / sleeping tabs). The server also infers it when
+ *   beats come back with no cause and an input time from before the gap (the page resumed without a reload).
+ *   These gaps show on My day and can be asked to count as work.
  * - closed: the HR tab was closed and opened again later
  * Each beat also carries `last_activity_at` (last input), used only when HR turns on strict idle.
  */
@@ -136,7 +138,8 @@ export function useHeartbeat() {
       frozenAt = Date.now()
     }
     const onResume = () => {
-      if (frozenAt) noteGap('suspended', frozenAt)
+      // `resume` only fires after the browser froze the page, even when the freeze event itself was missed.
+      noteGap('suspended', frozenAt ?? lastTick)
       frozenAt = null
       lastTick = Date.now()
       beatSoon()
@@ -172,10 +175,24 @@ export function useHeartbeat() {
     window.addEventListener('pagehide', onPageHide)
     window.addEventListener('pageshow', onPageShow)
 
+    // Chrome's tab-freezing heuristics skip pages that hold a Web Lock, so hold one for the life of this tab. The name
+    // is unique per tab so tabs never wait on each other. Not every browser honours this; the gap reason still covers it.
+    let releaseLock: (() => void) | null = null
+    const locks = (navigator as Navigator & { locks?: LockManager }).locks
+    if (locks && typeof locks.request === 'function') {
+      const name = `hr-tab-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      locks
+        .request(name, () => new Promise<void>((resolve) => (releaseLock = resolve)))
+        .catch(() => {
+          // lock refused or aborted: nothing to hold
+        })
+    }
+
     beat()
     const beatId = window.setInterval(beat, BEAT_MS)
     const tickId = window.setInterval(tick, TICK_MS)
     return () => {
+      releaseLock?.()
       window.clearInterval(beatId)
       window.clearInterval(tickId)
       ACTIVITY_EVENTS.forEach((e) => window.removeEventListener(e, touch, { capture: true }))

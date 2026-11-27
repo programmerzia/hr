@@ -4,6 +4,7 @@ namespace App\Domain\Settings;
 
 use App\Models\ActivityLogEntry;
 use App\Models\User;
+use App\Support\Audit;
 use Illuminate\Support\Str;
 
 /** Audit trail for Settings changes (subject_type 'settings', area in properties). */
@@ -11,11 +12,7 @@ final class SettingsLog
 {
     public static function record(?User $actor, string $area, string $text, array $properties = [], ?string $subjectId = null): ActivityLogEntry
     {
-        return ActivityLogEntry::create([
-            'subject_type' => 'settings', 'subject_id' => $subjectId ?? (string) Str::uuid(),
-            'actor_id' => $actor?->employee_id, 'description' => $text,
-            'properties' => ['area' => $area, ...$properties],
-        ]);
+        return Audit::record(['settings', $subjectId ?? (string) Str::uuid()], $text, $actor?->employee_id, ['area' => $area, ...$properties]);
     }
 
     /** Last changes for an area, shaped for HistoryPanel. @return list<array{at:string,actor:string,text:string}> */

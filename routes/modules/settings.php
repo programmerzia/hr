@@ -4,6 +4,7 @@
 
 use App\Http\Controllers\Settings\AccessController;
 use App\Http\Controllers\Settings\AttendancePolicyController;
+use App\Http\Controllers\Settings\AuditLogController;
 use App\Http\Controllers\Settings\HolidayController;
 use App\Http\Controllers\Settings\LeaveTypeController;
 use App\Http\Controllers\Settings\PayrollPolicyController;
@@ -23,6 +24,7 @@ Route::middleware('can:manage_policy')->prefix('settings')->group(function () {
 
     Route::controller(PayrollPolicyController::class)->prefix('payroll')->name('settings.payroll.')->group(function () {
         Route::get('/', 'index')->name('index');
+        Route::post('/single-approver', 'singleApprover')->name('single-approver');
         Route::post('/', 'store')->name('store');
         Route::put('/{policy}', 'update')->name('update');
         Route::delete('/{policy}', 'destroy')->name('destroy');
@@ -49,4 +51,9 @@ Route::middleware('can:manage_access')->prefix('settings/access')->name('setting
     Route::put('/roles/{role}', 'updateRole')->name('roles.update');
     Route::delete('/roles/{role}', 'destroyRole')->name('roles.destroy');
     Route::put('/users/{user}/permissions', 'updateUserPermissions')->name('users.permissions');
+});
+
+Route::middleware('can:manage_settings')->prefix('settings/audit-log')->name('settings.audit-log.')->controller(AuditLogController::class)->group(function () {
+    Route::get('/', 'index')->name('index');
+    Route::get('/export', 'export')->name('export');
 });

@@ -55,15 +55,15 @@ it('applies adjustments to festival net and runs the same workflow with a bonus 
     xrFestival($this);
     $run = PayrollRun::where('kind', 'festival')->firstOrFail();
     $item = PayrollItem::where('run_id', $run->id)->where('employee_id', $this->emp->employee_id)->firstOrFail();
-    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['kind' => 'bonus', 'label' => 'Extra', 'amount' => 1000]);
-    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['kind' => 'deduction', 'label' => 'Advance', 'amount' => 500]);
+    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['category' => 'bonus', 'note' => 'test', 'label' => 'Extra', 'amount' => 1000]);
+    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['category' => 'manual_deduction', 'note' => 'test', 'label' => 'Advance', 'amount' => 500]);
     expect($item->refresh()->net)->toBe(28000);
 
-    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
     expect(PayrollItem::where('run_id', $run->id)->where('variance_flag', true)->count())->toBe(0);
     $this->actingAs($this->mgmt)->post(route('payroll.runs.approve', $run))->assertSessionHasNoErrors();
     $this->actingAs($this->hr)->get(route('payroll.runs.bank-advice', $run))->assertOk()->assertHeader('Content-Disposition', 'attachment; filename="bank-advice-2026-11-festival-eid-bonus.csv"');
-    $this->actingAs($this->hr)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'F1']);
+    $this->actingAs($this->mgmt)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'F1']);
     expect($run->refresh()->status)->toBe('paid');
 
     $item->refresh();
@@ -120,7 +120,7 @@ it('prices a settlement: prorated salary, encashment, deductions and adjustments
         ->and($item->leave_encashment)->toBe((int) round(12 * $daily))
         ->and($item->tax)->toBe(3000)->and($item->pf)->toBe(0)
         ->and($item->net)->toBe($gross + (int) round(12 * $daily) - $item->tax - $item->pf);
-    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['kind' => 'deduction', 'label' => 'Laptop not returned', 'amount' => 5000]);
+    $this->actingAs($this->hr)->post(route('payroll.adjustments.store', $item), ['category' => 'manual_deduction', 'note' => 'test', 'label' => 'Laptop not returned', 'amount' => 5000]);
     expect($item->refresh()->net)->toBe($gross + (int) round(12 * $daily) - 3000 - $item->pf - 5000);
 });
 
@@ -128,13 +128,13 @@ it('consumes encashment on approve and blocks reopen', function () {
     xrExit($this);
     xrSettle($this);
     $run = PayrollRun::where('kind', 'settlement')->firstOrFail();
-    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run));
+    $this->actingAs($this->hr)->post(route('payroll.runs.submit', $run), ['pay_early' => 1, 'early_reason' => 'test']);
     $this->actingAs($this->mgmt)->post(route('payroll.runs.approve', $run))->assertSessionHasNoErrors();
     expect((float) LeaveBalance::where('employee_id', $this->emp->employee_id)->value('encashed'))->toBe(12.0);
     $this->actingAs($this->mgmt)->post(route('payroll.runs.reopen', $run), ['reason' => 'oops'])->assertSessionHasErrors(['payroll' => 'Settlement runs cannot be reopened.']);
     expect($run->refresh()->status)->toBe('approved');
 
-    $this->actingAs($this->hr)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'S1']);
+    $this->actingAs($this->mgmt)->post(route('payroll.runs.pay', $run), ['paid_on' => '2026-11-30', 'reference' => 'S1']);
     $item = PayrollItem::where('run_id', $run->id)->firstOrFail();
     expect($item->leave_encashment)->toBeGreaterThan(0)->and(str_starts_with(file_get_contents(storage_path('app/'.$item->payslip_path)), '%PDF'))->toBeTrue();
     $this->actingAs($this->emp)->get(route('payroll.payslip.pdf', $item))->assertOk();

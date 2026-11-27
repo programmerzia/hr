@@ -6,6 +6,7 @@ use App\Domain\Attendance\Services\CloseTime;
 use App\Domain\Attendance\Services\DayCalculator;
 use App\Domain\Attendance\Services\DayState;
 use App\Domain\Attendance\Services\Grading;
+use App\Domain\Attendance\Services\PayrollLock;
 use App\Domain\Attendance\Support\AttendanceNotification;
 use App\Domain\Leave\Services\LeaveNotifier;
 use App\Models\AttendanceDay;
@@ -20,12 +21,16 @@ use Illuminate\Support\Facades\DB;
  * Nightly day close (attendance:close-day, 00:10). For every employee expected at work on the date: create the
  * missing row (absent / holiday / on_leave), auto-close a forgotten running day, grade it and stamp closed_at.
  * Idempotent: rows with closed_at are left alone. Returns the number of rows closed.
+ * A date in a month whose payroll is no longer open is never touched (payroll already used what it saw).
  */
 class CloseDay
 {
     public function __invoke(?string $date = null): int
     {
         $date ??= now()->subDay()->toDateString();
+        if (PayrollLock::locked($date)) {
+            return 0;
+        }
         $policy = AttendancePolicy::forDate($date);
         $count = 0;
 
@@ -47,6 +52,9 @@ class CloseDay
     /** Closes one employee's day (notifying as the nightly run does). False when nothing needed closing. */
     public function forEmployee(Employee $employee, string $date, ?AttendancePolicy $policy = null): bool
     {
+        if (PayrollLock::locked($date)) {
+            return false;
+        }
         $notify = DB::transaction(fn () => $this->closeOne($employee, $date, $policy ?? AttendancePolicy::forDate($date)));
         if ($notify === false) {
             return false;
