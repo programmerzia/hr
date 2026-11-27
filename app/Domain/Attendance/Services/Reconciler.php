@@ -39,12 +39,6 @@ final class Reconciler
 
     public const OUTAGE_NOTE = 'Server unreachable for everyone, counted as work';
 
-    /** The idle break opened when nobody has touched the app after shift end (presence counts only during the shift). */
-    public const AFTER_HOURS_NOTE = 'No input after shift end';
-
-    /** Hours before shift start from which an open tab already counts as work. */
-    public const PRESENCE_EARLY_HOURS = 3;
-
     /**
      * @param  bool  $live  false at sign-in: only the stale-day and offline-gap steps run (StartWork does the rest)
      * @param  ?CarbonInterface  $activityAt  the client's last real input; null (older clients) means "active now"
@@ -79,10 +73,11 @@ final class Reconciler
             return $changed;
         }
 
-        // Work that ran up to midnight: the old day was just closed (here or by the nightly run), carry on today. Only
-        // on real input: a tab left open overnight never starts the next day by itself.
-        if ($continuous && $hasInput && ! DayState::find($employee) && ($healed || $this->yesterdayAutoClosed($user, $now)) && $this->ranToMidnight($user, $now, $idle)) {
-            app(StartWork::class)($employee, at: $input->max($now->copy()->startOfDay()));
+        // Work that ran up to midnight: the old day was just closed (here or by the nightly run), carry on today. With
+        // the presence model an open tab is enough; with strict idle only real input carries the work over.
+        $carry = $policy->idle_by_input ? $hasInput : true;
+        if ($continuous && $carry && ! DayState::find($employee) && ($healed || $this->yesterdayAutoClosed($user, $now)) && $this->ranToMidnight($user, $now, $idle)) {
+            app(StartWork::class)($employee, at: $policy->idle_by_input ? $input->max($now->copy()->startOfDay()) : $now->copy()->startOfDay());
             $changed = true;
         }
         $day = DayState::find($employee);
@@ -90,25 +85,20 @@ final class Reconciler
             return $changed;
         }
         $open = $day->openSegment();
-        $shiftStart = $now->copy()->setTimeFromTimeString($policy->shift_start);
-        $shiftEnd = $now->copy()->setTimeFromTimeString($policy->shift_end);
-        // Presence model (idle by input off): during the shift an open tab counts as work. Outside it only input does;
-        // after shift end the presence-credited time up to shift end is kept. Early starters get presence from up to
-        // PRESENCE_EARLY_HOURS before shift start, so reading a document at 08:30 isn't idle; the night stays input-only.
-        $presence = ! $policy->idle_by_input && $now->gte($shiftStart->copy()->subHours(self::PRESENCE_EARLY_HOURS)) && $now->lte($shiftEnd);
+        // Presence model (idle by input off, the owner's rule): an open HR tab counts as work at any hour, whether or not
+        // the person types in it (they may be working in another app). Time past the standard hours is overtime, which
+        // DayGrader computes and payroll pays only after approval.
+        $presence = ! $policy->idle_by_input;
         $checkIdle = $activityAt !== null && ! $presence;
         // Several tabs: the most recent input any of them reported counts, not just this one's (docs P1-3).
         $latest = $day->last_activity_at && $day->last_activity_at->gt($input) && $day->last_activity_at->lte($now) ? $day->last_activity_at->copy() : $input;
-        if (! $policy->idle_by_input && $now->gt($shiftEnd) && $latest->lt($shiftEnd)) {
-            $latest = $shiftEnd->copy();
-        }
         $seen = $presence || $activityAt === null ? $now->copy() : $this->clamp($latest, $open?->started_at, $now);
 
         if ($day->status === 'working' && $open?->type === 'work' && $checkIdle && $now->getTimestamp() - $seen->getTimestamp() > $idle) {
             DayState::leaveWork($employee, $day, $seen);
             TimeSegment::create([
                 'attendance_day_id' => $day->id, 'type' => 'break', 'break_category' => 'idle', 'started_at' => $seen,
-                'note' => $policy->idle_by_input ? 'No keyboard or mouse input' : self::AFTER_HOURS_NOTE, 'source' => 'idle',
+                'note' => 'No keyboard or mouse input', 'source' => 'idle',
             ]);
             $day->status = 'on_break';
             $day->last_activity_at = $seen;

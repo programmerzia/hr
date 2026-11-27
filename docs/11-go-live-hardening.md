@@ -3,10 +3,10 @@
 These changes come from an audit of attendance, payroll, the audit trail, reports and operations.
 
 ## Attendance
-- **Presence window.** An open tab counts as work from 3 hours before shift start until shift end. Outside that window only real keyboard or mouse input counts.
-  - After shift end, work stops at the later of the last input and the shift end. The break that follows is noted "No input after shift end".
-  - A tab left open overnight therefore no longer counts as work.
-  - Work carries past midnight only if it was running at midnight and there is real input. The new day starts at the time of that input.
+- **Presence (owner's rule, 27 Nov).** An open HR tab counts as work at any hour, whether or not the person types in it, because they may be working in another app with the browser minimised. There is no input check while "idle by input" is off.
+  - Work beyond the standard 8 hours is overtime. DayGrader computes it, and payroll pays it only after a lead or HR approves it.
+  - Work running at midnight carries on into the next day.
+  - Trade-off: a tab left open overnight also counts until someone ends the day. That time shows as overtime waiting for approval, so the approver is the check.
 - **Paused tabs.** Chrome and Edge freeze background tabs, and the gap is recorded as offline with the reason "Browser paused the HR tab".
   - My day lists these gaps with "Ask to count as work", a regularization of kind `paused`. Approving it turns the gap into work.
   - The heartbeat holds a Web Lock to discourage freezing, but this hasn't been checked in a browser yet.

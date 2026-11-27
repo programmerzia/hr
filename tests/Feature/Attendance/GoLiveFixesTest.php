@@ -56,52 +56,21 @@ function glSegs(AttendanceDay $d)
 }
 
 // ---- P0-1 overnight tab
-it('P0-1 a tab left open overnight stops counting at shift end and never starts the next day', function () {
+it('presence counts at any hour: working in another app after 19:00 is work, and past 8h it is overtime', function () {
     $u = makeUser();
     gl('2026-11-10 10:00');
     glLogin($this, $u);
-    // Present all day (last input 15:00), then nobody touches it again; the tab beats all night.
-    glBeats($u, '2026-11-10 10:02', '2026-11-11 00:30', '2026-11-10 15:00:00');
+    // The HR tab sits minimized all day (last input 10:01) while the person works in another app until 21:00.
+    glBeats($u, '2026-11-10 10:02', '2026-11-10 21:00', '2026-11-10 10:01:00');
 
     $day = glDay($u->employee, '2026-11-10');
-    expect($day->status)->toBe('ended')->and($day->auto_closed)->toBeTrue()
-        ->and($day->last_out_at->format('H:i'))->toBe('19:00')
-        ->and($day->work_seconds)->toBe(9 * 3600)
-        ->and($day->early_minutes)->toBe(0);
-    $work = glSegs($day)->where('type', 'work');
-    expect($work->max('ended_at')->format('H:i'))->toBe('19:00');
-    // No presence-only beat after midnight starts a day.
-    expect(glDay($u->employee, '2026-11-11'))->toBeNull();
+    expect($day->status)->toBe('working')
+        ->and(glSegs($day)->where('type', 'break')->count())->toBe(0);
 
-    // Morning: still nothing until the person does something; the app asks instead.
-    gl('2026-11-11 09:58');
-    app(Heartbeat::class)($u->fresh(), CarbonImmutable::parse('2026-11-10 15:00:00'));
-    expect(glDay($u->employee, '2026-11-11'))->toBeNull();
-    $this->actingAs($u)->get('/my-day')->assertInertia(fn (Assert $p) => $p->where('attendance.start_prompt', true));
-});
-
-it('P0-1 after shift end only input extends work; it stops at the last input', function () {
-    $u = makeUser();
-    gl('2026-11-10 10:00');
-    glLogin($this, $u);
-    glBeats($u, '2026-11-10 10:02', '2026-11-10 18:58', '2026-11-10 10:01:00');
-    // Real overtime: input every beat until 20:30, then the person walks away with the tab open.
-    for ($t = gl('2026-11-10 19:00'); $t->format('H:i') <= '20:30'; $t = $t->addMinutes(2)) {
-        gl($t->format('Y-m-d H:i'));
-        app(Heartbeat::class)($u->fresh(), $t->subSeconds(20));
-    }
-    glBeats($u, '2026-11-10 20:32', '2026-11-10 21:00', '2026-11-10 20:29:40');
-
+    app(\App\Domain\Attendance\Actions\EndDay::class)($u->employee->fresh());
     $day = glDay($u->employee, '2026-11-10');
-    $open = $day->openSegment();
-    expect($day->status)->toBe('on_break')->and($open->break_category)->toBe('idle')
-        ->and($open->note)->toBe('No input after shift end')
-        ->and($open->started_at->format('H:i:s'))->toBe('20:29:40');
-
-    // Coming back with input resumes from that input.
-    gl('2026-11-10 21:10');
-    app(Heartbeat::class)($u->fresh(), CarbonImmutable::parse('2026-11-10 21:09:50'));
-    expect(glDay($u->employee, '2026-11-10')->status)->toBe('working');
+    expect(intdiv($day->work_seconds, 60))->toBe(11 * 60)
+        ->and(\App\Domain\Attendance\Services\Overtime::raw($day->fresh()))->toBe(3 * 60);
 });
 
 it('P0-1 in-shift presence is unchanged: no input for hours is still work', function () {
@@ -127,14 +96,6 @@ it('P0-1 work that really runs past midnight carries on, from the input time', f
         ->and($today->first_in_at->format('H:i:s'))->toBe('00:00:00');
 });
 
-it('P0-1 a presence-only beat after midnight does not carry the day over', function () {
-    $u = makeUser();
-    gl('2026-11-10 23:00');
-    glLogin($this, $u);
-    glBeats($u, '2026-11-10 23:02', '2026-11-11 00:20', '2026-11-10 23:00:10');
-    expect(glDay($u->employee, '2026-11-11'))->toBeNull()
-        ->and(glDay($u->employee, '2026-11-10')->last_out_at->format('H:i:s'))->toBe('23:00:10');
-});
 
 // ---- P1-1 early leave
 it('P1-1 a short reopen late in the evening does not wipe out early leave', function () {
